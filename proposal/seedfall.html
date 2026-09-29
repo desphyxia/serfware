@@ -1,0 +1,1253 @@
+<title>Seedfall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an expedition field journal. A narrow reading column, full-width concept plates
+   captioned like specimen cards, and a contents rail that stays put on wide screens.
+   Deliberately single-theme: dusk on a small planet, lantern light against blue shadow. */
+:root{
+  --night:#10141e; --deep:#161b28; --panel:#1d2332; --line:#2d3446; --line-soft:#232939;
+  --ink:#ece5d4; --ink-2:#c9c3b4; --muted:#9aa1b3;
+  --lantern:#f0b25a; --moss:#9cc58f; --tide:#7fc4c8; --ember:#e58a6c; --lilac:#b7a3e0;
+  --f-display:"Young Serif", "Iowan Old Style", Georgia, serif;
+  --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --s-1:.8125rem; --s0:1rem; --s1:1.1875rem; --s2:1.5rem; --s3:2.125rem; --s4:3.25rem; --s5:clamp(3.2rem, 9vw, 6.5rem);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{background:var(--night);color:var(--ink);font-family:var(--f-body);font-size:var(--s0);line-height:1.62;-webkit-font-smoothing:antialiased}
+a{color:var(--lantern);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--lantern);outline-offset:3px;border-radius:3px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;text-wrap:balance;line-height:1.15;margin:0}
+h2{font-size:var(--s3)}
+h3{font-size:var(--s1);color:var(--ink)}
+p{margin:0}
+.mono{font-family:var(--f-mono)}
+.eyebrow{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lantern)}
+
+/* ---------- hero ---------- */
+.hero{position:relative;background:var(--night)}
+.hero canvas{display:block;width:100%;height:clamp(420px,58vw,660px)}
+.hero-copy{position:absolute;inset:0;padding:clamp(24px,5vw,64px) max(16px,5vw);display:flex;flex-direction:column;gap:14px;pointer-events:none;max-width:760px}
+.hero-copy h1{font-size:var(--s5);letter-spacing:-.01em;line-height:.95;color:var(--ink)}
+.hero-copy .tag{font-size:clamp(1.02rem,2.1vw,1.3rem);color:var(--ink-2);max-width:34ch}
+.hero-foot{position:absolute;left:0;right:0;bottom:0;padding:12px max(16px,5vw);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:var(--f-mono);font-size:.7rem;color:var(--muted);letter-spacing:.06em;background:linear-gradient(transparent,rgba(9,12,18,.85))}
+
+/* ---------- page frame ---------- */
+.frame{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:48px 96px;display:grid;grid-template-columns:1fr;gap:40px}
+@media (min-width:1000px){.frame{grid-template-columns:190px minmax(0,1fr);gap:56px;padding-inline:32px}}
+.toc{display:none}
+@media (min-width:1000px){
+  .toc{display:block;position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;max-height:calc(100vh - 48px);overflow:auto;font-size:.84rem}
+  .toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;counter-reset:t}
+  .toc li{counter-increment:t}
+  .toc a{display:flex;gap:10px;color:var(--muted);text-decoration:none;padding:3px 0;line-height:1.35}
+  .toc a::before{content:counter(t,decimal-leading-zero);font-family:var(--f-mono);font-size:.7rem;color:#5d6479;padding-top:2px}
+  .toc a:hover,.toc a.on{color:var(--ink)}
+  .toc a.on::before{color:var(--lantern)}
+}
+main{min-width:0;display:flex;flex-direction:column;gap:88px}
+section{display:flex;flex-direction:column;gap:22px;min-width:0;scroll-margin-top:24px}
+.head{display:flex;flex-direction:column;gap:10px}
+.prose{max-width:66ch;display:flex;flex-direction:column;gap:14px;color:var(--ink-2)}
+.prose strong{color:var(--ink);font-weight:600}
+.lede{font-size:var(--s1);color:var(--ink);max-width:60ch}
+
+/* ---------- plates ---------- */
+.plate{background:var(--deep);border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.plate canvas{display:block;width:100%}
+.cap{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line-soft);font-size:.86rem;color:var(--muted)}
+.cap b{font-family:var(--f-mono);font-weight:500;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lantern)}
+.cap span{flex:1 1 280px}
+
+/* ---------- generic blocks ---------- */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:18px}
+.note{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-left:2px solid var(--line);min-width:0}
+.note h3{font-family:var(--f-body);font-weight:600;font-size:1rem}
+.note p{color:var(--ink-2);font-size:.95rem}
+.note .k{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+.pillars{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.pillars div{background:var(--deep);padding:18px;display:flex;flex-direction:column;gap:8px}
+.pillars h3{font-size:1.25rem}
+.pillars p{color:var(--ink-2);font-size:.93rem}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:16px 24px;padding:18px 0;border-block:1px solid var(--line)}
+.facts dt{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.facts dd{margin:4px 0 0;color:var(--ink)}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line-soft);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:640px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-family:var(--f-mono);font-weight:500;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:var(--panel)}
+td{color:var(--ink-2)}
+td:first-child{color:var(--ink)}
+tr:last-child td{border-bottom:0}
+.num{font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:.84rem;white-space:nowrap}
+
+.chip{display:inline-block;font-family:var(--f-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:1px solid currentColor;line-height:1.4;white-space:nowrap}
+.c-core{color:var(--lantern)} .c-ext{color:var(--tide)} .c-str{color:var(--lilac)}
+
+/* sequence tracks */
+.track{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:0;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden}
+.track li{list-style:none;padding:14px 14px 16px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;gap:6px;background:var(--deep);min-width:0}
+.track li:last-child{border-right:0}
+.track .n{font-family:var(--f-mono);font-size:.7rem;color:var(--lantern)}
+.track h3{font-family:var(--f-body);font-weight:600;font-size:.98rem}
+.track p{font-size:.86rem;color:var(--muted)}
+ol.track{margin:0;padding:0}
+
+/* chains */
+.chains{display:flex;flex-direction:column;gap:10px}
+.chain{display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;align-items:center;padding:10px 0;border-bottom:1px dashed var(--line)}
+.chain:last-child{border-bottom:0}
+.chain .lbl{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.chain .steps{display:flex;flex-wrap:wrap;align-items:center;gap:6px 4px}
+.chain .g{padding:3px 9px;border-radius:14px;background:var(--panel);border:1px solid var(--line);font-size:.86rem;color:var(--ink);white-space:nowrap}
+.chain .b{font-size:.82rem;color:var(--muted);font-style:italic;white-space:nowrap}
+.chain .ar{color:#5d6479;font-size:.8rem}
+@media (max-width:600px){.chain{grid-template-columns:1fr;gap:6px}}
+
+/* biomes */
+.biomes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:18px}
+.biome canvas{height:210px}
+.biome .body{padding:14px 16px 18px;display:flex;flex-direction:column;gap:8px}
+.biome h3{font-size:1.35rem}
+.biome .meta{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.06em;color:var(--muted)}
+.biome p{font-size:.92rem;color:var(--ink-2)}
+.biome ul{margin:0;padding-left:18px;font-size:.88rem;color:var(--ink-2);display:flex;flex-direction:column;gap:3px}
+
+/* terraform */
+.tf-top{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:end;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line-soft)}
+.tf-stage{font-family:var(--f-display);font-size:1.5rem}
+.tf-read{display:flex;gap:22px;flex-wrap:wrap}
+.tf-read div{display:flex;flex-direction:column}
+.tf-read dt{font-family:var(--f-mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tf-read dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:1.02rem}
+.tf-ctl{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--line-soft);flex-wrap:wrap}
+.tf-ctl label{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+input[type=range]{accent-color:var(--lantern);flex:1 1 240px;min-width:0}
+.btn{font:inherit;font-size:.82rem;font-family:var(--f-mono);background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 12px;cursor:pointer}
+.btn:hover{border-color:var(--lantern);color:var(--lantern)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--f-mono);font-size:.72rem;color:var(--ink-2);padding:10px 16px 0}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+svg text{font-family:var(--f-mono)}
+
+/* HUD mock */
+.hud-stage{position:relative}
+.hud canvas{height:clamp(360px,46vw,520px)}
+@media (min-width:820px){.hud canvas{height:clamp(480px,46vw,580px)}}
+.hud-ui{display:grid;gap:10px;padding:12px}
+.pane{background:rgba(17,21,31,.82);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(240,178,90,.22);border-radius:6px;padding:10px 12px;font-size:.8rem;color:var(--ink-2)}
+.pane h4{margin:0 0 6px;font-family:var(--f-mono);font-weight:500;font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lantern)}
+.res{display:flex;gap:6px 14px;flex-wrap:wrap;font-family:var(--f-mono);font-size:.74rem;font-variant-numeric:tabular-nums}
+.res span{display:flex;align-items:center;gap:5px;color:var(--ink)}
+.res i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.slider-row{display:grid;grid-template-columns:78px minmax(0,1fr) 34px;gap:8px;align-items:center;font-family:var(--f-mono);font-size:.72rem}
+.slider-row output{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--moss)}
+@media (min-width:820px){
+  .hud-ui{position:absolute;inset:0;padding:14px;grid-template-columns:260px 1fr 280px;grid-template-rows:auto 1fr auto;pointer-events:none}
+  .hud-ui .pane{pointer-events:auto}
+  .p-res{grid-column:1 / 4;justify-self:center}
+  .p-settler{grid-column:1;grid-row:3;align-self:end}
+  .p-time{grid-column:2;grid-row:3;align-self:end;justify-self:center}
+  .p-dist{grid-column:3;grid-row:3;align-self:end}
+}
+
+/* swatches */
+.swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
+.sw{border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;background:var(--deep)}
+.sw .strip{display:flex;height:54px}
+.sw .strip i{flex:1}
+.sw p{padding:10px 12px;font-size:.84rem;color:var(--ink-2)}
+.sw b{display:block;font-family:var(--f-mono);font-weight:500;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);margin-bottom:2px}
+
+.index{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:26px 32px}
+.index h3{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lantern);font-weight:500;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.index ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column}
+.index li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:5px 0;border-bottom:1px solid var(--line-soft);font-size:.9rem;color:var(--ink-2)}
+.index li .chip{align-self:start;margin-top:3px}
+
+.close{padding:36px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.close p{max-width:62ch;color:var(--ink-2)}
+.quote{font-family:var(--f-display);font-size:clamp(1.5rem,3.4vw,2.2rem);line-height:1.25;color:var(--ink);max-width:28ch}
+</style>
+
+<header class="hero" id="top">
+  <canvas id="hero" aria-label="Concept art: a small planet at dusk with a lantern-lit village, a windmill, carriers walking a road between flags, and a ringed gas giant in the sky"></canvas>
+  <div class="hero-copy">
+    <span class="eyebrow">Game proposal · Concept v0.9</span>
+    <h1>Seedfall</h1>
+    <p class="tag">A settlement game about roads, carriers and small living planets. Build the chain, watch every parcel travel it, and slowly turn a cold rock into a home.</p>
+  </div>
+  <div class="hero-foot"><span>PLATE 01 · Hearth, evening of the first autumn</span><span>Live render · planet rotates in real time</span></div>
+</header>
+
+<div class="frame">
+  <nav class="toc" aria-label="Contents">
+    <ol id="toc"></ol>
+  </nav>
+
+  <main>
+
+  <!-- ============ 1 PITCH ============ -->
+  <section id="pitch" data-t="The pitch">
+    <div class="head"><span class="eyebrow">The pitch</span><h2>Serf City's heart, on a planet that breathes</h2></div>
+    <div class="prose">
+      <p class="lede">In 1993 Serf City (The Settlers) made logistics feel alive. You didn't command people. You laid roads, planted flags, and watched thousands of tiny carriers hand goods to each other until a castle stood where a forest had been.</p>
+      <p>Seedfall keeps that exact pleasure: <strong>one carrier per road segment, goods passed flag to flag, tools that decide professions, and a territory that grows as your economy does.</strong> What changes is the world underneath. Maps become small spherical planets with their own gravity, day length, seasons, tides and weather. Water flows, fire spreads, soil remembers what you grew in it. A star system of very different worlds waits to be settled, and the late game is the slow, visible work of terraforming a planet from rust and frost into forest and rain.</p>
+      <p>The tone is cosy without being childish. Nothing shouts at you. Settlers have names, households and memories, and a failing harvest is a problem to solve, not a game-over screen. Depth comes from systems that interact, not from pressure.</p>
+    </div>
+    <dl class="facts">
+      <div><dt>Genre</dt><dd>Logistics settlement builder</dd></div>
+      <div><dt>Players</dt><dd>Solo · 2–4 co-op · async trade</dd></div>
+      <div><dt>Platform</dt><dd>PC first, handheld-verified; consoles later</dd></div>
+      <div><dt>Session</dt><dd>30 min to open-ended</dd></div>
+      <div><dt>Scale</dt><dd>2,562–40,962 tiles per planet</dd></div>
+      <div><dt>Audience</dt><dd>10+; builders, gardeners, tinkerers</dd></div>
+    </dl>
+    <div class="pillars">
+      <div><span class="eyebrow">Pillar</span><h3>The chain is the game</h3><p>Every log, loaf and ingot is a physical object carried by a person you can follow. Bottlenecks are visible as crowded flags, not red numbers.</p></div>
+      <div><span class="eyebrow">Pillar</span><h3>Worlds with weather</h3><p>Each planet runs a light simulation of water, wind, heat, soil and life. The map changes under you, and you learn to read it.</p></div>
+      <div><span class="eyebrow">Pillar</span><h3>Slow warmth</h3><p>Soft failure, readable pacing, pause at any time. Beauty and comfort are mechanics, and the settlement sounds and looks happier as it thrives.</p></div>
+      <div><span class="eyebrow">Pillar</span><h3>Many small worlds</h3><p>Planets are small enough to walk around. A system of six gives you contrasting problems, and each colony needs the others.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 2 LINEAGE ============ -->
+  <section id="lineage" data-t="What we keep">
+    <div class="head"><span class="eyebrow">Lineage</span><h2>What we keep, and what thirty years add</h2></div>
+    <div class="prose"><p>The original's systems are the skeleton. Each one carries forward recognisably and gains a layer from later design and simulation work.</p></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Serf City, 1993</th><th>Seedfall</th><th>What the new layer brings</th></tr></thead>
+      <tbody>
+        <tr><td>Roads between flags; one serf per segment</td><td>Same rule, on a hex grid wrapped around a sphere</td><td>Road tiers, desire paths, canals, ropeways and seasonal ice roads</td></tr>
+        <tr><td>Up to 8 goods waiting on a flag</td><td>Kept exactly</td><td>Congestion becomes visible and audible; flags can be widened into small depots</td></tr>
+        <tr><td>Donkeys on busy roads</td><td>Pack animals bred per biome</td><td>Mules, sledge dogs, stilt-walkers, drift-rays in low gravity</td></tr>
+        <tr><td>Castle as the starting store</td><td>The Hearthship: your landing craft unpacks into a keep</td><td>Colonisation becomes a repeatable, planned event</td></tr>
+        <tr><td>Geologists plant signs showing ore below</td><td>Kept, with strata you can inspect in cross-section</td><td>Veins deplete, groundwater moves, caves open</td></tr>
+        <tr><td>Toolmaker's output decides professions</td><td>Kept, with tool priority sliders</td><td>Settlers also gain skill, age, teach and remember</td></tr>
+        <tr><td>Distribution sliders for food, coal, steel</td><td>Kept, grouped by material</td><td>Seasonal presets and per-colony policies</td></tr>
+        <tr><td>Knights, military buildings and gold morale</td><td>Lantern wardens push borders; combat is an optional mode</td><td>Influence, festivals and contests settle most disputes</td></tr>
+        <tr><td>Flat, static tile map</td><td>Small living planets</td><td>Curvature, day and night, axial tilt, tides, erosion, ecology, terraforming</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ 3 LOOP ============ -->
+  <section id="loop" data-t="Core loop">
+    <div class="head"><span class="eyebrow">Core loop</span><h2>Six verbs, repeated at three scales</h2></div>
+    <div class="grid2" style="align-items:center">
+      <div class="plate" style="padding:10px">
+        <svg viewBox="0 0 520 380" role="img" aria-label="Loop diagram: Settle, Connect, Produce, Grow, Understand, Transform, repeating, with Launch leading outward to a new world" style="width:100%;height:auto;display:block">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0b25a"/></marker></defs>
+          <circle cx="220" cy="190" r="128" fill="none" stroke="#2d3446" stroke-width="2"/>
+          <g id="loopArrows"></g>
+          <g id="loopNodes"></g>
+          <path d="M338,120 C400,80 440,70 470,70" fill="none" stroke="#7fc4c8" stroke-width="2" stroke-dasharray="5 5" marker-end="url(#ah)"/>
+          <text x="470" y="56" text-anchor="end" fill="#7fc4c8" font-size="13">LAUNCH</text>
+          <text x="470" y="96" text-anchor="end" fill="#9aa1b3" font-size="11">to a new world</text>
+          <text x="220" y="184" text-anchor="middle" fill="#ece5d4" font-size="15" style="font-family:'Young Serif',Georgia,serif">a settlement</text>
+          <text x="220" y="204" text-anchor="middle" fill="#9aa1b3" font-size="11">minutes → seasons → centuries</text>
+        </svg>
+      </div>
+      <div class="prose">
+        <p><strong>Settle.</strong> Place buildings on buildable tiles; builders and levellers prepare the ground.</p>
+        <p><strong>Connect.</strong> Draw roads between flags. Carriers take their posts.</p>
+        <p><strong>Produce.</strong> Raw goods become refined goods. Distribution sliders decide who gets scarce coal.</p>
+        <p><strong>Grow.</strong> Warden lanterns extend the border; new ground brings new resources.</p>
+        <p><strong>Understand.</strong> Geologists, weather-watchers and naturalists fill the Almanac, which unlocks buildings and forecasts.</p>
+        <p><strong>Transform.</strong> Dams, irrigation, reforestation and, later, planetary terraforming reshape the land.</p>
+        <p>In the first hour the loop runs over minutes around one keep. By mid-game it runs over seasons across a continent. In the late game it runs over centuries across a star system, with the same verbs.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4 ROADS ============ -->
+  <section id="roads" data-t="Roads & carriers">
+    <div class="head"><span class="eyebrow">Signature system</span><h2>Roads, flags and carriers</h2></div>
+    <div class="plate">
+      <canvas id="net" style="height:clamp(340px,42vw,470px)" aria-label="Live simulation: carriers pass goods along road segments between flags from woodcutter, quarry, farm and fisher to a storehouse"></canvas>
+      <div class="cap"><b>Plate 02 · Planner view, live</b><span>Each road segment has exactly one carrier. Goods wait on flags (max 8) until the next carrier takes them. Amber rings mark flags that are filling up. <span id="netStats" class="mono" style="color:var(--ink)"></span></span></div>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Rule</span><h3>One carrier, one segment</h3><p>Long roads are slow; flags split them into segments so more carriers work in parallel. This single rule creates the whole puzzle, and it stays untouched.</p></div>
+      <div class="note"><span class="k">Rule</span><h3>Eight goods per flag</h3><p>A full flag blocks the segment behind it. Jams propagate backward, and you see them as piles of crates and hear them as impatient carriers.</p></div>
+      <div class="note"><span class="k">New</span><h3>Road tiers</h3><p>Dirt path, gravel, cobble, boardwalk. Better surfaces raise speed and resist mud, snow and flood. Upgrades cost stone and a road crew's time.</p></div>
+      <div class="note"><span class="k">New</span><h3>Desire paths</h3><p>Settlers walking off-road to homes and wells wear visible paths in grass. The game suggests these as road plans, so the town teaches you its own layout.</p></div>
+      <div class="note"><span class="k">New</span><h3>Other carriers</h3><p>Pack animals double a busy segment. Barges run canals, ropeways cross gorges, ice roads open on frozen lakes, gliders ride updrafts in low gravity.</p></div>
+      <div class="note"><span class="k">New</span><h3>Priority and depots</h3><p>Mark goods as urgent or bulk. Widen a crossroads flag into a depot that holds 24 items and sorts them, at the cost of two keepers.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 5 SETTLERS ============ -->
+  <section id="settlers" data-t="Settlers">
+    <div class="head"><span class="eyebrow">People</span><h2>Settlers are people you can follow</h2></div>
+    <div class="prose"><p>Every settler is simulated. Click anyone to follow them through their day: breakfast, the walk to the flag, a shift of carrying, an evening at the well. The camera drops to street level and the music thins to what they would hear.</p></div>
+    <ol class="track">
+      <li><span class="n">01</span><h3>Arrival or birth</h3><p>From the Hearthship's cryo-hold, or born to a household with a home and enough Glow.</p></li>
+      <li><span class="n">02</span><h3>Child</h3><p>Follows parents to work. Picks up an affinity for what they watched.</p></li>
+      <li><span class="n">03</span><h3>Carrier</h3><p>Everyone starts on the roads. It's how settlers learn the map.</p></li>
+      <li><span class="n">04</span><h3>Apprentice</h3><p>Receives a tool. A saw makes a sawyer, a pick a miner, as in the original.</p></li>
+      <li><span class="n">05</span><h3>Master</h3><p>Skill raises speed and quality. Masters sign their work and earn titles.</p></li>
+      <li><span class="n">06</span><h3>Elder</h3><p>Stops working, teaches apprentices faster, tells stories at festivals.</p></li>
+      <li><span class="n">07</span><h3>Remembered</h3><p>A memorial tree grows where they lived. Their journal stays in the Almanac.</p></li>
+    </ol>
+    <div class="grid3">
+      <div class="note"><span class="k">Needs</span><h3>Food, warmth, rest, belonging</h3><p>Kept simple and visible. Food variety matters more than quantity. Warmth matters on cold worlds, shade on hot ones.</p></div>
+      <div class="note"><span class="k">Households</span><h3>Homes are optional, then essential</h3><p>Early settlers sleep in the keep. Homes raise birth rate and Glow, and households pass trades down generations.</p></div>
+      <div class="note"><span class="k">Traits</span><h3>Shaped by their world</h3><p>Settlers raised on Tessel swim; those raised on Rime shrug off cold. Moving people between planets mixes these traits.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 6 ECONOMY ============ -->
+  <section id="economy" data-t="Economy">
+    <div class="head"><span class="eyebrow">Production</span><h2>Chains you can read at a glance</h2></div>
+    <div class="prose"><p>Chains are short enough to hold in your head and long enough to interlock. Buildings are in italics; goods are in pills. The distribution sliders from the original return: when coal is scarce, you decide whether the smelter, the toolsmith or the glassworks gets it.</p></div>
+    <div class="plate" style="padding:6px 18px">
+      <div class="chains" id="chains"></div>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Distribution</span><h3>Sliders per scarce material</h3><p>Food to mines, coal to forges, planks to shipwright or toolsmith, steel to tools or bells. Save them as seasonal presets.</p></div>
+      <div class="note"><span class="k">Storage</span><h3>Things spoil and weather</h3><p>Fish spoils in days unless smoked or iced. Timber stored outside warps in rain. Granaries attract mice, and a cat fixes that.</p></div>
+      <div class="note"><span class="k">Quality</span><h3>Masterwork goods</h3><p>Skilled workers sometimes produce masterwork items. They last longer, raise Glow and are prized in interplanetary trade.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 7 WORLDS ============ -->
+  <section id="worlds" data-t="Planets">
+    <div class="head"><span class="eyebrow">Planets</span><h2>Small worlds, walkable in an evening</h2></div>
+    <div class="prose">
+      <p>Each map is a whole planet you can orbit with the camera. Curvature is part of play: the horizon is close, your first village sits on a gentle dome, and by mid-game your roads wrap around to meet themselves.</p>
+      <p><strong>Physics follows the planet.</strong> Gravity changes carrier speed and load, how tall a tower can stand, how far water jets and sparks fly. Rotation sets day length. Axial tilt gives seasons that differ by latitude, so a colony near the pole lives with long summer days and long winter nights. Moons raise tides. A tidally locked world has a permanent noon, a permanent midnight, and a habitable twilight ring.</p>
+    </div>
+    <div class="plate">
+      <canvas id="system" style="height:clamp(340px,44vw,480px)" aria-label="Star system map with six worlds on tilted orbits, and skyships travelling trade routes between them"></canvas>
+      <div class="cap"><b>Plate 03 · The Lanterne system</b><span>Six worlds on tilted orbits. Dashed lines are active trade routes; the moving dots are skyships. Launch windows open as planets align.</span></div>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>World</th><th>Tiles</th><th>Gravity</th><th>Day</th><th>Biomes</th><th>Offers</th><th>Lacks</th></tr></thead>
+      <tbody>
+        <tr><td>Hearth</td><td class="num">10,242</td><td class="num">1.0 g</td><td class="num">24 h</td><td>Meadowlands, Canopy Deeps</td><td>Food, timber, a gentle start</td><td>Rare metals, glass sand</td></tr>
+        <tr><td>Cinder</td><td class="num">4,002</td><td class="num">0.8 g</td><td class="num">31 h</td><td>Emberglass Steppe, Saltglass Flats</td><td>Ore, geothermal heat, crystal</td><td>Water, soil</td></tr>
+        <tr><td>Tessel</td><td class="num">10,242</td><td class="num">1.1 g</td><td class="num">19 h</td><td>Tidewater Reach</td><td>Fish, salt, tidal power</td><td>Stone, dry land</td></tr>
+        <tr><td>Mirewake</td><td class="num">4,002</td><td class="num">0.9 g</td><td class="num">locked</td><td>Lumen Mire</td><td>Fungi, peat, glow-dyes, medicine</td><td>Sunlight for crops</td></tr>
+        <tr><td>Rime</td><td class="num">16,812</td><td class="num">1.2 g</td><td class="num">40 h</td><td>Rimefall Tundra</td><td>Ice (water), furs, deep ores</td><td>Warmth, a short growing season</td></tr>
+        <tr><td>Skyreef <span style="color:var(--muted)">(moon of Oru)</span></td><td class="num">2,562</td><td class="num">0.4 g</td><td class="num">70 h</td><td>Skyreef</td><td>Buoyant stone, gas, silk</td><td>Ground; everything floats</td></tr>
+      </tbody>
+    </table></div>
+    <div class="prose"><p style="font-size:.9rem;color:var(--muted)">Tile counts are real Goldberg-polyhedron sizes (10T+2 hexagons). Every planet has exactly twelve pentagonal tiles, and the game treats them as landmarks: see <a href="#tech">Technology</a>.</p></div>
+  </section>
+
+  <!-- ============ 8 BIOMES ============ -->
+  <section id="biomes" data-t="Biomes">
+    <div class="head"><span class="eyebrow">Biomes</span><h2>Eight biomes, each with its own rule</h2></div>
+    <div class="prose"><p>A biome is more than a palette. Each one changes a core system, so settling somewhere new means relearning something you thought you knew.</p></div>
+    <div class="biomes" id="biomeGrid"></div>
+  </section>
+
+  <!-- ============ 9 GROUND ============ -->
+  <section id="ground" data-t="Geology">
+    <div class="head"><span class="eyebrow">Beneath</span><h2>Geology you can see in section</h2></div>
+    <div class="plate">
+      <canvas id="geo" style="height:clamp(320px,38vw,420px)" aria-label="Cross-section of the ground: soil, clay, sandstone with a groundwater lens, granite and basalt, with ore veins, a cave, a mine shaft and geologist signposts on the surface"></canvas>
+      <div class="cap"><b>Plate 04 · Section through the Hearth foothills</b><span>Geologists walk out and plant signposts; the coloured board shows what lies below. Hold <span class="mono">Alt</span> in game to slice the ground like this anywhere.</span></div>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Kept</span><h3>Geologist signposts</h3><p>Send a geologist to a flag; they wander and plant signs. It is slow, charming and still the best way to find a seam.</p></div>
+      <div class="note"><span class="k">New</span><h3>Strata and depletion</h3><p>Veins have real volume and deplete. Deep ores need timber-propped shafts; cheap shafts collapse and close.</p></div>
+      <div class="note"><span class="k">New</span><h3>Groundwater and soil</h3><p>Wells draw from aquifers that fall in drought. Soil tracks nitrogen, moisture and compaction; crop rotation and hedgerows keep fields fertile.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 10 LIVING ============ -->
+  <section id="living" data-t="Living simulation">
+    <div class="head"><span class="eyebrow">Simulation</span><h2>A world that keeps moving</h2></div>
+    <div class="prose"><p>Every system runs slowly and readably. Nothing is so fast you can't react, and each one leaves marks on the land you can learn to read.</p></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>System</th><th>What you see</th><th>What it does to play</th></tr></thead>
+      <tbody>
+        <tr><td>Water</td><td>Rivers that carve banks, spring floods, ponds that freeze</td><td>Dams, mills, irrigation, canals; floods cut roads and deposit fertile silt</td></tr>
+        <tr><td>Erosion</td><td>Bare slopes gullying after felling; deltas growing</td><td>Clear-cutting hills costs soil; terraces and replanting prevent it</td></tr>
+        <tr><td>Wind</td><td>Grass waves, smoke leans, clouds cross the map</td><td>Windmill output, fire direction, pollen and seed spread, sail speed</td></tr>
+        <tr><td>Weather</td><td>Fronts on the horizon, fog at dawn, aurora at the pole</td><td>Rain slows roads to mud; snow piles up; forecasts unlock with the Almanac</td></tr>
+        <tr><td>Seasons</td><td>Crops ripen, leaves turn, lakes ice over</td><td>Planting and harvest windows, ice roads, winter stores, festivals</td></tr>
+        <tr><td>Fire</td><td>Heat shimmer, embers carried downwind</td><td>Spreads by fuel, dryness and wind; firebreaks, wells and bucket lines</td></tr>
+        <tr><td>Ecology</td><td>Deer at forest edges, bees in orchards, gulls at fisheries</td><td>Populations grow and crash; over-hunting empties forests; pollinators raise yields</td></tr>
+        <tr><td>Succession</td><td>Clearings fill with grass, then shrubs, then young trees</td><td>Abandoned land heals on its own; forests regrow if you leave seed trees</td></tr>
+        <tr><td>Day and night</td><td>Lanterns come on, carriers slow, glowworms rise</td><td>Night shifts are optional and cost Glow; some species and crops are nocturnal</td></tr>
+        <tr><td>Wear</td><td>Paths worn into grass, moss on old roofs, patina on bronze</td><td>Buildings need upkeep; old buildings gain character and a small Glow bonus</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ 11 TERRAFORM ============ -->
+  <section id="terraform" data-t="Terraforming">
+    <div class="head"><span class="eyebrow">Late game</span><h2>Terraforming takes centuries, and you watch every one</h2></div>
+    <div class="prose"><p>Terraforming is a slow planetary project that runs alongside your settlements. Time scales up once a colony is self-sufficient: a season passes in minutes, then a decade. Your towns keep running at their own pace, and the planet around them changes colour. Drag the slider to see one valley on Rime change over six hundred years.</p></div>
+    <div class="plate">
+      <div class="tf-top">
+        <div><span class="eyebrow" id="tfYear">Year 0</span><div class="tf-stage" id="tfStage">Rust and frost</div></div>
+        <dl class="tf-read">
+          <div><dt>Pressure</dt><dd id="rP">0.6 kPa</dd></div>
+          <div><dt>Mean temp</dt><dd id="rT">−58 °C</dd></div>
+          <div><dt>Surface water</dt><dd id="rW">0 %</dd></div>
+          <div><dt>Oxygen</dt><dd id="rO">0.1 %</dd></div>
+        </dl>
+      </div>
+      <canvas id="tf" style="height:clamp(280px,34vw,380px)" aria-label="Concept art of a valley being terraformed; its sky, ice, water and vegetation change with the slider"></canvas>
+      <div class="tf-ctl">
+        <label for="tfSlider">Years since first seeding</label>
+        <input type="range" id="tfSlider" min="0" max="600" step="1" value="0">
+        <button class="btn" id="tfPlay" type="button">Play</button>
+      </div>
+      <div class="legend">
+        <span><i style="background:#f0b25a"></i>Pressure</span>
+        <span><i style="background:#e58a6c"></i>Temperature</span>
+        <span><i style="background:#7fc4c8"></i>Surface water</span>
+        <span><i style="background:#9cc58f"></i>Oxygen</span>
+      </div>
+      <div style="padding:6px 10px 12px;overflow-x:auto">
+        <svg id="tfChart" viewBox="0 0 680 230" role="img" aria-label="Chart of progress toward a habitable target over 600 years. Pressure rises first, then temperature, then surface water; oxygen rises last." style="width:100%;min-width:520px;height:auto;display:block"></svg>
+      </div>
+      <div class="cap"><b>Plate 05 · Rime, Kettle Valley</b><span>Lines show progress toward a habitable target (100 %). Oxygen comes last because only living things make it.</span></div>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Heat &amp; air</span><h3>Warm it, thicken it</h3><p>Orbital mirrors, greenhouse-gas works, redirected ice comets. Each is a megaproject built by your economy, with goods launched from other worlds.</p></div>
+      <div class="note"><span class="k">Water</span><h3>Make it rain</h3><p>Melt caps, seed clouds, dig lake basins before the thaw so water pools where you want it. The water sim takes it from there.</p></div>
+      <div class="note"><span class="k">Life</span><h3>Seed, then step back</h3><p>Lichen, moss, grasses, pioneer trees, pollinators, grazers. You choose the seed mix; succession and climate decide what thrives.</p></div>
+      <div class="note"><span class="k">Kinship</span><h3>Native life has a say</h3><p>Some worlds already have life. Terraforming can erase it. Reserves, gene banks and hybrid biomes let you choose, and the Almanac remembers what you chose.</p></div>
+      <div class="note"><span class="k">Local</span><h3>Small-scale shaping</h3><p>Before planets, valleys: domes, heated greenhouses, windbreak forests and irrigation shape microclimates from the first hour.</p></div>
+      <div class="note"><span class="k">Endgame</span><h3>Bloom</h3><p>A planet that sustains itself earns a Bloom: settlers walk outside unaided, rain falls on its own and the soundtrack gains a new theme.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 12 COLONIES ============ -->
+  <section id="colonies" data-t="Colonisation">
+    <div class="head"><span class="eyebrow">Colonisation</span><h2>From one keep to a star system</h2></div>
+    <ol class="track">
+      <li><span class="n">01</span><h3>Survey</h3><p>Probes map a world's tiles, climate and hazards. Unscanned areas stay as sketches.</p></li>
+      <li><span class="n">02</span><h3>Pack the Hearthship</h3><p>Choose settlers, tools, seeds and stock within a mass budget. What you pack is your start.</p></li>
+      <li><span class="n">03</span><h3>Land</h3><p>Pick a site by slope, water and ore. The ship unpacks into a keep and first store.</p></li>
+      <li><span class="n">04</span><h3>Take root</h3><p>Reach food, shelter and tools on site. The colony earns Rooted status and its own policies.</p></li>
+      <li><span class="n">05</span><h3>Build a launch rail</h3><p>Mass drivers throw bulk cargo to orbit; skyships carry people and fragile goods.</p></li>
+      <li><span class="n">06</span><h3>Trade and send</h3><p>Launch windows open as worlds align. Colonies specialise and depend on each other.</p></li>
+    </ol>
+    <div class="grid3">
+      <div class="note"><span class="k">Logistics</span><h3>Carriers all the way up</h3><p>Interplanetary cargo still leaves by road. Crates travel flag to flag to the launch rail, so an orbital shipment can be held up by a muddy lane.</p></div>
+      <div class="note"><span class="k">Culture</span><h3>Colonies drift</h3><p>Over generations each colony develops customs, songs, building styles and a slight dialect in settler chatter, shaped by its world.</p></div>
+      <div class="note"><span class="k">Governance</span><h3>Policies per colony</h3><p>Work hours, festival calendars, what to export, how much to keep. Set them yourself or name a steward to run a mature colony.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 13 BORDERS ============ -->
+  <section id="borders" data-t="Borders & neighbours">
+    <div class="head"><span class="eyebrow">Territory</span><h2>Borders, neighbours and three ways to share a world</h2></div>
+    <div class="prose"><p>Serf City's guard huts, towers and fortresses become <strong>lantern posts, lamp houses, beacon towers and lighthouse keeps</strong>. Each is staffed by wardens and lights a border radius. At night you can see your territory as a ring of warm light across the planet.</p></div>
+    <div class="grid3">
+      <div class="note"><span class="k">Mode</span><h3>Peaceful</h3><p>No rivals. Neutral nomad caravans visit to trade, and native creatures share the land.</p></div>
+      <div class="note"><span class="k">Mode</span><h3>Rivalry</h3><p>Borders press by influence: Glow, festivals and trade win over neutral hamlets. Contested lanterns are settled by contests between champions, such as log-rolling, stone-lifting and choirs.</p></div>
+      <div class="note"><span class="k">Mode</span><h3>Classic</h3><p>The original's conflict, stylised. Knights train on weapons, gold raises their morale, and towers change hands. Defeated settlers go home rather than die.</p></div>
+      <div class="note"><span class="k">Neighbours</span><h3>Nomads and hamlets</h3><p>Travelling traders bring seeds and rare goods and pay in knowledge. Hamlets can join you when your Glow outshines their need to stay apart.</p></div>
+      <div class="note"><span class="k">Natives</span><h3>Other life</h3><p>Grazing herds, burrowers that aerate soil, tide-crabs that eat your nets. Some can be tamed, some must be worked around.</p></div>
+      <div class="note"><span class="k">Diplomacy</span><h3>Letters between keeps</h3><p>With AI or human rivals: trade pacts, shared roads, joint megaprojects, gifts for festivals.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 14 ALMANAC ============ -->
+  <section id="almanac" data-t="The Almanac">
+    <div class="head"><span class="eyebrow">Knowledge</span><h2>The Almanac replaces the tech tree</h2></div>
+    <div class="prose">
+      <p>There is no research screen with points. Knowledge comes from settlers noticing things. The first time a geologist finds copper, an Almanac page appears with a sketch, and the coppersmith becomes buildable. After a full year of weather records, you get forecasts. Watch deer for a season and a naturalist learns to domesticate them.</p>
+      <p>The Almanac is also the game's journal. It fills with hand-drawn plates of species, ores, weather and buildings, with settler notes in the margins. Precursor ruins on some worlds hold pages you cannot read until you have learned enough to understand them.</p>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Unlock by doing</span><h3>Observation</h3><p>Mine, fish, farm, survive a winter. Each first adds a page, and pages combine into blueprints.</p></div>
+      <div class="note"><span class="k">Unlock by asking</span><h3>Teaching</h3><p>Elders and nomads teach techniques. Masters invent variations on their own buildings.</p></div>
+      <div class="note"><span class="k">Unlock by digging</span><h3>Ruins</h3><p>Excavate precursor sites for seed vaults, star charts and the old terraforming methods.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 15 GLOW ============ -->
+  <section id="glow" data-t="Glow & culture">
+    <div class="head"><span class="eyebrow">Wellbeing</span><h2>Glow: comfort as a mechanic</h2></div>
+    <div class="prose"><p>Glow is the settlement's mood, shown as the warmth of window light across town. It has five parts, and each one is earned through the economy rather than bought.</p></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Part</th><th>Raised by</th><th>Effect when high</th></tr></thead>
+      <tbody>
+        <tr><td>Nourishment</td><td>Food variety, hot meals, seasonal dishes</td><td>Faster work, longer lives</td></tr>
+        <tr><td>Warmth</td><td>Heated homes, sheltered roads, climate fit</td><td>Fewer illnesses; night work possible</td></tr>
+        <tr><td>Beauty</td><td>Gardens, fountains, masterwork decor, old buildings</td><td>Migration from nomads and hamlets</td></tr>
+        <tr><td>Belonging</td><td>Households, festivals, taverns, choirs</td><td>More births; apprentices learn faster</td></tr>
+        <tr><td>Rest</td><td>Reasonable hours, holidays, benches along roads</td><td>Fewer mistakes, better quality goods</td></tr>
+      </tbody>
+    </table></div>
+    <div class="grid3">
+      <div class="note"><span class="k">Festivals</span><h3>A calendar per world</h3><p>First Harvest, Longest Night, Tide Turn. Festivals pause work for a day, cost food and raise Belonging for a season.</p></div>
+      <div class="note"><span class="k">Music</span><h3>The town writes its soundtrack</h3><p>Each workshop adds a layer to the adaptive score: the smithy on the downbeat, the mill as a drone, the choir when Glow is high.</p></div>
+      <div class="note"><span class="k">Decoration</span><h3>Freeform prettiness</h3><p>Paint shutters, plant flower boxes, place lanterns. It is optional, it adds Beauty, and it makes the photo mode worth using.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 16 ADVERSITY ============ -->
+  <section id="adversity" data-t="Gentle adversity">
+    <div class="head"><span class="eyebrow">Challenge</span><h2>Adversity that asks for a plan</h2></div>
+    <div class="prose"><p>Hardships arrive with warning, are shaped by how you built, and leave something behind. Three settings: <strong>Gentle</strong> (no losses of people), <strong>Honest</strong> (the default) and <strong>Hard</strong> (colonies can fail).</p></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Event</th><th>Warning</th><th>Answer</th><th>Leaves behind</th></tr></thead>
+      <tbody>
+        <tr><td>Wildfire</td><td>Dry season, wind forecast</td><td>Firebreaks, wells, bucket lines</td><td>Ash-rich soil; fire-adapted flowers</td></tr>
+        <tr><td>Flood</td><td>Snowmelt readings, heavy rain</td><td>Levees, spillways, stilts</td><td>Silt that makes fields fertile</td></tr>
+        <tr><td>Blight</td><td>Monoculture warnings</td><td>Rotation, hedgerows, seed diversity</td><td>A resistant seed line</td></tr>
+        <tr><td>Cold snap</td><td>Aurora and pressure drop</td><td>Stores, heated routes, firewood</td><td>Ice roads and frozen lakes to fish</td></tr>
+        <tr><td>Eruption</td><td>Tremor count on Cinder</td><td>Evacuation routes, ash shelters</td><td>New land and rich volcanic soil</td></tr>
+        <tr><td>Meteor shower</td><td>Visible for nights before</td><td>Shelters, watchers</td><td>Rare metal in the craters</td></tr>
+        <tr><td>Sandstorm</td><td>Haze on the horizon</td><td>Windbreaks, covered roads</td><td>Dunes shift; buried ruins appear</td></tr>
+        <tr><td>Pests</td><td>Nibbled sacks in the granary</td><td>Cats, sealed stores, owls</td><td>A settlement cat population</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ 17 MODES ============ -->
+  <section id="modes" data-t="Modes & progression">
+    <div class="head"><span class="eyebrow">Structure</span><h2>Modes and progression</h2></div>
+    <div class="grid3">
+      <div class="note"><span class="k">Campaign</span><h3>The Long Voyage</h3><p>Twelve chapters across the Lanterne system, from the first landing on Hearth to the Bloom of Rime. Each chapter teaches one system and one world.</p></div>
+      <div class="note"><span class="k">Sandbox</span><h3>Seeded systems</h3><p>Generate a system from a seed with sliders for planet count, harshness, native life and rivals. Share seeds as short words.</p></div>
+      <div class="note"><span class="k">Scenarios</span><h3>Handmade puzzles</h3><p>Rebuild after a flood, supply a lighthouse through winter, feed a city from a single tidal island.</p></div>
+      <div class="note"><span class="k">Co-op</span><h3>2–4 keeps, one world</h3><p>Shared or separate economies. Roads can be jointly owned, and goods can cross borders on shared flags.</p></div>
+      <div class="note"><span class="k">Async</span><h3>Letters and skyships</h3><p>Send cargo to a friend's system. The skyship arrives hours later in real time, with a letter and a pressed flower.</p></div>
+      <div class="note"><span class="k">Creative</span><h3>World painter</h3><p>Sculpt planets, place biomes, write scenarios and share them through the workshop. Full mod support for buildings and goods.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 18 LOOK ============ -->
+  <section id="look" data-t="Look & sound">
+    <div class="head"><span class="eyebrow">Art &amp; audio direction</span><h2>A painted miniature under a real sky</h2></div>
+    <div class="prose">
+      <p>The look combines a handmade diorama with modern light. Buildings are chunky and hand-textured, settlers are readable at a distance, and physically based atmospheric scattering, soft global illumination and volumetric clouds make every hour of the day distinct. A gentle tilt-shift focus keeps the planet feeling small and precious.</p>
+    </div>
+    <div class="plate hud">
+      <div class="hud-stage"><canvas id="hudScene" aria-label="Concept of the in-game interface over a morning scene on Hearth"></canvas>
+      <div class="hud-ui">
+        <div class="pane p-res"><div class="res" id="resBar"></div></div>
+        <div class="pane p-settler">
+          <h4>Following · Ilse Varga</h4>
+          <div style="color:var(--ink);font-size:.92rem">Carrier, road 14 → apprentice miller</div>
+          <div style="margin:6px 0 4px">Carrying 1 grain · 3 deliveries today</div>
+          <div class="slider-row"><span>Glow</span><div class="bar"><i style="width:82%"></i></div><output>82</output></div>
+          <div class="slider-row"><span>Skill</span><div class="bar"><i style="width:36%;background:var(--tide)"></i></div><output>36</output></div>
+          <div style="margin-top:6px;font-style:italic;color:var(--muted)">“The mill smells like my grandmother's kitchen.”</div>
+        </div>
+        <div class="pane p-time"><h4>Hearth · Year 3</h4><div class="mono" style="color:var(--ink)">Spring, day 14 · 06:40</div><div style="color:var(--muted)">Light rain by noon · roads to mud</div></div>
+        <div class="pane p-dist">
+          <h4>Distribution · coal</h4>
+          <div style="display:flex;flex-direction:column;gap:6px" id="distRows"></div>
+        </div>
+      </div></div>
+      <div class="cap"><b>Plate 06 · Interface concept</b><span>Quiet by default. Panels fade when the camera is still; the sliders on the right work.</span></div>
+    </div>
+    <div class="swatches">
+      <div class="sw"><div class="strip"><i style="background:#2b4a73"></i><i style="background:#6f93b8"></i><i style="background:#e9c9a0"></i><i style="background:#5d8a5a"></i><i style="background:#c8553d"></i></div><p><b>Morning</b>Cool sky, first warm light on roofs. Roads read clearly.</p></div>
+      <div class="sw"><div class="strip"><i style="background:#8fb3c9"></i><i style="background:#f3d9a8"></i><i style="background:#6f9a66"></i><i style="background:#d8b95c"></i><i style="background:#8a3f34"></i></div><p><b>Afternoon</b>High sun, crisp shadows, maximum legibility for planning.</p></div>
+      <div class="sw"><div class="strip"><i style="background:#262a4d"></i><i style="background:#7a4e62"></i><i style="background:#e39a6a"></i><i style="background:#34503f"></i><i style="background:#f0b25a"></i></div><p><b>Dusk</b>The signature hour. Lantern light against blue shadow.</p></div>
+      <div class="sw"><div class="strip"><i style="background:#070b1a"></i><i style="background:#1b2b4a"></i><i style="background:#62e0a8"></i><i style="background:#b7a3e0"></i><i style="background:#ffc56b"></i></div><p><b>Night</b>Stars, aurora, glowing windows. Territory shows as light.</p></div>
+    </div>
+    <div class="grid3">
+      <div class="note"><span class="k">Light</span><h3>Real skies on small worlds</h3><p>Scattering computed for each planet's air, so Cinder's sky is rust, Tessel's is teal, and terraforming visibly changes the colour of the sky.</p></div>
+      <div class="note"><span class="k">Surface</span><h3>Things leave marks</h3><p>Footprints in snow and mud, desire paths, wet roofs after rain, moss on the north side of old walls, soot above chimneys.</p></div>
+      <div class="note"><span class="k">Motion</span><h3>Everything sways a little</h3><p>GPU vegetation bends in simulated wind; smoke, pennants and laundry lines agree on the wind direction.</p></div>
+      <div class="note"><span class="k">Sound</span><h3>Every building has a voice</h3><p>Positional audio per building and material. Zoom into the smithy and hear it clearly; zoom out to hear the whole town as one soft murmur.</p></div>
+      <div class="note"><span class="k">Voices</span><h3>Settler chatter</h3><p>A small invented language, gentle and wordless in tone, with colony dialects. Work songs rise when Glow is high.</p></div>
+      <div class="note"><span class="k">Camera</span><h3>Photo and follow modes</h3><p>Street-level follow cam, time-lapse of a whole season, a planetary orbit view, and postcards you can send with async letters.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 19 TECH ============ -->
+  <section id="tech" data-t="Technology">
+    <div class="head"><span class="eyebrow">Technology</span><h2>How the planets are built</h2></div>
+    <div class="grid2">
+      <div class="note"><span class="k">Grid</span><h3>Hexes on a sphere</h3><p>Each planet is a Goldberg polyhedron: hexagons plus exactly twelve pentagons. Instead of hiding the pentagons, the game makes them the twelve <strong>Star Wells</strong> of each world, ancient sites that hold precursor ruins, rare resources or unique views.</p></div>
+      <div class="note"><span class="k">Simulation</span><h3>Deterministic and layered</h3><p>A fixed-point simulation at 10 ticks per second runs the economy and settlers for lockstep co-op. Water, heat and erosion run on the GPU at coarser rates and sync as snapshots.</p></div>
+      <div class="note"><span class="k">Scale</span><h3>Twelve thousand settlers per planet</h3><p>Entity-component architecture; settlers far from the camera are simulated on the road graph only and animated as impostors. Idle planets run in summary mode.</p></div>
+      <div class="note"><span class="k">Rendering</span><h3>Modern, scalable</h3><p>Clustered lighting for thousands of lanterns, virtual texturing for per-tile wear, probe-based GI, temporal upscaling. A handheld preset keeps 30 fps with the same simulation.</p></div>
+      <div class="note"><span class="k">Saves</span><h3>A world journal</h3><p>Saves are compact event logs plus snapshots, so a colony's whole history can replay as a time-lapse.</p></div>
+      <div class="note"><span class="k">Access</span><h3>Accessibility from day one</h3><p>Pause and speed at any time, colour-blind palettes for goods, remappable controls, controller-first radial menus, scalable text and optional subtitles for chatter.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 20 ROADMAP ============ -->
+  <section id="roadmap" data-t="Roadmap & risks">
+    <div class="head"><span class="eyebrow">Production</span><h2>Roadmap and risks</h2></div>
+    <ol class="track">
+      <li><span class="n">Phase 0 · 4 mo</span><h3>Roads on a ball</h3><p>Flags, carriers and five buildings on a spherical hex grid. Is the camera readable?</p></li>
+      <li><span class="n">Phase 1 · 8 mo</span><h3>Hearth slice</h3><p>Full Meadowlands economy, settlers, seasons, Glow. Art target locked.</p></li>
+      <li><span class="n">Phase 2 · 8 mo</span><h3>Living world</h3><p>Water, fire, wind, soil, ecology. Almanac. Two more biomes.</p></li>
+      <li><span class="n">Phase 3 · 10 mo</span><h3>The system</h3><p>Colonisation, launch rails, trade, all eight biomes. Early access.</p></li>
+      <li><span class="n">Phase 4 · 8 mo</span><h3>Bloom</h3><p>Terraforming, campaign, co-op, async letters, modding. Release 1.0.</p></li>
+    </ol>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Risk</th><th>Why it matters</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Reading a sphere</td><td>Curvature can confuse planning and hide roads over the horizon</td><td>A flattening planner view (Plate 02), road overlays that wrap around, horizon markers</td></tr>
+        <tr><td>Simulation cost</td><td>Many systems times six planets</td><td>Summary mode for unwatched planets; GPU fields at low tick rates</td></tr>
+        <tr><td>Cosy vs deep</td><td>Depth can turn into stress</td><td>Warnings before events, soft failure, difficulty that changes consequences rather than speed</td></tr>
+        <tr><td>Scope</td><td>Eight biomes and terraforming is a lot</td><td>Biomes share systems and differ by one rule each; terraforming reuses the same simulation</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ 21 INDEX ============ -->
+  <section id="index" data-t="Mechanics index">
+    <div class="head"><span class="eyebrow">Reference</span><h2>Mechanics index</h2></div>
+    <div class="prose"><p>Every mechanic in this proposal, grouped and tiered. <span class="chip c-core">Core</span> ships in the vertical slice. <span class="chip c-ext">Extended</span> ships at 1.0. <span class="chip c-str">Stretch</span> is post-launch or a candidate for cutting.</p></div>
+    <div class="index" id="mechIndex"></div>
+    <div class="close">
+      <p class="quote">A parcel of bread, handed flag to flag across a planet you warmed yourself.</p>
+      <p>That is the whole game in one image. The first slice to build is Phase 0: roads on a ball. If watching carriers wrap around a small world is as satisfying as it was on a flat map in 1993, everything else in this document has something solid to stand on.</p>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<script>
+(() => {
+"use strict";
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const TAU = Math.PI * 2;
+
+/* ---------- utilities ---------- */
+function rng(seed){ return function(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function noise1(seed){ const r = rng(seed), v = []; for (let i = 0; i < 256; i++) v.push(r()); return x => { const i = Math.floor(x), f = x - i, a = v[i & 255], b = v[(i + 1) & 255], u = f * f * (3 - 2 * f); return a + (b - a) * u; }; }
+function fbm(n, x, o = 4){ let s = 0, a = .5, f = 1, norm = 0; for (let i = 0; i < o; i++){ s += a * n(x * f + i * 31.7); norm += a; a *= .5; f *= 2; } return s / norm; }
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+function hex(h){ const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function mix(a, b, t){ const A = hex(a), B = hex(b); return `rgb(${Math.round(lerp(A[0], B[0], t))},${Math.round(lerp(A[1], B[1], t))},${Math.round(lerp(A[2], B[2], t))})`; }
+function rgba(h, a){ const c = hex(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+function vgrad(ctx, y0, y1, stops){ const g = ctx.createLinearGradient(0, y0, 0, y1); stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c)); return g; }
+function glow(ctx, x, y, r, color, a){ const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, rgba(color, a)); g.addColorStop(1, rgba(color, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
+
+/* ---------- scene runner ---------- */
+const scenes = [];
+const io = new IntersectionObserver(es => es.forEach(e => { const s = scenes.find(x => x.canvas === e.target); if (s) s.visible = e.isIntersecting; }), { rootMargin: "120px" });
+function scene(canvas, draw, animated = true){
+  const s = { canvas, ctx: canvas.getContext("2d"), draw, animated, visible: false, w: 0, h: 0 };
+  new ResizeObserver(() => { resize(s); render(s, performance.now() / 1000); }).observe(canvas);
+  io.observe(canvas); scenes.push(s); return s;
+}
+function resize(s){ const r = s.canvas.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2); s.w = r.width; s.h = r.height; s.canvas.width = Math.max(1, Math.round(r.width * d)); s.canvas.height = Math.max(1, Math.round(r.height * d)); s.ctx.setTransform(d, 0, 0, d, 0, 0); }
+function render(s, t){ if (s.w < 2 || s.h < 2) return; s.draw(s.ctx, s.w, s.h, t, s); }
+function loop(now){ const t = now / 1000; for (const s of scenes) if (s.visible && s.animated && !RM) render(s, t); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+/* =====================================================================
+   PLANET SCENE (hero + HUD)
+   ===================================================================== */
+const PAL = {
+  dusk: { sky: ["#0b0f1e", "#1c2140", "#3a3257", "#7a4e62", "#e39a6a"], ground: ["#34503f", "#1a2622", "#10161a"], rim: "#8fb07a", window: "#ffc56b", roof: ["#8a3f34", "#4f5d6e", "#6b4a3a"], wall: "#6b5a4c", tree: ["#1f3a2c", "#3e6b4a"], stars: 1, lit: .9, hill: "#243a33", road: "#9b8462" },
+  morning: { sky: ["#1f3a63", "#2b4a73", "#6f93b8", "#c9b9a8", "#f0cfa4"], ground: ["#5d8a5a", "#35573c", "#1d2d24"], rim: "#b9d69a", window: "#ffd58a", roof: ["#b0503a", "#5e7088", "#8a5a3a"], wall: "#a08a70", tree: ["#2f5a3a", "#6a9a5a"], stars: .15, lit: .35, hill: "#4a6f58", road: "#c4a77a" }
+};
+function makePlanet(seed, pal, opts = {}){
+  const r = rng(seed), objs = [], towns = opts.towns || [0, 2.2, 4.1], roads = [], fields = [];
+  towns.forEach(c => {
+    const n = 5 + Math.floor(r() * 3);
+    for (let i = 0; i < n; i++) objs.push({ k: "house", a: c + (i - n / 2) * .042 + r() * .012, s: .85 + r() * .45, roof: Math.floor(r() * 3), lit: r() < .85, z: 2 });
+    objs.push({ k: "mill", a: c + n * .026 + .05, s: 1, z: 1 });
+    objs.push({ k: "tower", a: c - n * .026 - .06, s: 1, z: 1 });
+    const flags = []; for (let a = c - .24; a <= c + .245; a += .06) flags.push(a);
+    roads.push(flags);
+    fields.push([c + .1, c + .2], [c - .21, c - .13]);
+  });
+  const nearTown = a => towns.some(c => { let d = Math.abs(((a - c) % TAU + TAU) % TAU); d = Math.min(d, TAU - d); return d < .25; });
+  for (let i = 0; i < 190; i++){ const a = r() * TAU; if (nearTown(a) && r() < .8) continue; objs.push({ k: r() < .35 ? "pine" : "tree", a, s: .6 + r() * .9, hue: r(), z: 0 }); }
+  objs.sort((a, b) => a.z - b.z);
+  const stars = []; for (let i = 0; i < 160; i++) stars.push([r(), r() * .7, r() * 1.3 + .3, r() * TAU]);
+  const hills = noise1(seed + 5);
+  const flies = []; for (let i = 0; i < 26; i++) flies.push([r(), r(), r() * TAU]);
+
+  return (ctx, w, h, t) => {
+    const k = Math.max(.45, Math.min(1.15, w / 1100));
+    const R = Math.max(w * .78, 520), cx = w * .5, top = h * (opts.top || .66), cy = top + R;
+    const rot = (opts.rot0 || 0) + (RM ? 0 : t * .012);
+    // sky
+    ctx.fillStyle = vgrad(ctx, 0, top + 30, pal.sky); ctx.fillRect(0, 0, w, h);
+    // stars
+    if (pal.stars > .2) for (const s of stars){ const a = pal.stars * (.45 + .55 * Math.sin(t * s[2] + s[3])) * (1 - s[1] * .9); ctx.fillStyle = `rgba(236,229,212,${a.toFixed(3)})`; ctx.fillRect(s[0] * w, s[1] * h * .8, s[2] * .9, s[2] * .9); }
+    // gas giant with rings
+    const gx = w * .8, gy = h * .23, gr = Math.min(w, h) * .12;
+    ctx.save(); ctx.translate(gx, gy); ctx.rotate(-.35);
+    ctx.strokeStyle = rgba("#d9c3a0", .45); ctx.lineWidth = gr * .08;
+    ctx.beginPath(); ctx.ellipse(0, 0, gr * 1.9, gr * .45, 0, Math.PI, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, gr, 0, TAU); ctx.save(); ctx.clip();
+    ctx.fillStyle = "#b98a6a"; ctx.fillRect(-gr, -gr, gr * 2, gr * 2);
+    const bands = ["#d8b08a", "#9b6a55", "#c99c7a", "#a87860", "#e0c29e", "#8a5f50"];
+    for (let i = 0; i < 9; i++){ ctx.fillStyle = bands[i % bands.length]; ctx.globalAlpha = .7; ctx.fillRect(-gr, -gr + i * gr * .23 + Math.sin(i * 3.1) * 3, gr * 2, gr * .12); }
+    ctx.globalAlpha = 1;
+    const sh = ctx.createLinearGradient(-gr, 0, gr, 0); sh.addColorStop(0, "rgba(10,12,24,0)"); sh.addColorStop(.55, "rgba(10,12,24,.25)"); sh.addColorStop(1, "rgba(10,12,24,.85)");
+    ctx.fillStyle = sh; ctx.fillRect(-gr, -gr, gr * 2, gr * 2); ctx.restore();
+    ctx.strokeStyle = rgba("#e8d3b0", .6);
+    ctx.beginPath(); ctx.ellipse(0, 0, gr * 1.9, gr * .45, 0, 0, Math.PI); ctx.stroke();
+    ctx.restore();
+    // moon
+    const mx = w * .6, my = h * .13, mr = Math.min(w, h) * .03;
+    glow(ctx, mx, my, mr * 4, "#e8e0cc", .12);
+    ctx.fillStyle = "#e6dfcc"; ctx.beginPath(); ctx.arc(mx, my, mr, 0, TAU); ctx.fill();
+    ctx.fillStyle = rgba(pal.sky[1], .92); ctx.beginPath(); ctx.arc(mx + mr * .45, my - mr * .2, mr * .92, 0, TAU); ctx.fill();
+    // airship
+    const ax = ((t * 14) % (w + 260)) - 130, ay = h * .38 + Math.sin(t * .6) * 5;
+    ctx.save(); ctx.translate(ax, ay); ctx.scale(k, k);
+    ctx.fillStyle = "#c9a27a"; ctx.beginPath(); ctx.ellipse(0, 0, 34, 12, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.beginPath(); ctx.ellipse(0, 4, 34, 7, 0, 0, Math.PI); ctx.fill();
+    ctx.strokeStyle = "#7a5a44"; ctx.lineWidth = 1; for (let i = -2; i <= 2; i++){ ctx.beginPath(); ctx.moveTo(i * 11, -11); ctx.lineTo(i * 11, 11); ctx.stroke(); }
+    ctx.fillStyle = "#5a4436"; ctx.fillRect(-9, 15, 18, 6); ctx.strokeStyle = "#5a4436"; ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(-7, 15); ctx.moveTo(8, 10); ctx.lineTo(7, 15); ctx.stroke();
+    ctx.fillStyle = pal.window; ctx.fillRect(-5, 16.5, 3, 2.5); ctx.fillRect(1, 16.5, 3, 2.5);
+    ctx.fillStyle = "#8a3f34"; ctx.beginPath(); ctx.moveTo(-32, 0); ctx.lineTo(-42, -9); ctx.lineTo(-42, 9); ctx.fill();
+    ctx.restore();
+    // atmosphere halo
+    const halo = ctx.createRadialGradient(cx, cy, R * .985, cx, cy, R * 1.09);
+    halo.addColorStop(0, rgba(pal.sky[4], .55)); halo.addColorStop(.35, rgba(pal.sky[3], .22)); halo.addColorStop(1, rgba(pal.sky[3], 0));
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, w, h);
+    // far hills ring
+    ctx.fillStyle = pal.hill; ctx.beginPath();
+    const span = Math.asin(Math.min(1, (w * .5 + 40) / R)) + .05;
+    for (let th = -Math.PI / 2 - span; th <= -Math.PI / 2 + span; th += .004){ const a = th + Math.PI / 2 + rot; const hh = (fbm(hills, a * 9) * 42 + 4) * k; const x = cx + (R + hh) * Math.cos(th), y = cy + (R + hh) * Math.sin(th); th === -Math.PI / 2 - span ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.lineTo(cx + R, cy); ctx.lineTo(cx - R, cy); ctx.closePath(); ctx.fill();
+    // planet body
+    ctx.fillStyle = vgrad(ctx, top, h, pal.ground); ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+    ctx.strokeStyle = rgba(pal.rim, .55); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R - 1, Math.PI, TAU); ctx.stroke();
+    const vis = a => { const th = -Math.PI / 2 + a - rot; const d = Math.atan2(Math.sin(th + Math.PI / 2), Math.cos(th + Math.PI / 2)); return Math.abs(d) < span ? th : null; };
+    const at = (th, rr, fn) => { ctx.save(); ctx.translate(cx + rr * Math.cos(th), cy + rr * Math.sin(th)); ctx.rotate(th + Math.PI / 2); ctx.scale(k, k); fn(); ctx.restore(); };
+    // fields
+    for (const [a0, a1] of fields){ const t0 = vis(a0), t1 = vis(a1); if (t0 === null && t1 === null) continue; const th0 = -Math.PI / 2 + a0 - rot, th1 = -Math.PI / 2 + a1 - rot;
+      ctx.strokeStyle = rgba("#c9a857", .55); ctx.lineWidth = 7 * k; ctx.beginPath(); ctx.arc(cx, cy, R - 4 * k, th0, th1); ctx.stroke();
+      ctx.strokeStyle = rgba("#e2c46e", .5); ctx.lineWidth = 1.5 * k; ctx.setLineDash([3 * k, 4 * k]); ctx.beginPath(); ctx.arc(cx, cy, R - 1 * k, th0, th1); ctx.stroke(); ctx.setLineDash([]); }
+    // roads
+    for (const flags of roads){ const a0 = flags[0], a1 = flags[flags.length - 1]; if (vis(a0) === null && vis(a1) === null && vis((a0 + a1) / 2) === null) continue;
+      ctx.strokeStyle = rgba(pal.road, .8); ctx.lineWidth = 3.2 * k; ctx.beginPath(); ctx.arc(cx, cy, R - 1.5 * k, -Math.PI / 2 + a0 - rot, -Math.PI / 2 + a1 - rot); ctx.stroke(); }
+    // objects
+    for (const o of objs){ const th = vis(o.a); if (th === null) continue;
+      at(th, R, () => {
+        ctx.scale(o.s, o.s);
+        if (o.k === "tree"){ ctx.fillStyle = "#3a2a20"; ctx.fillRect(-1.2, -8, 2.4, 8); ctx.fillStyle = mix(pal.tree[0], pal.tree[1], o.hue * .6); ctx.beginPath(); ctx.arc(0, -13, 7, 0, TAU); ctx.arc(-4, -9, 5, 0, TAU); ctx.arc(4, -10, 5, 0, TAU); ctx.fill(); ctx.fillStyle = rgba(pal.rim, .25); ctx.beginPath(); ctx.arc(-2.5, -15, 3.2, 0, TAU); ctx.fill(); }
+        else if (o.k === "pine"){ ctx.fillStyle = "#3a2a20"; ctx.fillRect(-1, -4, 2, 4); ctx.fillStyle = mix(pal.tree[0], pal.tree[1], o.hue * .4); ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(7, -4); ctx.lineTo(-7, -4); ctx.fill(); ctx.fillStyle = rgba(pal.rim, .18); ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(-7, -4); ctx.lineTo(-2, -4); ctx.fill(); }
+        else if (o.k === "house"){ ctx.fillStyle = pal.wall; ctx.fillRect(-8, -11, 16, 11); ctx.fillStyle = pal.roof[o.roof]; ctx.beginPath(); ctx.moveTo(-10, -11); ctx.lineTo(0, -20); ctx.lineTo(10, -11); ctx.fill(); ctx.fillStyle = "#3a302a"; ctx.fillRect(4, -21, 3, 6); ctx.fillRect(-2, -6, 4, 6);
+          if (o.lit){ glow(ctx, -4.5, -6, 11, pal.window, .28 * pal.lit); ctx.fillStyle = pal.window; ctx.fillRect(-6, -8, 3, 3); ctx.fillRect(3.5, -8, 3, 3); }
+          for (let i = 0; i < 5; i++){ const p = (((t * .35 + i * .2 + o.a * 7) % 1) + 1) % 1; ctx.fillStyle = `rgba(200,195,190,${(.28 * (1 - p)).toFixed(3)})`; ctx.beginPath(); ctx.arc(5.5 + Math.sin(p * 6 + i) * 2 + p * 6, -23 - p * 22, 1.5 + p * 3.5, 0, TAU); ctx.fill(); } }
+        else if (o.k === "mill"){ ctx.fillStyle = "#b8a488"; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-4, -26); ctx.lineTo(4, -26); ctx.lineTo(6, 0); ctx.fill(); ctx.fillStyle = "#6b4a3a"; ctx.beginPath(); ctx.moveTo(-5.5, -26); ctx.lineTo(0, -32); ctx.lineTo(5.5, -26); ctx.fill(); ctx.fillStyle = pal.window; ctx.fillRect(-1.5, -16, 3, 3);
+          ctx.save(); ctx.translate(0, -26); ctx.rotate((RM ? .3 : t * .9)); ctx.fillStyle = "#e0d4bc"; for (let i = 0; i < 4; i++){ ctx.rotate(TAU / 4); ctx.fillRect(-1, 2, 2, 18); ctx.fillRect(1, 6, 4, 13); } ctx.restore(); }
+        else if (o.k === "tower"){ ctx.fillStyle = "#5a5058"; ctx.fillRect(-4, -34, 8, 34); ctx.fillStyle = "#3a3440"; ctx.beginPath(); ctx.moveTo(-6, -34); ctx.lineTo(0, -42); ctx.lineTo(6, -34); ctx.fill(); const pulse = .75 + .25 * Math.sin(t * 1.6 + o.a * 10); glow(ctx, 0, -30, 34, "#f0b25a", .22 * pulse * (pal.lit + .1)); ctx.fillStyle = "#ffd58a"; ctx.fillRect(-2, -31, 4, 4); }
+      });
+    }
+    // flags & carriers
+    for (const flags of roads){ for (let i = 0; i < flags.length; i++){ const th = vis(flags[i]); if (th !== null) at(th, R - 1, () => { ctx.strokeStyle = "#d8cbb0"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -11); ctx.stroke(); ctx.fillStyle = "#f0b25a"; ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(6 + Math.sin(t * 3 + i) * 1, -9); ctx.lineTo(0, -7); ctx.fill(); });
+        if (i < flags.length - 1){ const ph = flags[i] * 13 + i; const u = (Math.sin(t * .8 + ph) + 1) / 2; const carrying = Math.cos(t * .8 + ph) > 0; const a = lerp(flags[i] + .006, flags[i + 1] - .006, u); const th2 = vis(a);
+          if (th2 !== null) at(th2, R - 1, () => { const bob = Math.abs(Math.sin(t * 9 + ph)) * .8; ctx.fillStyle = "#3b3a4a"; ctx.fillRect(-1.6, -7 - bob, 3.2, 5); ctx.fillRect(-1.4, -2, 1.1, 2); ctx.fillRect(.4, -2, 1.1, 2); ctx.fillStyle = "#e6c9a8"; ctx.beginPath(); ctx.arc(0, -9 - bob, 1.9, 0, TAU); ctx.fill(); if (carrying){ ctx.fillStyle = ["#c28a52", "#e2c46e", "#a9a9b3"][i % 3]; ctx.fillRect(-2.6, -14 - bob, 5.2, 3.6); } }); } } }
+    // fireflies
+    if (pal.lit > .5) for (const f of flies){ const x = f[0] * w + Math.sin(t * .4 + f[2]) * 14; const dx = x - cx; if (Math.abs(dx) > R) continue; const sy = cy - Math.sqrt(R * R - dx * dx); const y = sy - 8 - f[1] * 60 * k + Math.cos(t * .7 + f[2]) * 6; const a = .5 + .5 * Math.sin(t * 2.2 + f[2] * 3); glow(ctx, x, y, 5, "#ffd98a", .5 * a); ctx.fillStyle = `rgba(255,230,160,${(.9 * a).toFixed(3)})`; ctx.fillRect(x - .7, y - .7, 1.4, 1.4); }
+    // vignette
+    const vg = ctx.createRadialGradient(cx, h * .45, Math.min(w, h) * .35, cx, h * .5, Math.max(w, h) * .8); vg.addColorStop(0, "rgba(8,10,16,0)"); vg.addColorStop(1, "rgba(8,10,16,.55)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  };
+}
+scene(document.getElementById("hero"), makePlanet(11, PAL.dusk, { rot0: 0, top: .66 }));
+scene(document.getElementById("hudScene"), makePlanet(29, PAL.morning, { rot0: 2.2, top: .6, towns: [2.2, 3.4, 5.1] }));
+
+/* =====================================================================
+   ROAD NETWORK SIMULATION
+   ===================================================================== */
+(function(){
+  const F = [[.07,.28],[.22,.2],[.38,.3],[.54,.2],[.7,.3],[.9,.22],[.12,.66],[.28,.76],[.44,.64],[.6,.76],[.76,.64],[.92,.74]];
+  const E = [[0,1],[1,2],[2,3],[3,4],[4,5],[6,7],[7,8],[8,9],[9,10],[10,11],[0,6],[2,8],[1,7],[3,8],[4,10],[5,11],[4,9]];
+  const GOODS = { wood:"#b07a4a", stone:"#a9a9b3", grain:"#e2c46e", flour:"#f1e6cc", bread:"#d98f4e", plank:"#e0b27a", fish:"#7fc4c8" };
+  const B = [
+    { name:"Woodcutter", f:0, dy:-1, make:"wood", to:9, every:3.2 },
+    { name:"Farm", f:1, dy:-1, make:"grain", to:3, every:3.6 },
+    { name:"Mill", f:3, dy:-1, conv:{ grain:"flour" }, to:10 },
+    { name:"Quarry", f:6, dy:1, make:"stone", to:5, every:4.4 },
+    { name:"Sawmill", f:9, dy:1, conv:{ wood:"plank" }, to:5 },
+    { name:"Bakery", f:10, dy:1, conv:{ flour:"bread" }, to:5 },
+    { name:"Fisher", f:11, dy:1, make:"fish", to:5, every:5 },
+    { name:"Storehouse", f:5, dy:-1, store:true }
+  ];
+  const adj = F.map(() => []); E.forEach(([a, b], i) => { adj[a].push([b, i]); adj[b].push([a, i]); });
+  // next hop tables via BFS from each destination
+  const next = F.map(() => F.map(() => -1));
+  F.forEach((_, d) => { const q = [d], seen = new Set([d]); while (q.length){ const u = q.shift(); for (const [v] of adj[u]) if (!seen.has(v)){ seen.add(v); next[v][d] = u; q.push(v); } } });
+  const flagGoods = F.map(() => []);
+  const carriers = E.map((e, i) => ({ e: i, pos: .5, st: "idle", good: null, dir: 0, wait: 0 }));
+  const bAt = {}; B.forEach(b => { bAt[b.f] = b; b.timer = Math.random() * (b.every || 2); b.queue = []; });
+  const delivered = {};
+  const rr = rng(4);
+  function spawn(f, type, dest){ if (flagGoods[f].length >= 8) return false; flagGoods[f].push({ type, dest, res: false }); return true; }
+  function step(dt){
+    for (const b of B){
+      if (b.make){ b.timer -= dt; if (b.timer <= 0){ if (spawn(b.f, b.make, b.to)) b.timer = b.every * (.8 + rr() * .4); else b.timer = .5; } }
+      if (b.queue.length){ b.queue[0].t -= dt; if (b.queue[0].t <= 0 && spawn(b.f, b.queue[0].type, b.to)) b.queue.shift(); }
+    }
+    for (const c of carriers){
+      const [a, bb] = E[c.e];
+      if (c.st === "idle"){
+        let found = null;
+        for (const [end, other] of [[a, bb], [bb, a]]){
+          const g = flagGoods[end].find(g => !g.res && next[end][g.dest] === other);
+          if (g && flagGoods[other].length < 8){ found = [end, g]; break; }
+        }
+        if (found){ c.good = found[1]; c.good.res = true; c.st = "fetch"; c.target = found[0] === a ? 0 : 1; }
+        else { c.pos += Math.sign(.5 - c.pos) * Math.min(Math.abs(.5 - c.pos), dt * .5); }
+      }
+      if (c.st === "fetch" || c.st === "carry"){
+        const L = Math.hypot(F[a][0] - F[bb][0], F[a][1] - F[bb][1]) + .02;
+        const sp = (c.st === "carry" ? .09 : .13) / L;
+        const d = c.target - c.pos; c.pos += Math.sign(d) * Math.min(Math.abs(d), dt * sp);
+        if (Math.abs(c.target - c.pos) < 1e-4){
+          const here = c.target === 0 ? a : bb;
+          if (c.st === "fetch"){ const arr = flagGoods[here]; const i = arr.indexOf(c.good); if (i >= 0){ arr.splice(i, 1); c.st = "carry"; c.target = 1 - c.target; } else { c.st = "idle"; c.good = null; } }
+          else {
+            const g = c.good;
+            if (here === g.dest){ const b = bAt[here]; if (b && b.conv && b.conv[g.type]) b.queue.push({ type: b.conv[g.type], t: 2.2 }); else delivered[g.type] = (delivered[g.type] || 0) + 1; c.st = "idle"; c.good = null; }
+            else if (flagGoods[here].length < 8){ g.res = false; flagGoods[here].push(g); c.st = "idle"; c.good = null; }
+          }
+        }
+      }
+    }
+  }
+  for (let i = 0; i < 700; i++) step(.05);
+  const stats = document.getElementById("netStats");
+  let last = null, statT = 0;
+  const cv = document.getElementById("net");
+  scene(cv, (ctx, w, h, t) => {
+    const dt = last === null ? 0 : Math.min(.1, t - last); last = t; if (!RM) step(dt);
+    const P = f => [F[f][0] * w, (F[f][1] * .86 + .07) * h];
+    const k = Math.max(.7, Math.min(1.2, w / 900));
+    ctx.fillStyle = "#171d29"; ctx.fillRect(0, 0, w, h);
+    // hex paper
+    ctx.strokeStyle = "rgba(120,130,160,.07)"; ctx.lineWidth = 1; const hs = 18 * k;
+    for (let y = 0, row = 0; y < h + hs; y += hs * .866, row++) for (let x = (row % 2) * hs / 2; x < w + hs; x += hs){ ctx.beginPath(); for (let i = 0; i < 6; i++){ const an = Math.PI / 6 + i * Math.PI / 3; const px = x + Math.cos(an) * hs * .5, py = y + Math.sin(an) * hs * .5; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
+    // a river
+    ctx.strokeStyle = "rgba(127,196,200,.18)"; ctx.lineWidth = 14 * k; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(w * .98, h * .02); ctx.bezierCurveTo(w * .8, h * .45, w * .98, h * .6, w * .84, h * 1.02); ctx.stroke();
+    // roads
+    for (const [a, b] of E){ const [x1, y1] = P(a), [x2, y2] = P(b); ctx.strokeStyle = "#4f4538"; ctx.lineWidth = 7 * k; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.strokeStyle = "#7a6a52"; ctx.lineWidth = 3 * k; ctx.stroke(); }
+    // buildings
+    ctx.font = `500 ${Math.round(10.5 * k)}px "IBM Plex Mono", monospace`; ctx.textAlign = "center";
+    for (const b of B){ const [x, y] = P(b.f); const by = y + b.dy * 34 * k, bs = 20 * k;
+      ctx.strokeStyle = "#4f4538"; ctx.lineWidth = 2 * k; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, by); ctx.stroke();
+      ctx.fillStyle = b.store ? "#3a3244" : "#2a3142"; ctx.strokeStyle = b.store ? "#b7a3e0" : "#5d6479"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - bs / 2, by - bs / 2, bs, bs, 3) : ctx.rect(x - bs / 2, by - bs / 2, bs, bs); ctx.fill(); ctx.stroke();
+      const c = b.make ? GOODS[b.make] : b.conv ? GOODS[Object.values(b.conv)[0]] : "#b7a3e0"; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, by, 4 * k, 0, TAU); ctx.fill();
+      if (b.queue && b.queue.length){ ctx.strokeStyle = "rgba(240,178,90,.8)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, by, bs * .75, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - clamp(b.queue[0].t / 2.2))); ctx.stroke(); }
+      if (w > 520){ ctx.fillStyle = "#c9c3b4"; ctx.fillText(b.name.toUpperCase(), x, by + b.dy * (bs / 2 + 12 * k) + (b.dy > 0 ? 4 : 0)); } }
+    // flags + waiting goods
+    F.forEach((f, i) => { const [x, y] = P(i); const n = flagGoods[i].length;
+      if (n >= 5){ const pl = .5 + .5 * Math.sin(t * 4); ctx.strokeStyle = `rgba(240,178,90,${(.35 + .4 * pl).toFixed(2)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 16 * k, 0, TAU); ctx.stroke(); }
+      flagGoods[i].forEach((g, j) => { const an = -Math.PI / 2 + j * TAU / 8; ctx.fillStyle = GOODS[g.type]; ctx.fillRect(x + Math.cos(an) * 10 * k - 2.5 * k, y + Math.sin(an) * 10 * k - 2.5 * k, 5 * k, 5 * k); });
+      ctx.fillStyle = "#1d2332"; ctx.beginPath(); ctx.arc(x, y, 4.5 * k, 0, TAU); ctx.fill(); ctx.strokeStyle = "#d8cbb0"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = "#d8cbb0"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 13 * k); ctx.stroke(); ctx.fillStyle = "#f0b25a"; ctx.beginPath(); ctx.moveTo(x, y - 13 * k); ctx.lineTo(x + 8 * k, y - 10.5 * k); ctx.lineTo(x, y - 8 * k); ctx.fill(); });
+    // carriers
+    for (const c of carriers){ const [a, b] = E[c.e]; const [x1, y1] = P(a), [x2, y2] = P(b); const x = lerp(x1, x2, c.pos), y = lerp(y1, y2, c.pos);
+      ctx.fillStyle = "#ece5d4"; ctx.beginPath(); ctx.arc(x, y, 3.4 * k, 0, TAU); ctx.fill(); ctx.fillStyle = "#3b3a4a"; ctx.beginPath(); ctx.arc(x, y, 1.6 * k, 0, TAU); ctx.fill();
+      if (c.st === "carry"){ ctx.fillStyle = GOODS[c.good.type]; ctx.fillRect(x - 3 * k, y - 10 * k, 6 * k, 6 * k); } }
+    statT -= dt; if (statT <= 0 && stats){ statT = .5; const parts = ["plank", "bread", "stone", "fish"].map(g => `${g} ${delivered[g] || 0}`); stats.textContent = "Stored so far: " + parts.join(" · "); }
+  });
+})();
+
+/* =====================================================================
+   STAR SYSTEM
+   ===================================================================== */
+(function(){
+  const P = [
+    { n:"Cinder", b:"Emberglass · Saltglass", a:.14, c:"#e07a4f", r:6, sp:.5, ph:1.1 },
+    { n:"Hearth", b:"Meadowlands · Canopy", a:.24, c:"#7fb07a", r:9, sp:.3, ph:4.2, moons:1 },
+    { n:"Tessel", b:"Tidewater Reach", a:.33, c:"#5aa7b8", r:9, sp:.22, ph:2.4, moons:2 },
+    { n:"Mirewake", b:"Lumen Mire · locked", a:.41, c:"#4d8a86", r:6, sp:.17, ph:5.6, locked:true },
+    { n:"Oru", b:"gas giant · moon Skyreef", a:.52, c:"#c99c7a", r:17, sp:.11, ph:.4, ring:true, sky:true },
+    { n:"Rime", b:"Rimefall Tundra", a:.63, c:"#cfe0ec", r:10, sp:.07, ph:3.1 }
+  ];
+  const routes = [[1, 2], [1, 0], [2, 5], [1, 4], [3, 1]];
+  const r = rng(77), bg = []; for (let i = 0; i < 220; i++) bg.push([r(), r(), r()]);
+  scene(document.getElementById("system"), (ctx, w, h, t) => {
+    const T = RM ? 20 : t + 20;
+    ctx.fillStyle = "#0c101a"; ctx.fillRect(0, 0, w, h);
+    for (const s of bg){ ctx.fillStyle = `rgba(236,229,212,${(.15 + s[2] * .5).toFixed(2)})`; ctx.fillRect(s[0] * w, s[1] * h, s[2] > .9 ? 1.6 : 1, s[2] > .9 ? 1.6 : 1); }
+    const cx = w * .5, cy = h * .52, S = Math.min(w * .75, h * 1.55), tilt = .36;
+    const pos = p => { const an = p.ph + T * p.sp * .12; return [cx + Math.cos(an) * p.a * S, cy + Math.sin(an) * p.a * S * tilt, Math.sin(an)]; };
+    ctx.strokeStyle = "rgba(154,161,179,.22)"; ctx.lineWidth = 1;
+    for (const p of P){ ctx.beginPath(); ctx.ellipse(cx, cy, p.a * S, p.a * S * tilt, 0, 0, TAU); ctx.stroke(); }
+    const pts = P.map(pos);
+    // routes
+    ctx.setLineDash([4, 6]); ctx.strokeStyle = "rgba(240,178,90,.35)";
+    routes.forEach(([i, j], ri) => { const [x1, y1] = pts[i], [x2, y2] = pts[j]; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); });
+    ctx.setLineDash([]);
+    routes.forEach(([i, j], ri) => { const [x1, y1] = pts[i], [x2, y2] = pts[j]; const u = ((T * .06 + ri * .23) % 1); const x = lerp(x1, x2, u), y = lerp(y1, y2, u); glow(ctx, x, y, 7, "#f0b25a", .5); ctx.fillStyle = "#ffe0a8"; ctx.fillRect(x - 1.2, y - 1.2, 2.4, 2.4); });
+    const drawStar = () => { glow(ctx, cx, cy, S * .16, "#f5c77a", .35); glow(ctx, cx, cy, S * .05, "#fff0cc", .9); ctx.fillStyle = "#fff4d8"; ctx.beginPath(); ctx.arc(cx, cy, S * .018 + 4, 0, TAU); ctx.fill(); };
+    const order = P.map((p, i) => i).sort((a, b) => pts[a][2] - pts[b][2]);
+    let starDrawn = false;
+    const k = Math.max(.7, Math.min(1.25, w / 900));
+    ctx.font = `500 ${Math.round(11 * k)}px "IBM Plex Mono", monospace`;
+    for (const i of order){
+      if (!starDrawn && pts[i][2] > 0){ drawStar(); starDrawn = true; }
+      const p = P[i], [x, y] = pts[i], rr = p.r * k;
+      if (p.ring){ ctx.strokeStyle = "rgba(232,211,176,.55)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, rr * 1.9, rr * .5, -.3, Math.PI, TAU); ctx.stroke(); }
+      const g = ctx.createRadialGradient(x - rr * .4, y - rr * .4, rr * .1, x, y, rr); g.addColorStop(0, mix(p.c, "#ffffff", .25)); g.addColorStop(1, mix(p.c, "#0c101a", .55));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+      // night side facing away from star
+      const an = Math.atan2(y - cy, x - cx); ctx.fillStyle = "rgba(8,10,18,.55)"; ctx.beginPath(); ctx.arc(x, y, rr, an - Math.PI / 2, an + Math.PI / 2); ctx.fill();
+      if (p.ring){ ctx.strokeStyle = "rgba(232,211,176,.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, rr * 1.9, rr * .5, -.3, 0, Math.PI); ctx.stroke(); }
+      for (let m = 0; m < (p.moons || 0) + (p.sky ? 1 : 0); m++){ const ma = T * (.8 - m * .3) + m * 2; const mx = x + Math.cos(ma) * rr * (2.1 + m * .7), my = y + Math.sin(ma) * rr * (2.1 + m * .7) * .45; ctx.fillStyle = p.sky ? "#b7c9e8" : "#cfc8b8"; ctx.beginPath(); ctx.arc(mx, my, p.sky ? 3.2 * k : 2 * k, 0, TAU); ctx.fill(); }
+      ctx.textAlign = "left"; const lx = x + rr + 8, ly = y - rr - 4;
+      ctx.fillStyle = "#ece5d4"; ctx.fillText(p.n.toUpperCase(), lx, ly);
+      if (w > 480){ ctx.fillStyle = "#9aa1b3"; ctx.fillText(p.b, lx, ly + 14 * k); }
+    }
+    if (!starDrawn) drawStar();
+  });
+})();
+
+/* =====================================================================
+   BIOMES
+   ===================================================================== */
+const BIOMES = [
+  { id:"meadow", name:"Meadowlands", meta:"Hearth · temperate · 4 even seasons", desc:"The home biome. Deep loam, gentle hills, slow rivers. It teaches the whole economy without punishing mistakes.",
+    rules:["Soil nitrogen and crop rotation","Hedgerows shelter fields from wind","Orchards need bees; bees need wildflowers"],
+    sky:["#8fb3c9","#cfd8d0","#f3d9a8"], hills:["#86a987","#6f9a66","#557f52"], base:[.52,.62,.76], amp:[.18,.14,.12], orb:{x:.78,y:.26,r:18,c:"#fff2cf"} },
+  { id:"tide", name:"Tidewater Reach", meta:"Tessel · archipelago · 6 m tides twice a day", desc:"Two moons pull the sea back and forth across the land. What is road at noon is seabed by dusk.",
+    rules:["Roads flood on a tide table; causeways stay dry","Tide mills turn in both directions","Shellfish beds open at low water"],
+    sky:["#2a4a6a","#5f8fa3","#bcd5cf"], hills:["#5a7d80","#4b6b64","#6d8a5e"], base:[.5,.58,.64], amp:[.1,.12,.16], orb:{x:.2,y:.22,r:12,c:"#f2f0e6"} },
+  { id:"ember", name:"Emberglass Steppe", meta:"Cinder · volcanic · 31 h day", desc:"Black glass plains split by glowing seams. Rich in ore and free heat, if you learn to read the ground.",
+    rules:["Geothermal vents power smelters and greenhouses","Tremor counts forecast eruptions","Ash falls make the richest soil in the system"],
+    sky:["#1a0f14","#4a2224","#c4583a"], hills:["#3a2426","#261a1c","#140e10"], base:[.5,.62,.78], amp:[.2,.16,.1], orb:null },
+  { id:"rime", name:"Rimefall Tundra", meta:"Rime · polar · 40 h day, long winters", desc:"Snow-quiet plains under the aurora. Everything here is about carrying warmth from place to place.",
+    rules:["Warmth radius: routes need heated waystations","Ice roads open over frozen lakes in winter","Sledges and dogs replace mules"],
+    sky:["#070b1a","#13203a","#2b3f5e"], hills:["#6f86a3","#9fb3c9","#dfe8f0"], base:[.55,.64,.76], amp:[.16,.12,.08], orb:null },
+  { id:"mire", name:"Lumen Mire", meta:"Mirewake · tidally locked twilight ring", desc:"The sun never rises here. Fungi, glowing algae and peat make a strange, gentle economy that runs on light.",
+    rules:["Light is a resource: glowcaps light roads and fields","Crops are fungal; spores drift with the wind","Peat for fuel, glow-dyes for trade"],
+    sky:["#060b14","#0e1c22","#17302f"], hills:["#12241f","#0e1c19","#0a1412"], base:[.55,.66,.8], amp:[.12,.1,.06], orb:null },
+  { id:"salt", name:"Saltglass Flats", meta:"Cinder, far side · crystal desert", desc:"A white salt pan scattered with crystal spires. Days are scorching, nights freezing.",
+    rules:["Crystals focus sunlight into solar kilns, and can start fires","Shift work: days too hot, nights too cold","Water from dew condensers; salt is currency"],
+    sky:["#b9a8cc","#e4cdbf","#f6e2c8"], hills:["#caa07e","#d8b48a","#ecdcc0"], base:[.56,.64,.76], amp:[.12,.09,.03], orb:{x:.62,y:.2,r:22,c:"#fffaf0"} },
+  { id:"canopy", name:"Canopy Deeps", meta:"Hearth, equator · 300 m trees", desc:"A forest so tall the town lives in its branches. Timber is everywhere, but every tree is centuries old.",
+    rules:["Build vertically: platforms, rope lifts, gliders","The forest floor is dark; crops grow on sunny crowns","Felling an ancient tree changes the whole grove"],
+    sky:["#1d3528","#3e6a4c","#8fb07a"], hills:["#1a2c20","#14231a","#0e1812"], base:[.66,.76,.86], amp:[.08,.06,.05], orb:null },
+  { id:"reef", name:"Skyreef", meta:"Moon of Oru · 0.4 g · floating isles", desc:"Islands of buoyant stone drift above a sea of cloud. Roads are ropes, and the map rearranges with the orbit.",
+    rules:["Ropeways and skiffs link islands","Islands drift apart and together each orbit","Carriers can glide; heavy goods need ballast"],
+    sky:["#4c6aa8","#9fb6de","#f2d6c6"], hills:[], base:[], amp:[], orb:null }
+];
+function biomePainter(B, seed){
+  const N = [0, 1, 2].map(i => noise1(seed + i * 19));
+  const layerY = (i, x, w, h) => h * B.base[i] - fbm(N[i], x / w * (2.2 + i * 1.3) + i * 5) * h * B.amp[i] * 2 + h * B.amp[i] * .6;
+  const drawLayer = (ctx, i, w, h, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, layerY(i, x, w, h)); ctx.lineTo(w, h); ctx.fill(); };
+  return (ctx, w, h, t) => {
+    const r = rng(seed * 7 + 3);
+    ctx.fillStyle = vgrad(ctx, 0, h, B.sky); ctx.fillRect(0, 0, w, h);
+    if (B.orb){ glow(ctx, B.orb.x * w, B.orb.y * h, B.orb.r * 4, B.orb.c, .35); ctx.fillStyle = B.orb.c; ctx.beginPath(); ctx.arc(B.orb.x * w, B.orb.y * h, B.orb.r, 0, TAU); ctx.fill(); }
+    const F = FEAT[B.id];
+    if (F.back) F.back(ctx, w, h, t, r);
+    B.hills.forEach((c, i) => { drawLayer(ctx, i, w, h, c); if (F.layer) F.layer(ctx, i, w, h, t, r, (x) => layerY(i, x, w, h)); });
+    if (F.front) F.front(ctx, w, h, t, r, (x) => layerY(2, x, w, h));
+  };
+}
+function tree(ctx, x, y, s, c, hi){ ctx.fillStyle = "#4a3426"; ctx.fillRect(x - s * .12, y - s * .9, s * .24, s * .9); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y - s * 1.2, s * .7, 0, TAU); ctx.arc(x - s * .45, y - s * .85, s * .45, 0, TAU); ctx.arc(x + s * .45, y - s * .9, s * .5, 0, TAU); ctx.fill(); if (hi){ ctx.fillStyle = hi; ctx.beginPath(); ctx.arc(x - s * .2, y - s * 1.4, s * .3, 0, TAU); ctx.fill(); } }
+function pine(ctx, x, y, s, c, snow){ ctx.fillStyle = c; for (let i = 0; i < 3; i++){ const yy = y - i * s * .45; ctx.beginPath(); ctx.moveTo(x, yy - s * .9); ctx.lineTo(x + s * (.5 - i * .1), yy); ctx.lineTo(x - s * (.5 - i * .1), yy); ctx.fill(); } if (snow){ ctx.fillStyle = snow; ctx.beginPath(); ctx.moveTo(x, y - s * 1.8); ctx.lineTo(x + s * .15, y - s * 1.45); ctx.lineTo(x - s * .15, y - s * 1.45); ctx.fill(); } }
+function hut(ctx, x, y, s, wall, roof, win){ ctx.fillStyle = wall; ctx.fillRect(x - s, y - s * 1.2, s * 2, s * 1.2); ctx.fillStyle = roof; ctx.beginPath(); ctx.moveTo(x - s * 1.25, y - s * 1.2); ctx.lineTo(x, y - s * 2.2); ctx.lineTo(x + s * 1.25, y - s * 1.2); ctx.fill(); if (win){ glow(ctx, x - s * .45, y - s * .6, s * 1.4, win, .35); ctx.fillStyle = win; ctx.fillRect(x - s * .65, y - s * .8, s * .4, s * .4); } }
+const FEAT = {
+  meadow: {
+    layer(ctx, i, w, h, t, r, Y){ if (i === 1) for (let j = 0; j < 9; j++){ const x = r() * w; tree(ctx, x, Y(x) + 3, 7 + r() * 4, "#4d7a4a", null); } },
+    front(ctx, w, h, t, r, Y){
+      for (let x = w * .52; x < w * .98; x += 5){ const y = Y(x); ctx.fillStyle = (Math.floor(x / 22) % 2) ? "#d8b95c" : "#c5a64c"; ctx.fillRect(x, y + 6, 5, h - y); }
+      ctx.strokeStyle = "#d9c49a"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-5, h * .98); ctx.bezierCurveTo(w * .25, h * .82, w * .35, h * .95, w * .48, Y(w * .48) + 8); ctx.stroke();
+      hut(ctx, w * .44, Y(w * .44) + 6, 11, "#e6d6bc", "#a8483a", null);
+      for (let j = 0; j < 6; j++){ const x = w * (.04 + r() * .36); tree(ctx, x, Y(x) + 10, 13 + r() * 7, "#3e6b3e", "#5f9458"); }
+      for (let j = 0; j < 4; j++){ const bx = ((t * 18 + j * 90) % (w + 60)) - 30, by = h * (.2 + j * .05) + Math.sin(t * 2 + j) * 3; ctx.strokeStyle = "#3a4a4a"; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(bx - 4, by - 2 * Math.abs(Math.sin(t * 6 + j))); ctx.lineTo(bx, by); ctx.lineTo(bx + 4, by - 2 * Math.abs(Math.sin(t * 6 + j))); ctx.stroke(); }
+    } },
+  tide: {
+    front(ctx, w, h, t, r, Y){
+      const tide = Math.sin(t * .35) * h * .05, wl = h * .7 + tide;
+      // sand bars exposed at low tide
+      ctx.fillStyle = "#c9b88a"; for (let j = 0; j < 3; j++){ ctx.beginPath(); ctx.ellipse(w * (.2 + j * .3), h * .74, w * .1, h * .03, 0, 0, TAU); ctx.fill(); }
+      ctx.fillStyle = vgrad(ctx, wl, h, ["rgba(58,122,138,.92)", "rgba(20,58,70,.98)"]); ctx.fillRect(0, wl, w, h - wl);
+      ctx.strokeStyle = "rgba(230,245,240,.35)"; ctx.lineWidth = 1; for (let j = 0; j < 26; j++){ const x = r() * w, y = wl + 4 + r() * (h - wl); const l = 6 + r() * 16; ctx.beginPath(); ctx.moveTo(x + Math.sin(t + j) * 3, y); ctx.lineTo(x + l + Math.sin(t + j) * 3, y); ctx.stroke(); }
+      // stilt houses
+      [[.58, .56], [.66, .58], [.74, .55]].forEach(([fx, fy], i) => { const x = w * fx, y = h * fy; ctx.strokeStyle = "#4a3a2c"; ctx.lineWidth = 2; for (const dx of [-8, 0, 8]){ ctx.beginPath(); ctx.moveTo(x + dx, y); ctx.lineTo(x + dx, h * .82); ctx.stroke(); } hut(ctx, x, y, 9, "#c9b8a0", i === 1 ? "#3f6f7a" : "#8a4a3a", "#ffd58a"); });
+      ctx.strokeStyle = "#6a5440"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w * .58, h * .56); ctx.lineTo(w * .74, h * .55); ctx.stroke();
+      ctx.fillStyle = "#e0d6c0"; const bx = w * .3 + Math.sin(t * .2) * w * .05; ctx.beginPath(); ctx.moveTo(bx - 12, wl + 6); ctx.lineTo(bx + 12, wl + 6); ctx.lineTo(bx + 8, wl + 11); ctx.lineTo(bx - 8, wl + 11); ctx.fill(); ctx.beginPath(); ctx.moveTo(bx, wl + 5); ctx.lineTo(bx, wl - 16); ctx.lineTo(bx + 10, wl + 3); ctx.fill();
+    } },
+  ember: {
+    back(ctx, w, h, t, r){ for (let j = 0; j < 40; j++){ const x = (r() * w + t * 6) % w, y = (r() * h * .6 + t * 4 * (1 + r())) % (h * .7); ctx.fillStyle = "rgba(200,180,170,.35)"; ctx.fillRect(x, y, 1.4, 1.4); } },
+    layer(ctx, i, w, h, t, r, Y){ if (i === 1) for (let j = 0; j < 5; j++){ const x = r() * w, y = Y(x) + 4, s = 20 + r() * 30; ctx.fillStyle = "#0b0809"; ctx.beginPath(); ctx.moveTo(x - 5, y); ctx.lineTo(x + 1, y - s); ctx.lineTo(x + 6, y); ctx.fill(); ctx.strokeStyle = "rgba(160,80,110,.6)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x + 1, y - s); ctx.lineTo(x + 6, y); ctx.stroke(); } },
+    front(ctx, w, h, t, r, Y){
+      const pulse = .6 + .4 * Math.sin(t * 1.3);
+      for (let j = 0; j < 4; j++){ let x = r() * w, y = Y(x) + 12 + r() * (h * .12); ctx.strokeStyle = `rgba(255,138,61,${(.55 + .35 * pulse).toFixed(2)})`; ctx.lineWidth = 2; ctx.shadowColor = "#ff7a2d"; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(x, y); for (let s = 0; s < 7; s++){ x += 10 + r() * 14; y += (r() - .5) * 10; ctx.lineTo(x, y); } ctx.stroke(); ctx.shadowBlur = 0; }
+      for (let v = 0; v < 2; v++){ const vx = w * (.3 + v * .35), vy = Y(vx) + 6; ctx.fillStyle = "#1a1012"; ctx.beginPath(); ctx.ellipse(vx, vy, 12, 4, 0, 0, TAU); ctx.fill(); for (let p = 0; p < 9; p++){ const u = (t * .25 + p / 9 + v * .5) % 1; ctx.fillStyle = `rgba(220,210,205,${(.35 * (1 - u)).toFixed(3)})`; ctx.beginPath(); ctx.arc(vx + Math.sin(u * 5 + p) * 6 + u * 18, vy - u * h * .5, 4 + u * 16, 0, TAU); ctx.fill(); } }
+      const sx = w * .82; hut(ctx, sx, Y(sx) + 10, 10, "#3a3034", "#5a2a2a", "#ffae5a"); glow(ctx, sx + 16, Y(sx) - 4, 24, "#ff8a3d", .3 * pulse);
+    } },
+  rime: {
+    back(ctx, w, h, t, r){
+      for (let j = 0; j < 90; j++){ ctx.fillStyle = `rgba(236,229,212,${(.3 + r() * .6).toFixed(2)})`; ctx.fillRect(r() * w, r() * h * .55, 1.2, 1.2); }
+      for (let band = 0; band < 2; band++){ for (let x = 0; x < w; x += 3){ const y = h * (.16 + band * .1) + Math.sin(x * .012 + t * .35 + band * 2) * 16 + Math.sin(x * .031 - t * .2) * 8; const a = (.1 + .08 * Math.sin(x * .02 + t)) * (band ? .7 : 1); const g = ctx.createLinearGradient(0, y, 0, y + 70); g.addColorStop(0, band ? `rgba(183,163,224,${a})` : `rgba(98,224,168,${a})`); g.addColorStop(1, "rgba(98,224,168,0)"); ctx.fillStyle = g; ctx.fillRect(x, y, 3, 70); } }
+    },
+    layer(ctx, i, w, h, t, r, Y){ if (i === 1) for (let j = 0; j < 14; j++){ const x = r() * w; pine(ctx, x, Y(x) + 4, 10 + r() * 6, "#243446", "#e8f0f6"); } },
+    front(ctx, w, h, t, r, Y){
+      const x = w * .6, y = Y(x) + 8; ctx.fillStyle = "#e8eef4"; ctx.beginPath(); ctx.arc(x, y, 20, Math.PI, TAU); ctx.fill(); ctx.fillStyle = "#3a2a24"; ctx.fillRect(x - 5, y - 10, 10, 10); glow(ctx, x, y - 5, 30, "#ffc56b", .4); ctx.fillStyle = "#ffc56b"; ctx.fillRect(x - 3, y - 8, 6, 8);
+      for (let j = 0; j < 5; j++){ const xx = w * (.05 + r() * .4); pine(ctx, xx, Y(xx) + 12, 16 + r() * 8, "#1c2838", "#f2f6fa"); }
+      for (let j = 0; j < 70; j++){ const sx = (r() * w + Math.sin(t * .5 + j) * 10) % w, sy = (r() * h + t * (12 + r() * 14)) % h; ctx.fillStyle = "rgba(240,246,250,.75)"; ctx.fillRect(sx, sy, 1.6, 1.6); }
+    } },
+  mire: {
+    back(ctx, w, h, t, r){ glow(ctx, w * .85, h * .9, h * .9, "#2a5a60", .35); },
+    front(ctx, w, h, t, r, Y){
+      ctx.fillStyle = "rgba(12,36,38,.9)"; ctx.beginPath(); ctx.ellipse(w * .45, h * .9, w * .3, h * .06, 0, 0, TAU); ctx.fill();
+      const caps = [[.18, 70, "#3fd0c0"], [.36, 44, "#b48cf0"], [.7, 86, "#3fd0c0"], [.86, 50, "#8fe0a0"], [.55, 32, "#b48cf0"]];
+      caps.forEach(([fx, s, c], i) => { const x = w * fx, y = Y(x) + 14; const sway = Math.sin(t * .5 + i) * 3; ctx.strokeStyle = "rgba(210,205,190,.75)"; ctx.lineWidth = s * .09; ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x - 6, y - s * .6, x + sway, y - s); ctx.stroke(); const pl = .7 + .3 * Math.sin(t * 1.1 + i * 2); glow(ctx, x + sway, y - s, s * .9, c, .28 * pl); ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(x + sway, y - s, s * .45, s * .18, 0, Math.PI, TAU); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.25)"; for (let d = 0; d < 4; d++){ ctx.beginPath(); ctx.arc(x + sway - s * .25 + d * s * .15, y - s - s * .09, 1.5, 0, TAU); ctx.fill(); } glow(ctx, x + sway, h * .9, s * .6, c, .12 * pl); });
+      for (let j = 0; j < 36; j++){ const px = (r() * w + Math.sin(t * .3 + j) * 20 + t * 5) % w, py = (r() * h - t * (4 + r() * 6)) % h; const yy = py < 0 ? py + h : py; const a = .4 + .4 * Math.sin(t * 2 + j); ctx.fillStyle = `rgba(160,240,220,${a.toFixed(2)})`; ctx.fillRect(px, yy, 1.8, 1.8); }
+      for (let j = 0; j < 20; j++){ const x = r() * w, y = Y(x) + 10; ctx.strokeStyle = "rgba(63,208,192,.5)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.sin(t + j) * 2, y - 8 - r() * 10); ctx.stroke(); }
+    } },
+  salt: {
+    front(ctx, w, h, t, r, Y){
+      const y0 = Y(w / 2); ctx.strokeStyle = "rgba(160,140,120,.35)"; ctx.lineWidth = 1;
+      for (let j = 0; j < 30; j++){ const x = r() * w, y = y0 + 10 + r() * (h - y0 - 10); const s = 10 + r() * 18; ctx.beginPath(); for (let i = 0; i < 6; i++){ const an = i * Math.PI / 3; const px = x + Math.cos(an) * s, py = y + Math.sin(an) * s * .3; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.stroke(); }
+      const clusters = [[.2, 1], [.48, .6], [.78, 1.3]];
+      clusters.forEach(([fx, sc], ci) => { const x = w * fx, y = Y(x) + 14; for (let j = 0; j < 5; j++){ const hh = (26 + r() * 40) * sc, ww = (5 + r() * 5) * sc, dx = (r() - .5) * 26 * sc, lean = (r() - .5) * .5; ctx.save(); ctx.translate(x + dx, y); ctx.rotate(lean); ctx.fillStyle = "rgba(191,231,240,.85)"; ctx.beginPath(); ctx.moveTo(-ww, 0); ctx.lineTo(-ww * .8, -hh * .8); ctx.lineTo(0, -hh); ctx.lineTo(ww * .8, -hh * .8); ctx.lineTo(ww, 0); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(-ww * .8, -hh * .8); ctx.lineTo(0, -hh); ctx.lineTo(0, 0); ctx.lineTo(-ww, 0); ctx.fill(); ctx.restore(); }
+        const sp = .5 + .5 * Math.sin(t * 1.5 + ci * 2); const g = ctx.createLinearGradient(x, y, x + 60 * sc, y + 20); g.addColorStop(0, `rgba(255,120,120,${(.25 * sp).toFixed(2)})`); g.addColorStop(.5, `rgba(255,240,120,${(.25 * sp).toFixed(2)})`); g.addColorStop(1, `rgba(120,200,255,${(.25 * sp).toFixed(2)})`); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x, y - 20 * sc); ctx.lineTo(x + 70 * sc, y + 10); ctx.lineTo(x + 50 * sc, y + 16); ctx.fill(); });
+      const cx = w * .64, cy = Y(cx) + 12; ctx.fillStyle = "#b08a64"; ctx.fillRect(cx - 14, cy - 10, 28, 10); ctx.fillStyle = "#e8d8bc"; ctx.beginPath(); ctx.moveTo(cx - 18, cy - 10); ctx.lineTo(cx, cy - 20); ctx.lineTo(cx + 18, cy - 10); ctx.fill(); ctx.strokeStyle = "#e8d8bc"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx + 12, cy - 13); ctx.lineTo(cx + 12, cy - 30); ctx.stroke();
+    } },
+  canopy: {
+    back(ctx, w, h, t, r){ for (let j = 0; j < 5; j++){ const x = w * (.1 + j * .2) + Math.sin(t * .1 + j) * 8; const g = ctx.createLinearGradient(x, 0, x + 40, h); g.addColorStop(0, "rgba(255,240,170,.16)"); g.addColorStop(1, "rgba(255,240,170,0)"); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 26, 0); ctx.lineTo(x + 90, h); ctx.lineTo(x + 40, h); ctx.fill(); } },
+    front(ctx, w, h, t, r, Y){
+      const trunks = [[.12, 46], [.42, 62], [.8, 54], [.62, 24], [.26, 20]];
+      trunks.sort((a, b) => a[1] - b[1]).forEach(([fx, tw]) => { const x = w * fx; const c = tw > 30 ? "#3b2e24" : "#2c2620"; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x - tw * .45, -5); ctx.lineTo(x + tw * .45, -5); ctx.lineTo(x + tw * .6, h); ctx.lineTo(x - tw * .6, h); ctx.fill(); ctx.fillStyle = "rgba(120,160,90,.35)"; ctx.fillRect(x - tw * .45, -5, tw * .2, h); });
+      const plats = [[.12, .42, .42], [.42, .62, .28], [.42, .8, .55]];
+      plats.forEach(([a, b, fy]) => { const x1 = w * a, x2 = w * b, y = h * fy; ctx.fillStyle = "#6a5040"; ctx.fillRect(x1, y, x2 - x1, 4); ctx.strokeStyle = "#8a7050"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x1, y - 8); ctx.quadraticCurveTo((x1 + x2) / 2, y - 2, x2, y - 8); ctx.stroke(); hut(ctx, (x1 + x2) / 2, y, 8, "#a08868", "#5e7a4a", "#ffd58a"); });
+      for (let j = 0; j < 14; j++){ const x = r() * w, l = 30 + r() * h * .5; ctx.strokeStyle = "rgba(90,130,70,.8)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, 0); ctx.quadraticCurveTo(x + Math.sin(t * .7 + j) * 10, l / 2, x + Math.sin(t * .7 + j) * 4, l); ctx.stroke(); }
+      const gx = ((t * 30) % (w + 80)) - 40, gy = h * .3 + Math.sin(t) * 10; ctx.fillStyle = "#e0d4b8"; ctx.beginPath(); ctx.moveTo(gx - 12, gy); ctx.lineTo(gx, gy - 4); ctx.lineTo(gx + 12, gy); ctx.lineTo(gx, gy - 1); ctx.fill(); ctx.fillStyle = "#3b3a4a"; ctx.fillRect(gx - 1, gy - 1, 2, 5);
+    } },
+  reef: {
+    back(ctx, w, h, t, r){
+      const gx = w * .78, gy = h * .5, gr = h * .6; ctx.save(); ctx.globalAlpha = .55; ctx.beginPath(); ctx.arc(gx, gy, gr, 0, TAU); ctx.clip(); ctx.fillStyle = "#e0c2a2"; ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2); for (let i = 0; i < 12; i++){ ctx.fillStyle = i % 2 ? "#c99c7a" : "#f0dcc0"; ctx.fillRect(gx - gr, gy - gr + i * gr / 6, gr * 2, gr / 12); } ctx.restore();
+      for (let j = 0; j < 40; j++){ const x = r() * w, y = h * (.82 + r() * .2); glow(ctx, x + Math.sin(t * .2 + j) * 8, y, 30 + r() * 30, "#ffffff", .45); }
+    },
+    front(ctx, w, h, t, r){
+      const isles = [[.18, .42, 1], [.5, .3, .7], [.72, .58, 1.2], [.38, .66, .55]];
+      isles.forEach(([fx, fy, s], i) => { const x = w * fx + Math.sin(t * .15 + i) * 6, y = h * fy + Math.sin(t * .5 + i * 2) * 4, W = 46 * s, H = 50 * s;
+        ctx.fillStyle = "#6e5a58"; ctx.beginPath(); ctx.moveTo(x - W, y); ctx.lineTo(x + W, y); ctx.lineTo(x + W * .3, y + H * .6); ctx.lineTo(x, y + H); ctx.lineTo(x - W * .4, y + H * .5); ctx.fill(); ctx.fillStyle = "#8a7470"; ctx.beginPath(); ctx.moveTo(x - W, y); ctx.lineTo(x, y); ctx.lineTo(x - W * .4, y + H * .5); ctx.fill();
+        ctx.fillStyle = "#7fa864"; ctx.beginPath(); ctx.ellipse(x, y, W, 6 * s, 0, Math.PI, TAU); ctx.fill(); ctx.fillRect(x - W, y - 1, W * 2, 3);
+        tree(ctx, x - W * .4, y - 1, 8 * s, "#4f8a4f", null); if (i !== 3) hut(ctx, x + W * .3, y - 1, 6 * s, "#e0d4c0", "#8a4a3a", "#ffd58a");
+        if (i === 0 || i === 2){ const fx2 = x + W * .8; for (let k = 0; k < 6; k++){ const u = (t * .8 + k / 6) % 1; ctx.fillStyle = `rgba(230,244,255,${(.6 * (1 - u)).toFixed(2)})`; ctx.fillRect(fx2 + Math.sin(k) * 1.5, y + u * h * .35, 2.5, 8); } } });
+      const [x1, y1] = [w * .18 + Math.sin(t * .15) * 6, h * .42 + Math.sin(t * .5) * 4], [x2, y2] = [w * .5 + Math.sin(t * .15 + 1) * 6, h * .3 + Math.sin(t * .5 + 2) * 4];
+      ctx.strokeStyle = "rgba(60,50,40,.8)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x1 + 20, y1 - 10); ctx.quadraticCurveTo((x1 + x2) / 2, (y1 + y2) / 2 + 6, x2 - 16, y2 - 10); ctx.stroke();
+      const u = (Math.sin(t * .4) + 1) / 2; const qx = lerp(x1 + 20, x2 - 16, u), qy = lerp(y1 - 10, y2 - 10, u) + Math.sin(u * Math.PI) * 3; ctx.fillStyle = "#b07a4a"; ctx.fillRect(qx - 3, qy + 1, 6, 5);
+    } }
+};
+(function(){
+  const grid = document.getElementById("biomeGrid");
+  BIOMES.forEach((B, i) => {
+    const el = document.createElement("article"); el.className = "plate biome";
+    el.innerHTML = `<canvas aria-label="Concept art of ${B.name}"></canvas><div class="body"><span class="meta">PLATE ${String(7 + i).padStart(2, "0")} · ${B.meta}</span><h3>${B.name}</h3><p>${B.desc}</p><ul>${B.rules.map(x => `<li>${x}</li>`).join("")}</ul></div>`;
+    grid.appendChild(el);
+    scene(el.querySelector("canvas"), biomePainter(B, 100 + i * 13));
+  });
+})();
+
+/* =====================================================================
+   GEOLOGY SECTION
+   ===================================================================== */
+(function(){
+  const N = [0, 1, 2, 3, 4, 5].map(i => noise1(300 + i * 7));
+  scene(document.getElementById("geo"), (ctx, w, h, t) => {
+    const r = rng(9);
+    const surf = x => h * .2 - fbm(N[0], x / w * 2.5) * h * .12 + h * .05;
+    const bnd = [ x => surf(x) + h * .06, x => h * .36 + fbm(N[1], x / w * 3) * h * .06, x => h * .56 + fbm(N[2], x / w * 2.4) * h * .08, x => h * .78 + fbm(N[3], x / w * 2) * h * .06 ];
+    const cols = ["#4a3a2c", "#6b4e3a", "#8a6a4a", "#4f4b55", "#2e2b33"];
+    const names = ["Topsoil", "Clay", "Sandstone", "Granite", "Basalt"];
+    ctx.fillStyle = vgrad(ctx, 0, h * .3, ["#1a2238", "#3a3a5a", "#7a5a6a"]); ctx.fillRect(0, 0, w, h);
+    const band = (topF, botF, c) => { ctx.fillStyle = c; ctx.beginPath(); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, topF(x)); for (let x = w + 4; x >= 0; x -= 4) ctx.lineTo(x, botF(x)); ctx.closePath(); ctx.fill(); };
+    const tops = [surf, ...bnd], bots = [...bnd, () => h + 2];
+    for (let i = 0; i < 5; i++) band(tops[i], bots[i], cols[i]);
+    // texture specks
+    for (let j = 0; j < 500; j++){ const x = r() * w, y = surf(x) + r() * (h - surf(x)); ctx.fillStyle = `rgba(255,255,255,${(r() * .06).toFixed(3)})`; ctx.fillRect(x, y, 2, 1.2); }
+    // groundwater lens
+    const gw = ctx.createRadialGradient(w * .3, h * .5, 0, w * .3, h * .5, w * .16); gw.addColorStop(0, "rgba(127,196,200,.55)"); gw.addColorStop(1, "rgba(127,196,200,0)"); ctx.fillStyle = gw; ctx.beginPath(); ctx.ellipse(w * .3, h * .5, w * .16, h * .05, 0, 0, TAU); ctx.fill();
+    // cave
+    ctx.fillStyle = "#15131a"; ctx.beginPath(); ctx.ellipse(w * .72, h * .66, w * .07, h * .045, .1, 0, TAU); ctx.fill(); ctx.fillStyle = "#b9a3f0"; for (let j = 0; j < 7; j++){ const x = w * .66 + j * w * .018; ctx.beginPath(); ctx.moveTo(x, h * .63); ctx.lineTo(x + 2, h * .65 + (j % 3) * 3); ctx.lineTo(x + 4, h * .63); ctx.fill(); }
+    // veins
+    const veins = [["#141417", .15, .3, 8, "Coal"], ["#b0603f", .5, .46, 9, "Iron"], ["#3fa39a", .84, .5, 6, "Copper"], ["#e8c25a", .44, .84, 5, "Gold"], ["#b9a3f0", .72, .6, 0, ""], ["#141417", .9, .34, 6, ""]];
+    veins.forEach(([c, fx, fy, n]) => { for (let j = 0; j < n; j++){ ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(w * fx + (j - n / 2) * w * .014 + r() * 6, h * fy + Math.sin(j) * 5, w * .016 + r() * 6, 3 + r() * 3, .3 * (r() - .5), 0, TAU); ctx.fill(); } });
+    // mine shaft
+    const mx = w * .5, my = surf(mx); ctx.fillStyle = "#1a1418"; ctx.fillRect(mx - 7, my, 14, h * .46 - my); ctx.strokeStyle = "#8a6a4a"; ctx.lineWidth = 1; for (let y = my + 6; y < h * .46; y += 8){ ctx.beginPath(); ctx.moveTo(mx - 5, y); ctx.lineTo(mx + 5, y); ctx.stroke(); }
+    ctx.fillStyle = "#5a4436"; ctx.fillRect(mx - 16, my - 16, 32, 16); ctx.fillStyle = "#8a3f34"; ctx.beginPath(); ctx.moveTo(mx - 19, my - 16); ctx.lineTo(mx, my - 28); ctx.lineTo(mx + 19, my - 16); ctx.fill(); ctx.fillStyle = "#ffc56b"; ctx.fillRect(mx - 3, my - 10, 6, 6);
+    const lamp = h * .44 - (RM ? 0 : Math.abs(Math.sin(t * .4)) * (h * .44 - my - 20)); glow(ctx, mx, lamp, 14, "#ffc56b", .6); ctx.fillStyle = "#ece5d4"; ctx.beginPath(); ctx.arc(mx, lamp - 5, 2.2, 0, TAU); ctx.fill();
+    // grass line + trees
+    ctx.strokeStyle = "#5f8a52"; ctx.lineWidth = 3; ctx.beginPath(); for (let x = 0; x <= w; x += 4) ctx.lineTo(x, surf(x)); ctx.stroke();
+    for (let j = 0; j < 12; j++){ const x = r() * w; if (Math.abs(x - mx) < 40) continue; tree(ctx, x, surf(x) + 1, 7 + r() * 4, "#2f5a3a", null); }
+    // signposts
+    const signs = [[.15, "#141417"], [.5, "#b0603f"], [.84, "#3fa39a"], [.3, "#7fc4c8"], [.66, null]];
+    const k = Math.max(.8, Math.min(1.2, w / 900));
+    ctx.font = `500 ${Math.round(10 * k)}px "IBM Plex Mono", monospace`;
+    signs.forEach(([fx, c]) => { const x = w * fx + (fx === .5 ? 34 : 0), y = surf(x); ctx.strokeStyle = "#d8cbb0"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - 20 * k); ctx.stroke(); ctx.fillStyle = "#e6dcc4"; ctx.fillRect(x - 7 * k, y - 26 * k, 14 * k, 9 * k); if (c){ ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y - 21.5 * k, 3 * k, 0, TAU); ctx.fill(); } else { ctx.strokeStyle = "#8a7a64"; ctx.beginPath(); ctx.moveTo(x - 3 * k, y - 21.5 * k); ctx.lineTo(x + 3 * k, y - 21.5 * k); ctx.stroke(); } });
+    // layer labels
+    ctx.textAlign = "right";
+    for (let i = 0; i < 5; i++){ const x = w - 12; const yt = tops[i](x), yb = i < 4 ? bots[i](x) : h; if (yb - yt < 14) continue; ctx.fillStyle = "rgba(236,229,212,.75)"; ctx.fillText(names[i].toUpperCase(), x, (yt + yb) / 2 + 4); }
+    ctx.textAlign = "left"; ctx.fillStyle = "rgba(236,229,212,.75)";
+    if (w > 560){ ctx.fillText("AQUIFER", w * .3 - 28, h * .5 + 4); ctx.fillText("COAL", w * .15 - 14, h * .3 - 12); ctx.fillText("IRON", mx + 14, h * .46 + 4); ctx.fillText("COPPER", w * .84 - 22, h * .5 - 12); ctx.fillText("GOLD", w * .44 - 14, h * .84 - 12); ctx.fillText("CRYSTAL CAVE", w * .72 - 40, h * .66 + 28); }
+  }, !RM);
+})();
+
+/* =====================================================================
+   TERRAFORMING
+   ===================================================================== */
+(function(){
+  const Y_MAX = 600;
+  const logi = (c, k) => { const L = y => 1 / (1 + Math.exp(-(y - c) / k)); const a = L(0), b = L(Y_MAX); return y => (L(y) - a) / (b - a); };
+  const M = { P: logi(140, 40), T: logi(200, 50), W: logi(260, 55), O: logi(430, 55), lichen: logi(120, 30), veg: logi(330, 45) };
+  const stages = [[0, "Rust and frost"], [60, "First colour"], [180, "Thaw and rain"], [300, "Green tide"], [420, "Deep roots"], [540, "Breath"]];
+  const el = id => document.getElementById(id);
+  const slider = el("tfSlider"), play = el("tfPlay");
+  let year = 0, playing = false, lastT = null;
+  const N = [0, 1, 2].map(i => noise1(500 + i * 11));
+  const r0 = rng(21), trees = []; for (let i = 0; i < 90; i++) trees.push([r0(), r0(), .15 + r0() * .85, r0()]);
+  const lichen = []; for (let i = 0; i < 160; i++) lichen.push([r0(), r0(), r0()]);
+  const clouds = []; for (let i = 0; i < 7; i++) clouds.push([r0(), .08 + r0() * .25, .6 + r0() * .8]);
+  const houses = []; for (let i = 0; i < 7; i++) houses.push([.56 + i * .045 + r0() * .01, .2 + i * .1]);
+  function readouts(){
+    const p = .6 + M.P(year) * 84.4, tt = -58 + M.T(year) * 70, ww = M.W(year) * 36, o = .1 + M.O(year) * 19.4;
+    el("rP").textContent = p.toFixed(p < 10 ? 1 : 0) + " kPa";
+    el("rT").textContent = (tt < 0 ? "−" : "") + Math.abs(tt).toFixed(0) + " °C";
+    el("rW").textContent = ww.toFixed(0) + " %";
+    el("rO").textContent = o.toFixed(1) + " %";
+    el("tfYear").textContent = "Year " + Math.round(year);
+    let st = stages[0][1]; for (const s of stages) if (year >= s[0]) st = s[1]; el("tfStage").textContent = st;
+    const mk = document.getElementById("tfMark"); if (mk){ const x = X(year); mk.setAttribute("x1", x); mk.setAttribute("x2", x); }
+  }
+  // chart
+  const svg = el("tfChart"), L = 48, Rr = 664, T = 14, Bt = 196;
+  const X = y => L + (y / Y_MAX) * (Rr - L), Yp = v => Bt - v * (Bt - T);
+  (function(){
+    let s = "";
+    [0, .5, 1].forEach(v => { s += `<line x1="${L}" x2="${Rr}" y1="${Yp(v)}" y2="${Yp(v)}" stroke="#2d3446" stroke-width="1"/><text x="${L - 8}" y="${Yp(v) + 4}" text-anchor="end" fill="#9aa1b3" font-size="11">${v * 100}%</text>`; });
+    for (let y = 0; y <= 600; y += 100) s += `<line x1="${X(y)}" x2="${X(y)}" y1="${Bt}" y2="${Bt + 5}" stroke="#5d6479"/><text x="${X(y)}" y="${Bt + 19}" text-anchor="middle" fill="#9aa1b3" font-size="11">${y}</text>`;
+    s += `<text x="${Rr}" y="${Bt + 33}" text-anchor="end" fill="#9aa1b3" font-size="10">YEARS</text>`;
+    [["P", "#f0b25a"], ["T", "#e58a6c"], ["W", "#7fc4c8"], ["O", "#9cc58f"]].forEach(([key, c]) => { let d = ""; for (let y = 0; y <= 600; y += 5) d += (y ? "L" : "M") + X(y).toFixed(1) + "," + Yp(M[key](y)).toFixed(1); s += `<path d="${d}" fill="none" stroke="${c}" stroke-width="2.2"/>`; });
+    s += `<line id="tfMark" x1="${X(0)}" x2="${X(0)}" y1="${T - 4}" y2="${Bt}" stroke="#ece5d4" stroke-width="1" stroke-dasharray="3 3"/>`;
+    svg.innerHTML = s;
+  })();
+  const cv = el("tf");
+  const s = scene(cv, (ctx, w, h, t) => {
+    const dt = lastT === null ? 0 : Math.min(.1, t - lastT); lastT = t;
+    if (playing){ year = Math.min(Y_MAX, year + dt * 60); slider.value = Math.round(year); readouts(); if (year >= Y_MAX){ playing = false; play.textContent = "Replay"; } }
+    const P = M.P(year), Tm = M.T(year), W = M.W(year), O = M.O(year), Li = M.lichen(year), V = M.veg(year);
+    const r = rng(33);
+    ctx.fillStyle = vgrad(ctx, 0, h * .75, [mix("#12080c", "#2f5f9a", P * .6 + O * .4), mix("#5a2a24", "#7fa8cf", P), mix("#b0664a", "#e6eef0", (P + W) / 2)]); ctx.fillRect(0, 0, w, h);
+    // sun
+    const sx = w * .22, sy = h * .22; glow(ctx, sx, sy, 70, mix("#f0c0a0", "#fff6dc", P), .5); ctx.fillStyle = "#fff4e0"; ctx.beginPath(); ctx.arc(sx, sy, 9, 0, TAU); ctx.fill();
+    // clouds
+    const ca = smooth(.15, .8, W);
+    if (ca > 0) for (const c of clouds){ const x = ((c[0] * w + t * 6 * c[2]) % (w + 200)) - 100, y = c[1] * h; for (let i = 0; i < 5; i++) glow(ctx, x + i * 18 * c[2], y + Math.sin(i) * 5, 28 * c[2], "#ffffff", .5 * ca); }
+    // mountains with ice
+    const mY = x => h * .5 - fbm(N[0], x / w * 2.2) * h * .3 + h * .08;
+    ctx.fillStyle = mix("#6a3a30", "#4a5a64", P * .6); ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, mY(x)); ctx.lineTo(w, h); ctx.fill();
+    const ice = 1 - smooth(0, .75, Tm) * .85;
+    ctx.save(); ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, mY(x)); ctx.lineTo(w, h); ctx.clip();
+    ctx.fillStyle = `rgba(240,244,248,${(.9 * ice).toFixed(2)})`; const iceLine = h * (.3 + .35 * ice); ctx.fillRect(0, 0, w, iceLine - h * .12); ctx.restore();
+    // mid hills
+    const hY = x => h * .66 - fbm(N[1], x / w * 3) * h * .14;
+    ctx.fillStyle = mix("#8a4a34", "#5f8a5a", V); ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, hY(x)); ctx.lineTo(w, h); ctx.fill();
+    // lake / sea in valley
+    const lake = W * h * .12; if (lake > .5){ const ly = h * .8 - lake; ctx.fillStyle = mix("#3a6a80", "#2f7a9a", O); ctx.beginPath(); ctx.ellipse(w * .36, h * .8, w * .26 * Math.min(1, .4 + W), lake + 2, 0, Math.PI, TAU); ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.25)"; ctx.lineWidth = 1; for (let i = 0; i < 6; i++){ const x = w * (.2 + i * .05); ctx.beginPath(); ctx.moveTo(x, h * .8 - lake * .4 + i % 2 * 3); ctx.lineTo(x + 14, h * .8 - lake * .4 + i % 2 * 3); ctx.stroke(); } }
+    // foreground ground
+    const gY = x => h * .8 + fbm(N[2], x / w * 3) * h * .08;
+    ctx.fillStyle = mix("#9a5238", "#3f6e3c", V); ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, gY(x)); ctx.lineTo(w, h); ctx.fill();
+    // lichen
+    for (const l of lichen){ if (l[2] > Li) continue; const x = l[0] * w, y = hY(x) + 6 + l[1] * (h - hY(x)); const la = (.55 * (1 - V * .75)).toFixed(2); ctx.fillStyle = l[2] < .5 ? `rgba(230,160,80,${la})` : `rgba(170,200,110,${la})`; ctx.beginPath(); ctx.arc(x, y, 2 + l[2] * 2, 0, TAU); ctx.fill(); }
+    // grass tufts
+    if (V > .05) for (let i = 0; i < 80; i++){ const x = r() * w, y = gY(x) + 4 + r() * (h - gY(x)); if (r() > V) continue; ctx.strokeStyle = "rgba(140,190,110,.7)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y - 6); ctx.moveTo(x, y); ctx.lineTo(x + 2, y - 7); ctx.stroke(); }
+    // trees grow in by threshold
+    for (const tr of trees){ const g = clamp((V - tr[2] * .9) / .12); if (g <= 0) continue; const onFar = tr[3] < .6; const x = tr[0] * w; if (x > w * .1 && x < w * .62 && onFar && W > .3) continue; const y = onFar ? hY(x) + 4 + tr[1] * 10 : gY(x) + 2 + tr[1] * 14; const sz = (onFar ? 7 : 12) * g; if (tr[3] < .3) pine(ctx, x, y, sz * 1.3, "#2f5a3a", null); else tree(ctx, x, y, sz, mix("#3e6b3e", "#5f9458", tr[1]), null); }
+    // habitat dome + town
+    const dx = w * .52, dy = gY(dx) + 4;
+    ctx.fillStyle = "rgba(200,230,240,.35)"; ctx.strokeStyle = "rgba(230,245,250,.8)"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(dx, dy, 24, Math.PI, TAU); ctx.fill(); ctx.stroke();
+    hut(ctx, dx - 6, dy, 5, "#c9b8a0", "#8a4a3a", "#ffd58a"); hut(ctx, dx + 8, dy, 4, "#c9b8a0", "#4f5d6e", "#ffd58a");
+    ctx.strokeStyle = "#d8cbb0"; ctx.beginPath(); ctx.moveTo(dx + 26, dy); ctx.lineTo(dx + 26, dy - 38); ctx.stroke(); glow(ctx, dx + 26, dy - 38, 10, "#f0b25a", .6 + .3 * Math.sin(t * 3));
+    for (const [fx, th] of houses){ if (O < th * .9 && V < th) continue; const x = w * fx + 40; hut(ctx, x, gY(x) + 6, 7, "#d8c8ac", "#a8483a", "#ffd58a"); }
+    // birds
+    if (O > .8) for (let j = 0; j < 5; j++){ const bx = ((t * 20 + j * 70) % (w + 60)) - 30, by = h * (.25 + j * .04); ctx.strokeStyle = "#2a3040"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(bx - 4, by - 2 * Math.abs(Math.sin(t * 6 + j))); ctx.lineTo(bx, by); ctx.lineTo(bx + 4, by - 2 * Math.abs(Math.sin(t * 6 + j))); ctx.stroke(); }
+    // dust haze
+    const hz = (1 - P) * .35; if (hz > .01){ ctx.fillStyle = `rgba(160,80,50,${hz.toFixed(2)})`; ctx.fillRect(0, 0, w, h); }
+  });
+  slider.addEventListener("input", () => { year = +slider.value; playing = false; play.textContent = "Play"; readouts(); render(s, performance.now() / 1000); });
+  play.addEventListener("click", () => { if (year >= Y_MAX) year = 0; playing = !playing; play.textContent = playing ? "Pause" : "Play"; if (RM && playing){ year = Y_MAX; slider.value = year; playing = false; play.textContent = "Replay"; readouts(); render(s, 0); } });
+  readouts();
+})();
+
+/* =====================================================================
+   LOOP DIAGRAM
+   ===================================================================== */
+(function(){
+  const names = ["Settle", "Connect", "Produce", "Grow", "Understand", "Transform"];
+  const cx = 220, cy = 190, R = 128; let nodes = "", arrows = "";
+  names.forEach((n, i) => {
+    const a = -Math.PI / 2 + i * TAU / 6, x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R;
+    const a1 = a + .2, a2 = a + TAU / 6 - .2;
+    arrows += `<path d="M${(cx + Math.cos(a1) * R).toFixed(1)},${(cy + Math.sin(a1) * R).toFixed(1)} A${R},${R} 0 0 1 ${(cx + Math.cos(a2) * R).toFixed(1)},${(cy + Math.sin(a2) * R).toFixed(1)}" fill="none" stroke="#f0b25a" stroke-width="2" marker-end="url(#ah)"/>`;
+    const lx = cx + Math.cos(a) * (R + 22), ly = cy + Math.sin(a) * (R + 22);
+    const anchor = Math.abs(Math.cos(a)) < .2 ? "middle" : Math.cos(a) > 0 ? "start" : "end";
+    nodes += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="#161b28" stroke="#ece5d4" stroke-width="1.5"/><text x="${lx.toFixed(1)}" y="${(ly + 4 + (Math.sin(a) < -.9 ? -4 : Math.sin(a) > .9 ? 8 : 0)).toFixed(1)}" text-anchor="${anchor}" fill="#ece5d4" font-size="13">${n.toUpperCase()}</text>`;
+  });
+  document.getElementById("loopArrows").innerHTML = arrows;
+  document.getElementById("loopNodes").innerHTML = nodes;
+})();
+
+/* =====================================================================
+   CHAINS, HUD, INDEX, TOC
+   ===================================================================== */
+(function(){
+  const C = [
+    ["Timber", "g:Log", "b:Sawmill", "g:Plank", "b:Joiner", "g:Beam · Furniture"],
+    ["Stone", "g:Rock", "b:Mason", "g:Block", "b:Kiln", "g:Lime · Brick"],
+    ["Bread", "g:Grain", "b:Mill", "g:Flour", "b:Bakery", "g:Bread", "u:miners, builders"],
+    ["Meat & dairy", "g:Grain", "b:Pasture", "g:Livestock", "b:Butcher · Dairy", "g:Meat · Cheese"],
+    ["Fish", "g:Catch", "b:Smokehouse · Icehouse", "g:Preserved fish", "u:winter stores"],
+    ["Metal", "g:Ore + Coal", "b:Smelter", "g:Ingot", "b:Toolsmith", "g:Tools", "u:new professions"],
+    ["Glass", "g:Sand + Ash", "b:Glassworks", "g:Glass", "b:Lensmaker", "g:Lenses · Greenhouses"],
+    ["Cloth", "g:Flax · Wool · Silk", "b:Weaver", "g:Cloth", "b:Tailor", "g:Warm clothes", "u:cold worlds"],
+    ["Light", "g:Glowcap · Oil", "b:Chandler", "g:Lanterns", "u:roads at night, warden posts"],
+    ["Orbit", "g:Beam + Ingot + Glass", "b:Rail yard", "g:Launch cradle", "b:Launch rail", "g:Cargo to orbit"],
+    ["Terraform", "g:Seeds + Microbes", "b:Seed vault · Culture pond", "g:Seed pods", "u:lichen fields, forests"]
+  ];
+  document.getElementById("chains").innerHTML = C.map(([lbl, ...xs]) => `<div class="chain"><span class="lbl">${lbl}</span><div class="steps">${xs.map((x, i) => { const [k, v] = [x.slice(0, 1), x.slice(2)]; const sep = i ? '<span class="ar" aria-hidden="true">→</span>' : ""; return sep + (k === "g" ? `<span class="g">${v}</span>` : k === "b" ? `<span class="b">${v}</span>` : `<span class="b" style="color:var(--moss)">for ${v}</span>`); }).join("")}</div></div>`).join("");
+
+  const res = [["Logs", 214, "#b07a4a"], ["Planks", 96, "#e0b27a"], ["Stone", 142, "#a9a9b3"], ["Grain", 58, "#e2c46e"], ["Bread", 31, "#d98f4e"], ["Coal", 12, "#3b3a4a"], ["Tools", 4, "#7fc4c8"], ["Settlers", 87, "#ece5d4"]];
+  document.getElementById("resBar").innerHTML = res.map(([n, v, c]) => `<span><i style="background:${c}"></i>${n} ${v}</span>`).join("");
+  const dist = [["Smelter", 60], ["Toolsmith", 25], ["Glassworks", 15]];
+  const rows = document.getElementById("distRows");
+  rows.innerHTML = dist.map(([n, v], i) => `<div class="slider-row"><label for="d${i}">${n}</label><input type="range" id="d${i}" min="0" max="100" value="${v}" style="flex:none;width:100%"><output id="o${i}">${v}</output></div>`).join("");
+  dist.forEach((_, i) => { const inp = document.getElementById("d" + i); inp.addEventListener("input", () => { document.getElementById("o" + i).textContent = inp.value; }); });
+
+  const IDX = {
+    "Logistics": [["Roads between flags, one carrier per segment", "core"], ["Eight goods per flag; visible congestion", "core"], ["Road tiers (dirt to boardwalk)", "core"], ["Desire paths suggest roads", "ext"], ["Pack animals per biome", "core"], ["Canals and barges", "ext"], ["Ropeways, gliders, ice roads", "ext"], ["Crossroad depots", "ext"], ["Urgent and bulk priorities", "core"], ["Launch rails and skyships", "ext"]],
+    "Settlers": [["Named, simulated individuals", "core"], ["Tools assign professions", "core"], ["Skill, mastery and titles", "core"], ["Households and generations", "ext"], ["Needs: food, warmth, rest, belonging", "core"], ["Traits shaped by home world", "ext"], ["Elders teach; memorial trees", "ext"], ["Follow cam and settler journals", "core"]],
+    "Economy": [["Production chains, 11 families", "core"], ["Distribution sliders", "core"], ["Tool priority sliders", "core"], ["Spoilage and weathering", "ext"], ["Masterwork quality", "ext"], ["Seasonal presets and colony policies", "ext"], ["Interplanetary trade", "ext"], ["Nomad caravans", "ext"]],
+    "Planet & physics": [["Spherical hex-grid planets", "core"], ["Gravity affects speed, load, height", "ext"], ["Day length and day/night", "core"], ["Axial tilt, seasons by latitude", "ext"], ["Moons and tides", "ext"], ["Tidally locked worlds", "ext"], ["Star Wells on the 12 pentagons", "ext"], ["Drifting islands in low gravity", "str"]],
+    "Living world": [["Water flow, floods, irrigation", "core"], ["Erosion and deposition", "ext"], ["Wind field", "core"], ["Weather fronts and forecasts", "ext"], ["Fire spread", "ext"], ["Fauna populations", "ext"], ["Plant succession", "ext"], ["Soil fertility and rotation", "core"], ["Groundwater and aquifers", "ext"], ["Building wear and patina", "str"]],
+    "Ground": [["Geologist signposts", "core"], ["Strata and cross-section view", "core"], ["Vein volume and depletion", "core"], ["Shaft props and collapse", "ext"], ["Caves and ruins", "ext"]],
+    "Colonies & terraforming": [["Survey probes", "ext"], ["Packing the Hearthship", "ext"], ["Rooted status and policies", "ext"], ["Launch windows", "ext"], ["Cultural drift", "str"], ["Atmosphere, heat, water targets", "ext"], ["Seed mixes and succession", "ext"], ["Microclimates and domes", "core"], ["Native life and reserves", "ext"], ["Bloom", "ext"]],
+    "Territory & neighbours": [["Lantern wardens and borders", "core"], ["Peaceful mode", "core"], ["Rivalry by influence and contests", "ext"], ["Classic knights and gold morale", "str"], ["Hamlets that join", "ext"], ["Letters and pacts", "ext"]],
+    "Wellbeing & knowledge": [["Glow (five parts)", "core"], ["Festivals per world", "ext"], ["Decoration", "core"], ["Almanac by observation", "core"], ["Teaching and invention", "ext"], ["Precursor ruins", "ext"]],
+    "Adversity": [["Wildfire, flood, blight", "ext"], ["Cold snap, eruption, meteors", "ext"], ["Sandstorms and pests", "ext"], ["Gentle / Honest / Hard settings", "core"]],
+    "Modes & presentation": [["Campaign: The Long Voyage", "ext"], ["Seeded sandbox", "core"], ["Scenarios", "ext"], ["2–4 player co-op", "ext"], ["Async letters and skyships", "str"], ["World painter and mods", "str"], ["Adaptive, settlement-built score", "core"], ["Photo mode and postcards", "ext"], ["Time-lapse replays", "str"], ["Accessibility suite", "core"]]
+  };
+  const lab = { core: ["c-core", "Core"], ext: ["c-ext", "Extended"], str: ["c-str", "Stretch"] };
+  document.getElementById("mechIndex").innerHTML = Object.entries(IDX).map(([g, xs]) => `<div><h3>${g}</h3><ul>${xs.map(([n, tier]) => `<li><span>${n}</span><span class="chip ${lab[tier][0]}">${lab[tier][1]}</span></li>`).join("")}</ul></div>`).join("");
+
+  const toc = document.getElementById("toc"), secs = [...document.querySelectorAll("main section[data-t]")];
+  toc.innerHTML = secs.map(s => `<li><a href="#${s.id}">${s.dataset.t}</a></li>`).join("");
+  const links = [...toc.querySelectorAll("a")];
+  const so = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting){ links.forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id)); } }); }, { rootMargin: "-40% 0px -55% 0px" });
+  secs.forEach(s => so.observe(s));
+})();
+})();
+</script>
