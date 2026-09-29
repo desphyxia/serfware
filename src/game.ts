@@ -13,7 +13,12 @@ import { BIOME_NAMES } from "./sim/planet/terrain";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 import { World } from "./sim/world";
+import type { Command } from "./sim/econ/economy";
+import { starterChain } from "./sim/econ/planner";
+import { Tools } from "./tools";
+import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
+import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
 import { ReportPanel } from "./ui/reportPanel";
@@ -43,12 +48,21 @@ export class Game {
   private readonly ambient = new THREE.AmbientLight("#8a9cc4", 0.3);
   /** Local sky light from straight above the view, acting like a hemisphere light on a sphere. */
   private readonly skyFill = new THREE.DirectionalLight("#b9cbe8", 0.6);
+  /** Soft light from the viewer so shaded sides of buildings stay readable. */
+  private readonly viewFill = new THREE.DirectionalLight("#ffe8d0", 0.35);
   private readonly fog = new THREE.Fog("#000000", 1e6, 2e6);
   private readonly hud: Hud;
   private readonly debug: DebugPanel;
   private readonly settingsPanel: SettingsPanel;
   private readonly report: ReportPanel;
   private readonly inspector: HTMLElement;
+  private readonly buildBar: BuildBar;
+  private readonly toasts = new Toasts();
+  private readonly info: InfoPanel;
+  private readonly stock = new StockBar();
+  readonly tools: Tools;
+  private uiTimer = 0;
+  private downAt: { x: number; y: number; button: number } | null = null;
   private readonly loading: HTMLElement;
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2(9, 9);
@@ -82,7 +96,7 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 9000);
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
     this.sky = new SkyDome(hashString(seed));
-    this.scene.add(this.sky.group, this.sun, this.sun.target, this.moon, this.moon.target, this.skyFill, this.skyFill.target, this.ambient);
+    this.scene.add(this.sky.group, this.sun, this.sun.target, this.moon, this.moon.target, this.skyFill, this.skyFill.target, this.viewFill, this.viewFill.target, this.ambient);
     this.scene.fog = this.fog;
     this.sun.castShadow = true;
     this.sun.shadow.bias = -0.0004;
@@ -118,6 +132,7 @@ export class Game {
         "×64": () => (this.speed = 64),
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
+        "Starter chain": () => this.toasts.show(`Placed ${starterChain(this.world)} buildings with roads.`, "good"),
         "Test crash": () =>
           setTimeout(() => {
             throw new Error("Test crash triggered from the debug dialog");
@@ -126,7 +141,33 @@ export class Game {
         "Sample memory": () => this.sampleMemory(),
       },
     });
-    container.append(this.hud.root, this.inspector, this.debug.root, this.settingsPanel.root, this.report.root);
+    this.info = new InfoPanel(() => this.world.economy, {
+      demolishTile: (tile) => {
+        this.command({ t: "demolish", tile });
+        this.info.select(null);
+      },
+    });
+    this.tools = new Tools({
+      world: () => this.world,
+      overlays: () => this.view.overlays,
+      command: (cmd) => this.command(cmd),
+      notify: (text, kind) => this.toasts.show(text, kind),
+      select: (sel: Selection) => this.info.select(sel),
+      toolChanged: (id: ToolId) => this.buildBar.setActive(id),
+    });
+    this.buildBar = new BuildBar((id) => this.tools.set(id));
+    this.buildBar.setActive("select");
+    container.append(
+      this.hud.root,
+      this.inspector,
+      this.stock.root,
+      this.buildBar.root,
+      this.toasts.root,
+      this.info.root,
+      this.debug.root,
+      this.settingsPanel.root,
+      this.report.root,
+    );
 
     this.applyUi();
     settings.subscribe((s) => {
@@ -157,8 +198,27 @@ export class Game {
     return cam;
   }
 
-  /** Start looking at a pleasant coast: the land tile with most water neighbours nearby. */
+  /** Issue a player command; failures are explained with a toast. */
+  command(cmd: Command): boolean {
+    const r = this.world.command(cmd);
+    if (!r.ok && r.reason) this.toasts.show(r.reason, "warn");
+    else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
+    return r.ok;
+  }
+
+  /** Start looking at the Hearthship. */
   private focusStart(): void {
+    const eco = this.world.economy;
+    if (eco.keep >= 0) {
+      const keep = eco.buildings[eco.keep]!;
+      this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(keep.tile)), 34);
+      return;
+    }
+    this.focusCoast();
+  }
+
+  /** Fallback: a pleasant coast, the land tile with some water nearby. */
+  private focusCoast(): void {
     const { grid, terrain } = this.world.planet;
     let best = 0;
     let bestScore = -1;
@@ -184,6 +244,16 @@ export class Game {
     const current = d.hour + d.minute / 60;
     if (hour < current) hour += 24;
     this.world.tick = Math.max(0, this.world.tick + Math.round((hour - current) * perHour));
+  }
+
+  /** Test and screenshot hook: run frames synchronously (software renderers are very slow). */
+  renderFrames(n: number): void {
+    let t = performance.now();
+    for (let i = 0; i < n; i++) {
+      t += 16.7;
+      this.lastRender = 0;
+      this.frame(t);
+    }
   }
 
   /** Test and screenshot hook: set camera distance, heading and tilt instantly. */
@@ -231,6 +301,8 @@ export class Game {
     this.scene.add(this.view.group);
     this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
+    this.info.select(null);
+    this.tools.set("select");
     this.focusStart();
     try {
       history.replaceState(null, "", `#${seed}`);
@@ -265,6 +337,16 @@ export class Game {
       this.pointer.set(9, 9);
       this.setHover(-1);
     });
+    canvas.addEventListener("pointerdown", (e) => {
+      this.downAt = { x: e.clientX, y: e.clientY, button: e.button };
+    });
+    canvas.addEventListener("pointerup", (e) => {
+      const d = this.downAt;
+      this.downAt = null;
+      if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
+      if (d.button === 0) this.tools.click(this.hoverTile);
+      else if (d.button === 2) this.tools.cancel();
+    });
     canvas.addEventListener("dblclick", () => {
       if (this.hoverTile >= 0) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(this.hoverTile)));
     });
@@ -279,12 +361,17 @@ export class Game {
         this.report.show();
       } else if (e.key === "Escape") {
         if (this.report.visible) this.report.hide();
+        else if (this.tools.cancel()) return;
+        else if (this.info.visible) this.info.hide();
         else this.settingsPanel.toggle();
       } else if (e.key === " ") {
         e.preventDefault();
         this.speed = this.speed === 0 ? 1 : 0;
       } else if (e.key.toLowerCase() === "g") {
         this.view.setGrid(!this.view.grid);
+      } else {
+        const tool = this.buildBar.toolForKey(e.key);
+        if (tool) this.tools.set(tool);
       }
     });
     canvas.addEventListener("webglcontextlost", (e) => {
@@ -360,8 +447,17 @@ export class Game {
     this.fps = this.fps * 0.92 + (1000 / dt) * 0.08;
 
     this.cam.update(dt / 1000);
-    this.updateEnvironment(now);
+    this.updateEnvironment(now, dt / 1000);
     this.updateHover();
+    this.tools.hoverTile(this.hoverTile);
+    const eco = this.world.economy;
+    while (eco.notices.length) this.toasts.show(eco.notices.shift() as string, "good");
+    this.uiTimer -= dt;
+    if (this.uiTimer <= 0) {
+      this.uiTimer = 400;
+      this.stock.update(eco);
+      this.info.refresh();
+    }
     this.gfx.render();
 
     const day = this.world.localDay(this.focusLon());
@@ -374,7 +470,7 @@ export class Game {
     this.debug.update();
   }
 
-  private updateEnvironment(now: number): void {
+  private updateEnvironment(now: number, dt: number): void {
     const p = this.world.planet.params;
     const f = this.world.day().fraction;
     // The subsolar point moves west as the planet turns east, so local noon is at lon = -theta.
@@ -416,6 +512,9 @@ export class Game {
     this.skyFill.position.copy(ground).addScaledVector(local, R);
     this.skyFill.target.position.copy(ground);
     this.skyFill.intensity = 0.25 + 0.75 * this.daylight;
+    this.viewFill.position.copy(camPos);
+    this.viewFill.target.position.copy(ground);
+    this.viewFill.intensity = (0.12 + 0.3 * this.daylight) * closeness;
     this.skyFill.color.copy(this.sky.zenith).lerp(new THREE.Color("#c8d6ee"), 0.6);
 
     this.sky.update(this.camera, this.sunDir, up, air, time, this.gfx.renderer.getPixelRatio(), this.settings.get().graphics.atmosphere === "scattering" ? 1 : 0.4);
@@ -427,7 +526,7 @@ export class Game {
       this.fog.near = 1e6;
       this.fog.far = 2e6;
     }
-    this.view.update({ time, sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness });
+    this.view.update({ time, dt, vegetation: this.settings.get().graphics.vegetation, sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness });
   }
 
   private updateHover(): void {

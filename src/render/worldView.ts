@@ -2,6 +2,10 @@ import * as THREE from "three";
 import type { GraphicsSettings } from "../core/settings";
 import type { World } from "../sim/world";
 import { AtmosphereShell, CloudLayer } from "./atmosphere";
+import { EconView } from "./econView";
+import { SurfaceFrames } from "./frames";
+import { NatureView } from "./natureView";
+import { Overlays } from "./overlays";
 import { StarWellMarkers } from "./starWells";
 import { buildSurface, makeTerrainMaterial } from "./terrainMesh";
 import { TileHighlight } from "./tileHighlight";
@@ -16,6 +20,10 @@ export class WorldView {
   readonly clouds: CloudLayer;
   readonly wells: StarWellMarkers;
   readonly highlight = new TileHighlight();
+  readonly frames: SurfaceFrames;
+  readonly nature: NatureView;
+  readonly econ: EconView;
+  readonly overlays: Overlays;
   private gridOn = false;
 
   constructor(
@@ -41,7 +49,21 @@ export class WorldView {
     this.atmosphere = new AtmosphereShell(R);
     this.clouds = new CloudLayer(R, seed);
     this.wells = new StarWellMarkers(planet);
-    this.group.add(this.land, this.water, this.wells.group, this.clouds.mesh, this.atmosphere.mesh, this.highlight.line);
+    this.frames = new SurfaceFrames(planet);
+    this.nature = new NatureView(world.land, this.frames, planet.grid.count);
+    this.econ = new EconView(world.economy, this.frames);
+    this.overlays = new Overlays(world.land, this.frames);
+    this.group.add(
+      this.land,
+      this.water,
+      this.nature.group,
+      this.econ.group,
+      this.overlays.group,
+      this.wells.group,
+      this.clouds.mesh,
+      this.atmosphere.mesh,
+      this.highlight.line,
+    );
   }
 
   setGrid(on: boolean): void {
@@ -54,6 +76,8 @@ export class WorldView {
 
   update(p: {
     time: number;
+    dt: number;
+    vegetation: number;
     sunDir: THREE.Vector3;
     sky: THREE.Color;
     daylight: number;
@@ -61,6 +85,9 @@ export class WorldView {
     fog: THREE.Fog | null;
     closeness: number;
   }): void {
+    this.nature.update(p.vegetation);
+    this.econ.update(p.time, p.dt);
+    this.overlays.update();
     const w = this.water.material.uniforms;
     w.uTime!.value = p.time;
     w.uSunDir!.value.copy(p.sunDir);
@@ -100,6 +127,9 @@ export class WorldView {
   }
 
   dispose(): void {
+    this.nature.dispose();
+    this.econ.dispose();
+    this.overlays.dispose();
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();
