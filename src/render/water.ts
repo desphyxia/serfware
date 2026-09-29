@@ -20,12 +20,15 @@ export function makeWaterMaterial(): THREE.ShaderMaterial {
     },
     vertexShader: /* glsl */ `
       attribute float aDepth;
+      attribute float aFog;
+      varying float vFog;
       varying float vDepth;
       varying vec3 vWorld;
       varying vec3 vNormal;
       varying float vViewZ;
       void main() {
         vDepth = aDepth;
+        vFog = aFog;
         vec4 w = modelMatrix * vec4(position, 1.0);
         vWorld = w.xyz;
         vNormal = normalize(w.xyz);
@@ -36,7 +39,7 @@ export function makeWaterMaterial(): THREE.ShaderMaterial {
     fragmentShader: /* glsl */ `
       uniform float uTime; uniform vec3 uSunDir; uniform vec3 uSunColor; uniform vec3 uSky; uniform float uDay;
       uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
-      varying float vDepth; varying vec3 vWorld; varying vec3 vNormal; varying float vViewZ;
+      varying float vDepth; varying vec3 vWorld; varying vec3 vNormal; varying float vViewZ; varying float vFog;
 
       float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
       float noise(vec3 x) {
@@ -80,6 +83,7 @@ export function makeWaterMaterial(): THREE.ShaderMaterial {
         col = mix(col, vec3(0.93, 0.95, 0.92) * mix(0.35, 1.0, sunUp), foam * 0.6);
         float alpha = mix(0.55, 0.93, smoothstep(0.0, 2.0, depth));
         alpha = max(alpha, foam * 0.7);
+        col = mix(col, col * 0.1 + vec3(0.01, 0.015, 0.03), smoothstep(0.55, 1.0, vFog));
         float fog = smoothstep(uFogNear, uFogFar, vViewZ);
         col = mix(col, uFogColor, fog);
         gl_FragColor = vec4(col, alpha);

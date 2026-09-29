@@ -7,7 +7,12 @@ import { h, Panel } from "./dom";
 
 export type Selection = { kind: "building" | "flag" | "road" | "person"; id: number } | null;
 
+export function playerName(owner: number): string {
+  return owner === 0 ? "the first settlement" : `rival settlement ${owner}`;
+}
+
 const STATE_TEXT: Record<string, string> = {
+  guard: "keeping watch",
   goto: "on the way",
   idle: "waiting for goods",
   center: "walking to the middle of the road",
@@ -40,7 +45,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -67,7 +72,9 @@ export class InfoPanel extends Panel {
       const where = s
         ? s.role === "carrier"
           ? `Carrying on the roads, ${STATE_TEXT[s.state] ?? s.state}.`
-          : `${s.role === "builder" ? "Building" : s.role === "geologist" ? "Surveying" : `Working at the ${work?.def.name.toLowerCase() ?? "workshop"}`}, ${STATE_TEXT[s.state] ?? s.state}.`
+          : s.role === "warden"
+            ? `Warden at the ${work?.def.name.toLowerCase() ?? "lantern"}, ${STATE_TEXT[s.state] ?? s.state}.`
+            : `${s.role === "builder" ? "Building" : s.role === "geologist" ? "Surveying" : `Working at the ${work?.def.name.toLowerCase() ?? "workshop"}`}, ${STATE_TEXT[s.state] ?? s.state}.`
         : p.stage === "child"
           ? "Playing near home."
           : p.house >= 0
@@ -95,7 +102,23 @@ export class InfoPanel extends Panel {
       const b = eco.buildings[this.sel.id];
       if (!b || !b.alive) return this.select(null);
       title.textContent = b.built ? b.def.name : `${b.def.name} (site)`;
+      const theirs = b.owner !== this.actions.player();
+      if (theirs) {
+        body.push(h("p", { class: "status warn" }, `Belongs to ${playerName(b.owner)}.`));
+        if (b.def.light) body.push(h("p", { class: "hint" }, b.lit ? "Its lantern is lit." : "Its lantern is dark."));
+        this.body.replaceChildren(...body);
+        return;
+      }
       body.push(h("p", { class: "lede" }, b.def.description));
+      if (b.def.slots) {
+        const on = b.garrison.filter((id) => eco.settlers[id]?.state === "guard").length;
+        const coming = b.garrison.length - on;
+        if (!b.built) body.push(h("p", { class: "status" }, `Once built, a warden lights it and your border grows ${b.def.light} steps around it.`));
+        else {
+          body.push(h("p", { class: b.lit ? "status" : "status warn" }, b.lit ? `Lit. Light reaches ${b.def.light} steps.` : "Dark. Waiting for a warden to light it."));
+          body.push(h("p", { class: "hint" }, `${on} of ${b.def.slots} wardens on watch${coming ? `, ${coming} on the way` : ""}. Wants ${eco.garrisonWant(b)} (${b.frontier ? "frontier" : "inland"} policy).`));
+        }
+      }
       if (b.def.storage) {
         body.push(h("h3", { class: "sub" }, "Stock"));
         body.push(h("div", { class: "chips" }, ...b.stock.map((n, i) => goodChip(i, n))));

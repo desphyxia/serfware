@@ -11,7 +11,7 @@ export interface GoodDef {
 }
 
 export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine";
-export type Category = "storage" | "materials" | "food" | "metal";
+export type Category = "storage" | "materials" | "food" | "metal" | "lantern";
 
 export interface BuildingDef {
   id: string;
@@ -41,11 +41,15 @@ export interface BuildingDef {
   inputStock?: number;
   /** Mines: outputs per food eaten. */
   foodPer?: number;
+  /** Lantern buildings: light radius in tiles once a warden is inside. */
+  light?: number;
+  /** Lantern buildings: warden places. */
+  slots?: number;
 }
 
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];
 export const BUILDINGS: readonly BuildingDef[] = content.buildings as BuildingDef[];
-export const START = content.start as { settlers: number; stock: Record<string, number>; territoryRadius: number };
+export const START = content.start as { settlers: number; stock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number } };
 export const DEFAULT_DISTRIBUTION = content.distribution as Record<string, Record<string, number>>;
 export const DEFAULT_TOOL_PRIORITY = content.toolPriority as Record<string, number>;
 

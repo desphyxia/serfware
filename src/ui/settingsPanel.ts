@@ -8,10 +8,11 @@ export class SettingsPanel extends Panel {
   private readonly controls: Array<(s: Settings) => void> = [];
   private readonly presetButtons = new Map<string, HTMLButtonElement>();
   private readonly seedInput: HTMLInputElement;
+  private readonly rivalsInput: HTMLSelectElement;
 
   constructor(
     private readonly store: SettingsStore,
-    private readonly world: { seed: () => string; newWorld: (seed?: string) => void },
+    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number) => void; rivals: () => number },
   ) {
     super("settings", "Settings", { width: 380 });
     const tabs = h("div", { class: "tabs", role: "tablist" });
@@ -86,12 +87,15 @@ export class SettingsPanel extends Panel {
     const w = h("div", { class: "form" });
     this.seedInput = h("input", { type: "text", id: "w-seed", spellcheck: "false", autocomplete: "off" }) as HTMLInputElement;
     w.append(this.row("Seed", this.seedInput, null, "w-seed"));
+    this.rivalsInput = h("select", { id: "w-rivals" }, ...[0, 1, 2, 3].map((n) => h("option", { value: String(n) }, n === 0 ? "None" : String(n)))) as HTMLSelectElement;
+    w.append(this.row("AI rivals", this.rivalsInput, null, "w-rivals"));
+    const rivals = () => Number(this.rivalsInput.value);
     w.append(
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value) }, "Generate this seed"),
-        h("button", { class: "btn", onclick: () => this.world.newWorld() }, "Random seed"),
+        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals()) }, "Generate this seed"),
+        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals()) }, "Random seed"),
       ),
       h("p", { class: "hint" }, "The same seed always produces the same world. Include it in bug reports."),
     );
@@ -105,6 +109,7 @@ export class SettingsPanel extends Panel {
 
   protected override onShow(): void {
     this.seedInput.value = this.world.seed();
+    this.rivalsInput.value = String(this.world.rivals());
     this.sync(this.store.get());
   }
 

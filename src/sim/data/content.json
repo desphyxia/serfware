@@ -119,7 +119,9 @@
       "large": true,
       "storage": true,
       "cost": {},
-      "buildable": false
+      "buildable": false,
+      "light": 9,
+      "slots": 0
     },
     {
       "id": "house",
@@ -462,6 +464,43 @@
       "workTicks": 80,
       "restTicks": 10,
       "produces": "tool"
+    },
+    {
+      "id": "lantern",
+      "name": "Lantern post",
+      "category": "lantern",
+      "description": "A warden keeps a lantern lit here. Its light widens your border a little.",
+      "cost": {
+        "plank": 1,
+        "stone": 1
+      },
+      "light": 5,
+      "slots": 1
+    },
+    {
+      "id": "lamphouse",
+      "name": "Lamp house",
+      "category": "lantern",
+      "description": "A small watch house for two wardens. Its light reaches further.",
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
+      "light": 7,
+      "slots": 2
+    },
+    {
+      "id": "beacon",
+      "name": "Beacon tower",
+      "category": "lantern",
+      "description": "A tall tower whose beacon lights up a wide circle. Room for five wardens.",
+      "large": true,
+      "cost": {
+        "plank": 3,
+        "stone": 5
+      },
+      "light": 10,
+      "slots": 5
     }
   ],
   "distribution": {
@@ -521,6 +560,10 @@
       "crook": 1,
       "tongs": 2
     },
-    "territoryRadius": 9
+    "territoryRadius": 9,
+    "garrison": {
+      "frontier": 0.6,
+      "inland": 0.2
+    }
   }
 }
