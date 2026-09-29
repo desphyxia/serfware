@@ -195,6 +195,156 @@ export function constructionSite(progress: number): THREE.BufferGeometry {
   return merge(parts);
 }
 
+function storehouse(): THREE.BufferGeometry {
+  const parts: Part[] = [
+    [box(2.6, 0.16, 2.0), STONE],
+    [box(2.4, 1.15, 1.8, 0, 0.16), "#b5876a"],
+    [roof(2.4, 1.8, 0.9, 1.31, 0, 0, 0.18), ROOF_SLATE],
+    [box(0.8, 0.9, 0.05, 0, 0.16, 0.91), TIMBER],
+    [box(0.05, 0.9, 0.05, 0, 0.16, 0.94), "#4a3222"],
+    [box(0.3, 0.25, 0.05, 0.8, 0.75, 0.91), WINDOW],
+    [box(0.3, 0.25, 0.05, -0.8, 0.75, 0.91), WINDOW],
+  ];
+  for (let i = 0; i < 4; i++) parts.push([box(0.35, 0.3, 0.35, -1.35 + (i % 2) * 0.4, (i > 1 ? 0.3 : 0) + 0.16, 1.1), "#c9a06a"]);
+  parts.push(...stonePile(1.4, 1.2));
+  return merge(parts);
+}
+
+function farm(): THREE.BufferGeometry {
+  const silo = cyl(0.36, 0.36, 1.6, 12, 1.2, 0.14, -0.5);
+  const dome = new THREE.SphereGeometry(0.36, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(1.2, 1.74, -0.5);
+  return merge([
+    [box(3.0, 0.14, 2.2), STONE],
+    [box(1.3, 0.8, 1.0, -0.8, 0.14, 0.3), WALL],
+    [roof(1.3, 1.0, 0.6, 0.94, -0.8, 0.3), ROOF_RED],
+    [box(0.3, 0.45, 0.05, -0.8, 0.14, 0.81), TIMBER],
+    [box(0.24, 0.2, 0.05, -1.2, 0.5, 0.81), WINDOW],
+    [box(0.22, 0.8, 0.22, -0.45, 0.9, 0.1), STONE],
+    [box(1.2, 1.0, 1.4, 0.35, 0.14, -0.4, 0.15), "#9a4a3a"],
+    [roof(1.2, 1.4, 0.7, 1.14, 0.35, -0.4), "#6a4a3a"],
+    [box(0.5, 0.6, 0.05, 0.35, 0.14, 0.31), "#e8dcc4"],
+    [silo, "#cfc4b0"],
+    [dome, "#8a8f98"],
+    [box(0.9, 0.35, 0.5, 1.0, 0.14, 0.7), "#d8b95c"],
+  ]);
+}
+
+function windmillBody(): THREE.BufferGeometry {
+  return merge([
+    [box(1.6, 0.14, 1.6), STONE],
+    [cyl(0.5, 0.72, 2.2, 10, 0, 0.14), "#e2d6c0"],
+    [new THREE.ConeGeometry(0.62, 0.8, 10).translate(0, 2.74, 0), ROOF_RED],
+    [box(0.36, 0.6, 0.05, 0, 0.14, 0.72), TIMBER],
+    [box(0.2, 0.2, 0.05, 0, 1.4, 0.58), WINDOW],
+    [cyl(0.08, 0.08, 0.4, 6, 0, 2.2, 0.55).rotateX(Math.PI / 2).translate(0, 2.2 - 0.1, 0.2), TIMBER],
+    ...logPile(0.9, 0.6, 2),
+  ]);
+}
+
+/** Four sails, centred on the origin, facing +Z. Rotated by the renderer. */
+export function windmillRotor(): THREE.BufferGeometry {
+  const parts: Part[] = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    const arm = new THREE.BoxGeometry(0.06, 1.3, 0.04).translate(0, 0.65, 0).rotateZ(a);
+    const sail = new THREE.BoxGeometry(0.34, 1.0, 0.02).translate(0.2, 0.75, 0.02).rotateZ(a);
+    parts.push([arm, TIMBER], [sail, "#efe6d2"]);
+  }
+  parts.push([new THREE.CylinderGeometry(0.1, 0.1, 0.12, 8).rotateX(Math.PI / 2), TIMBER]);
+  return merge(parts);
+}
+export const WINDMILL_HUB = new THREE.Vector3(0, 2.2, 0.82);
+
+function bakery(): THREE.BufferGeometry {
+  const oven = new THREE.SphereGeometry(0.42, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).translate(0.85, 0.14, -0.1);
+  return cottage(1.3, 1.0, 0.8, ROOF_RED, [
+    [oven, "#b86a4a"],
+    [box(0.2, 0.18, 0.05, 0.85, 0.14, 0.31), WINDOW],
+    [box(0.14, 0.6, 0.14, 0.95, 0.35, -0.3), STONE],
+    [box(0.4, 0.3, 0.3, -0.95, 0.14, 0.6), "#d9b27a"],
+  ]);
+}
+
+function fisher(): THREE.BufferGeometry {
+  const hull = new THREE.CylinderGeometry(0.28, 0.2, 1.3, 8, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(1.0, 0.3, 0.6);
+  return cottage(1.0, 0.9, 0.75, ROOF_SLATE, [
+    [hull, "#6a4a3a"],
+    [cyl(0.03, 0.03, 0.9, 5, -0.9, 0, 0.5), TIMBER],
+    [cyl(0.03, 0.03, 0.9, 5, -0.9, 0, -0.3), TIMBER],
+    [box(0.02, 0.5, 0.8, -0.9, 0.3, 0.1), "#c9bfa8"],
+  ]);
+}
+
+function pasture(): THREE.BufferGeometry {
+  const parts: Part[] = [[box(0.9, 0.6, 0.8, -0.6, 0, -0.5), "#a87a55"], [roof(0.9, 0.8, 0.4, 0.6, -0.6, -0.5), ROOF_MOSS]];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    parts.push([box(0.06, 0.4, 0.06, Math.cos(a) * 1.25, 0, Math.sin(a) * 1.05), TIMBER]);
+    const b = a + Math.PI / 12;
+    parts.push([box(0.66, 0.05, 0.04, Math.cos(b) * 1.22, 0.3, Math.sin(b) * 1.02, -b + Math.PI / 2), TIMBER]);
+  }
+  for (const [x, z] of [
+    [0.3, 0.3],
+    [0.6, -0.1],
+    [-0.1, 0.55],
+  ] as const) {
+    parts.push([box(0.3, 0.2, 0.18, x, 0.08, z), "#f0c8b8"], [box(0.12, 0.12, 0.12, x + 0.18, 0.14, z), "#e8b8a8"]);
+  }
+  return merge(parts);
+}
+
+function butcher(): THREE.BufferGeometry {
+  return cottage(1.1, 1.0, 0.8, ROOF_RED, [
+    [box(1.1, 0.04, 0.4, 0, 0.75, 0.7), "#b33a3a"],
+    [box(0.1, 0.22, 0.1, -0.3, 0.5, 0.75), "#b86a5a"],
+    [box(0.1, 0.22, 0.1, 0.3, 0.5, 0.75), "#b86a5a"],
+  ]);
+}
+
+const ORE_COLORS: Record<string, string> = { coal: "#2a2a2e", iron: "#a0583f", gold: "#e0b84a", granite: "#b8b2a8" };
+
+function mine(resource: string): THREE.BufferGeometry {
+  const cart = [
+    [box(0.4, 0.22, 0.28, 0.75, 0.1, 0.55), "#5a4a3c"] as Part,
+    [box(0.36, 0.08, 0.24, 0.75, 0.32, 0.55), ORE_COLORS[resource] ?? STONE] as Part,
+  ];
+  return merge([
+    [new THREE.DodecahedronGeometry(1.0, 0).scale(1.2, 0.8, 1.0).translate(0, 0.35, -0.5), "#8d8479"],
+    [box(0.9, 0.9, 0.3, 0, 0, 0.15), "#2a2320"],
+    [box(0.12, 1.0, 0.12, -0.5, 0, 0.3), TIMBER],
+    [box(0.12, 1.0, 0.12, 0.5, 0, 0.3), TIMBER],
+    [box(1.2, 0.14, 0.16, 0, 0.95, 0.3), TIMBER],
+    [box(0.08, 0.02, 1.0, -0.15, 0, 0.8), "#5a5a60"],
+    [box(0.08, 0.02, 1.0, 0.15, 0, 0.8), "#5a5a60"],
+    ...cart,
+    [box(0.6, 0.5, 0.5, -0.9, 0, 0.6), WALL_DARK],
+    [roof(0.6, 0.5, 0.3, 0.5, -0.9, 0.6), ROOF_SLATE],
+    [box(0.16, 0.14, 0.04, -0.9, 0.25, 0.86), WINDOW],
+  ]);
+}
+
+function smelter(gold = false): THREE.BufferGeometry {
+  return merge([
+    [box(1.8, 0.14, 1.4), STONE],
+    [box(1.2, 0.9, 1.0, -0.2, 0.14), gold ? "#c9b48a" : "#9a6a55"],
+    [roof(1.2, 1.0, 0.5, 1.04, -0.2, 0), gold ? ROOF_RED : ROOF_SLATE],
+    [cyl(0.4, 0.5, 1.6, 8, 0.65, 0.14, -0.1), "#8a5a48"],
+    [cyl(0.18, 0.22, 0.9, 8, 0.65, 1.74, -0.1), "#5a4a44"],
+    [box(0.3, 0.26, 0.05, 0.65, 0.35, 0.39), WINDOW],
+    [box(0.28, 0.4, 0.05, -0.2, 0.14, 0.51), TIMBER],
+    ...(gold ? [[box(0.22, 0.22, 0.04, -0.6, 0.7, 0.52), "#f0c85a"] as Part] : stonePile(-1.0, 0.6)),
+  ]);
+}
+
+function toolsmith(): THREE.BufferGeometry {
+  return cottage(1.3, 1.0, 0.85, ROOF_SLATE, [
+    [box(0.3, 0.2, 0.16, 0.95, 0.2, 0.55), "#3a3a42"],
+    [box(0.14, 0.2, 0.12, 0.95, 0, 0.55), "#4a3a30"],
+    [box(0.5, 0.35, 0.5, -1.0, 0, 0.3), "#8a5a48"],
+    [box(0.3, 0.12, 0.05, -1.0, 0.2, 0.56), WINDOW],
+  ]);
+}
+
 const cache = new Map<string, THREE.BufferGeometry>();
 
 export function buildingGeometry(id: string): THREE.BufferGeometry {
@@ -202,15 +352,51 @@ export function buildingGeometry(id: string): THREE.BufferGeometry {
   if (!g) {
     switch (id) {
       case "keep": g = hearthship(); break;
+      case "storehouse": g = storehouse(); break;
       case "woodcutter": g = woodcutter(); break;
       case "forester": g = forester(); break;
       case "quarry": g = quarry(); break;
       case "sawmill": g = sawmill(); break;
+      case "farm": g = farm(); break;
+      case "mill": g = windmillBody(); break;
+      case "bakery": g = bakery(); break;
+      case "fisher": g = fisher(); break;
+      case "pasture": g = pasture(); break;
+      case "butcher": g = butcher(); break;
+      case "coalmine": g = mine("coal"); break;
+      case "ironmine": g = mine("iron"); break;
+      case "goldmine": g = mine("gold"); break;
+      case "granitemine": g = mine("granite"); break;
+      case "smelter": g = smelter(); break;
+      case "goldsmith": g = smelter(true); break;
+      case "toolsmith": g = toolsmith(); break;
       default: g = cottage(1.2, 1.0, 0.8, ROOF_RED);
     }
     cache.set(id, g);
   }
   return g;
+}
+
+/** Tilled soil under a field. */
+export function fieldSoilGeometry(): THREE.BufferGeometry {
+  const parts: Part[] = [[box(2.3, 0.05, 2.3), "#6e5034"]];
+  for (let i = 0; i < 7; i++) parts.push([box(2.2, 0.03, 0.12, 0, 0.04, -1.0 + i * 0.33), "#5a4028"]);
+  return merge(parts);
+}
+
+/** Rows of grain; scaled by growth and tinted from green to gold. */
+export function fieldRowsGeometry(): THREE.BufferGeometry {
+  const parts: Part[] = [];
+  for (let i = 0; i < 7; i++)
+    for (let j = 0; j < 9; j++) parts.push([new THREE.ConeGeometry(0.1, 0.4, 4).translate(-1.0 + j * 0.25, 0.2, -1.0 + i * 0.33), "#ffffff"]);
+  return merge(parts);
+}
+
+export function signpostGeometry(): THREE.BufferGeometry {
+  return merge([
+    [cyl(0.03, 0.035, 0.7, 5), "#c9b89a"],
+    [box(0.3, 0.2, 0.03, 0, 0.55, 0.02), "#ffffff"],
+  ]);
 }
 
 // ---------------------------------------------------------------- nature and small props

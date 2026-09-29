@@ -1,8 +1,23 @@
 import type { StateHasher } from "../hash";
-import type { Rng } from "../rng";
-import { BUILDINGS, buildingType, GOODS, goodsArray, START, type BuildingDef } from "./defs";
+import { mix32, type Rng } from "../rng";
+import {
+  BUILDINGS,
+  buildingType,
+  DEFAULT_DISTRIBUTION,
+  DEFAULT_TOOL_PRIORITY,
+  distributionKey,
+  GOOD_INDEX,
+  goodId,
+  GOODS,
+  goodsArray,
+  goodsFor,
+  inputKeyFor,
+  START,
+  TOOLS,
+  type BuildingDef,
+} from "./defs";
 import { MinHeap } from "./heap";
-import { Feature, LandUse, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
+import { Deposit, DEPOSIT_IDS, Feature, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
 /**
  * The Serf City core: flags, roads with one carrier each, goods handed from flag to flag,
@@ -73,10 +88,22 @@ export interface Building {
   residents: number;
   /** Finished goods waiting to be carried out to the flag. */
   output: number;
+  /** Good type of each finished unit, oldest first. */
+  outputTypes: number[];
+  /** Mines: outputs left before more food is needed. */
+  food: number;
+  /** Mines: nothing left to dig. */
+  exhausted: boolean;
   alive: boolean;
 }
 
-export type Role = "carrier" | "builder" | "worker";
+/** Per-player economy preferences: distribution weights and tool priorities (0..1). */
+export interface Prefs {
+  dist: Record<string, Record<string, number>>;
+  tools: Record<string, number>;
+}
+
+export type Role = "carrier" | "builder" | "worker" | "geologist";
 
 export interface Settler {
   id: number;
@@ -96,6 +123,11 @@ export interface Settler {
   target: number;
   /** Index of the settler's tile within its road (carriers). */
   roadIdx: number;
+  /** Tool carried as the settler's trade, returned to storage when they go home. */
+  tool: number;
+  /** Geologists: flag tile to survey around, and survey visits left. */
+  home: number;
+  visits: number;
   alive: boolean;
 }
 
@@ -105,6 +137,9 @@ export type Command = (
   | { t: "road"; tiles: number[] }
   | { t: "build"; type: string; tile: number; flagTile: number }
   | { t: "demolish"; tile: number }
+  | { t: "geologist"; flagTile: number }
+  | { t: "prio"; key: string; target: string; value: number }
+  | { t: "toolprio"; tool: string; value: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -125,6 +160,8 @@ export class Economy {
   private readonly growing: number[] = [];
   /** Keep (Hearthship) building id per player. */
   readonly keeps: number[] = [];
+  readonly prefs: Prefs[] = [];
+  private readonly fieldTiles: number[] = [];
   tick = 0;
   /** Messages for the player (the UI shows and clears them). */
   readonly notices: string[] = [];
@@ -218,6 +255,7 @@ export class Economy {
     keep.stock = goodsArray(START.stock);
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
+    this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY })) as Prefs;
   }
 
   // ------------------------------------------------------------------ commands
@@ -234,7 +272,33 @@ export class Economy {
         return this.cmdBuild(cmd.type, cmd.tile, cmd.flagTile, p);
       case "demolish":
         return this.cmdDemolish(cmd.tile, p);
+      case "geologist":
+        return this.cmdGeologist(cmd.flagTile, p);
+      case "prio": {
+        const table = ((this.prefs[p] as Prefs).dist[cmd.key] ??= {});
+        table[cmd.target] = Math.max(0, Math.min(1, cmd.value));
+        return { ok: true };
+      }
+      case "toolprio":
+        (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
+        return { ok: true };
     }
+  }
+
+  private cmdGeologist(flagTile: number, p: number): CommandResult {
+    const flag = this.flagAt(flagTile);
+    if (!flag || flag.owner !== p) return { ok: false, reason: "Send geologists to one of your flags." };
+    const home = this.homeFor(flag.id);
+    if (!home) return { ok: false, reason: "That flag isn't connected to your Hearthship." };
+    const path = this.roadPath(home.flag, flag.id);
+    if (!path) return { ok: false, reason: "That flag isn't connected to your Hearthship." };
+    const hammer = this.takeTool(p, goodId("hammer"));
+    if (hammer < 0) return { ok: false, reason: "No hammer for a geologist. Build a toolsmith." };
+    const s = this.spawnSettler("geologist", home, path);
+    s.tool = hammer;
+    s.home = flagTile;
+    s.visits = 8;
+    return { ok: true };
   }
 
   /** Check a command without changing anything (for instant feedback in multiplayer). */
@@ -247,9 +311,15 @@ export class Economy {
       case "road":
         return this.checkRoad(cmd.tiles, p);
       case "build":
-        return land.canBuild(cmd.tile, cmd.flagTile, !!BUILDINGS[buildingType(cmd.type)]?.large, p) ? null : "You can't build here.";
+        return land.canBuildDef(cmd.tile, cmd.flagTile, BUILDINGS[buildingType(cmd.type)] as BuildingDef, p) ? null : this.placementHint(BUILDINGS[buildingType(cmd.type)] as BuildingDef);
       case "demolish":
         return land.use[cmd.tile] === Use.Free || land.use[cmd.tile] === Use.Blocked ? "Nothing to demolish here." : null;
+      case "geologist": {
+        const f = this.flagAt(cmd.flagTile);
+        return f && f.owner === p ? null : "Send geologists to one of your flags.";
+      }
+      default:
+        return null;
     }
   }
 
@@ -313,7 +383,7 @@ export class Economy {
     const def = BUILDINGS[type] as BuildingDef;
     if (def.buildable === false) return { ok: false, reason: `${def.name} can't be built.` };
     const land = this.land;
-    if (!land.canBuild(tile, flagTile, def.large, p)) return { ok: false, reason: "You can't build here." };
+    if (!land.canBuildDef(tile, flagTile, def, p)) return { ok: false, reason: this.placementHint(def) };
     const existing = this.flagAt(flagTile);
     if (existing && existing.building >= 0) return { ok: false, reason: "That flag already serves a building." };
     let flag = existing;
@@ -324,6 +394,12 @@ export class Economy {
     }
     this.createBuilding(type, tile, flag.id, p);
     return { ok: true };
+  }
+
+  private placementHint(def: BuildingDef): string {
+    if (def.terrain === "mountain") return `${def.name}s go on mountain slopes inside your border.`;
+    if (def.terrain === "coast") return `${def.name}s must be built near water.`;
+    return "You can't build here.";
   }
 
   private cmdDemolish(tile: number, p: number): CommandResult {
@@ -411,6 +487,9 @@ export class Economy {
       builder: -1,
       residents: 0,
       output: 0,
+      outputTypes: [],
+      food: 0,
+      exhausted: false,
       alive: true,
     };
     this.buildings.push(b);
@@ -598,11 +677,35 @@ export class Economy {
   need(b: Building, type: number): number {
     if (!b.alive) return 0;
     if (!b.built) return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
-    const inputs = b.def.inputs;
-    if (!inputs || b.worker < 0) return 0;
-    const good = GOODS[type];
-    if (!good || !(good.id in inputs)) return 0;
-    return (b.def.inputStock ?? 4) - (b.stock[type] as number) - (b.pending[type] as number);
+    if (b.worker < 0 || b.exhausted) return 0;
+    const key = inputKeyFor(b.def, type);
+    if (!key) return 0;
+    if (this.priority(b, type) <= 0) return 0;
+    let have = 0;
+    for (const g of goodsFor(key)) have += (b.stock[g] as number) + (b.pending[g] as number);
+    return (b.def.inputStock ?? 4) - have;
+  }
+
+  /** Distribution weight (0..1) of a building for a good; 0 means it gets none. */
+  priority(b: Building, type: number): number {
+    const table = this.prefs[b.owner]?.dist[distributionKey(type)];
+    if (!table) return 1;
+    return table[b.built ? b.def.id : "site"] ?? 1;
+  }
+
+  /** Take a tool of `type` from any of the player's storages; returns the type or -1. */
+  private takeTool(owner: number, type: number): number {
+    for (const s of this.buildings) {
+      if (!s.alive || !s.def.storage || s.owner !== owner || (s.stock[type] as number) <= 0) continue;
+      s.stock[type]!--;
+      return type;
+    }
+    return -1;
+  }
+
+  /** Does the player have a tool of this type in storage? */
+  hasTool(owner: number, type: number): boolean {
+    return this.buildings.some((s) => s.alive && s.def.storage && s.owner === owner && (s.stock[type] as number) > 0);
   }
 
   /** Choose where a good lying on a flag should go: a building that needs it, else storage. */
@@ -612,7 +715,7 @@ export class Economy {
     const owner = (this.flags[g.flag] as Flag).owner;
     for (const b of this.buildings) {
       if (!b.alive || b.owner !== owner || this.need(b, g.type) <= 0) continue;
-      const d = this.route(g.flag, b.flag).dist;
+      const d = this.route(g.flag, b.flag).dist / Math.max(0.05, this.priority(b, g.type));
       if (d < bestD) {
         bestD = d;
         best = b.id;
@@ -641,11 +744,12 @@ export class Economy {
     return this.route(g.flag, dest.flag).next;
   }
 
-  /** Storage buildings send goods out to buildings that need them. */
+  /** Storage buildings send goods out to buildings that need them, highest priority first. */
   private supply(): void {
-    for (const b of this.buildings) {
-      if (!b.alive) continue;
-      for (let type = 0; type < GOODS.length; type++) {
+    const order = this.buildings.filter((b) => b.alive);
+    for (let type = 0; type < GOODS.length; type++) {
+      const wanting = order.filter((b) => this.need(b, type) > 0).sort((x, y) => this.priority(y, type) - this.priority(x, type) || x.id - y.id);
+      for (const b of wanting) {
         let need = this.need(b, type);
         while (need > 0) {
           let src: Building | null = null;
@@ -669,6 +773,18 @@ export class Economy {
         }
       }
     }
+  }
+
+  /** What a production building still lacks, for the details panel. */
+  waitingFor(b: Building): string | null {
+    if (!b.built) return null;
+    if (b.def.tool && b.worker < 0 && !this.hasTool(b.owner, goodId(b.def.tool))) return `Needs a worker with a ${GOODS[goodId(b.def.tool)]?.name.toLowerCase()}. Make one at a toolsmith.`;
+    if (b.exhausted) return "Nothing left to dig here.";
+    if (b.def.inputs && b.worker >= 0) {
+      const missing = Object.keys(b.def.inputs).filter((k) => goodsFor(k).every((g) => (b.stock[g] as number) === 0));
+      if (missing.length && b.food <= 0) return `Waiting for ${missing.map((k) => GOODS[GOOD_INDEX.get(k) ?? -1]?.name.toLowerCase() ?? k).join(" and ")}.`;
+    }
+    return null;
   }
 
   private spawnGood(type: number, flagId: number): Good {
@@ -736,6 +852,9 @@ export class Economy {
       timer: 0,
       target: -1,
       roadIdx: 0,
+      tool: -1,
+      home: -1,
+      visits: 0,
       alive: true,
     };
     this.settlers.push(s);
@@ -752,6 +871,7 @@ export class Economy {
       const b = this.buildings[s.building] as Building;
       if (b.worker === s.id) b.worker = -1;
     }
+    this.releaseReservations(s);
     if (s.role === "builder" && s.building >= 0) {
       const b = this.buildings[s.building] as Building;
       if (b.builder === s.id) b.builder = -1;
@@ -789,16 +909,25 @@ export class Economy {
         if (!home) continue;
         const p = this.roadPath(home.flag, b.flag);
         if (!p) continue;
+        const tool = this.takeTool(b.owner, goodId("hammer"));
+        if (tool < 0) continue;
         const s = this.spawnSettler("builder", home, [...p, b.tile]);
         s.building = b.id;
+        s.tool = tool;
         b.builder = s.id;
       } else if (b.built && b.def.job && b.worker < 0) {
         const home = this.homeFor(b.flag);
         if (!home) continue;
         const p = this.roadPath(home.flag, b.flag);
         if (!p) continue;
+        let tool = -1;
+        if (b.def.tool) {
+          tool = this.takeTool(b.owner, goodId(b.def.tool));
+          if (tool < 0) continue;
+        }
         const s = this.spawnSettler("worker", home, [...p, b.tile]);
         s.building = b.id;
+        s.tool = tool;
         b.worker = s.id;
       }
     }
@@ -1039,6 +1168,117 @@ export class Economy {
     return -1;
   }
 
+  /** Consume one unit of each input (groups take from the fullest member). Returns false if short. */
+  private consumeInputs(b: Building): boolean {
+    const inputs = b.def.inputs ?? {};
+    for (const [key, n] of Object.entries(inputs)) {
+      if (key === "food" && b.def.job === "mine") continue;
+      let have = 0;
+      for (const g of goodsFor(key)) have += b.stock[g] as number;
+      if (have < n) return false;
+    }
+    for (const [key, n] of Object.entries(inputs)) {
+      if (key === "food" && b.def.job === "mine") continue;
+      for (let k = 0; k < n; k++) {
+        let pick = -1;
+        for (const g of goodsFor(key)) if (pick < 0 || (b.stock[g] as number) > (b.stock[pick] as number)) pick = g;
+        b.stock[pick]!--;
+      }
+    }
+    return true;
+  }
+
+  /** Toolsmith: the tool with the highest priority relative to how many are in stock. */
+  private chooseTool(owner: number): number {
+    const prefs = this.prefs[owner] as Prefs;
+    const stock = this.storageTotals(owner);
+    let best = -1;
+    let bestScore = 0;
+    for (const t of TOOLS) {
+      const prio = prefs.tools[(GOODS[t] as { id: string }).id] ?? 0;
+      const score = prio / (1 + (stock[t] as number));
+      if (score > bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  private produce(b: Building, type: number): void {
+    if (type < 0) return;
+    b.output++;
+    b.outputTypes.push(type);
+  }
+
+  private producedType(b: Building): number {
+    const p = b.def.produces;
+    if (!p) return -1;
+    return p === "tool" ? this.chooseTool(b.owner) : goodId(p);
+  }
+
+  /** Mines: the richest matching deposit within reach, or -1. */
+  private mineTile(b: Building): number {
+    const want = Deposit[(b.def.resource ?? "granite").replace(/^./, (c) => c.toUpperCase()) as keyof typeof Deposit];
+    let best = -1;
+    let most = 0;
+    for (const t of [b.tile, ...this.land.ring(b.tile, b.def.radius ?? 2)]) {
+      if (this.land.deposit[t] !== want) continue;
+      const a = this.land.depositAmount[t] as number;
+      if (a > most) {
+        most = a;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  /** Mines: eat if needed; returns false if hungry with nothing to eat. */
+  private feedMiner(b: Building): boolean {
+    if (b.food > 0) return true;
+    let pick = -1;
+    for (const g of goodsFor("food")) if ((b.stock[g] as number) > 0 && (pick < 0 || (b.stock[g] as number) > (b.stock[pick] as number))) pick = g;
+    if (pick < 0) return false;
+    b.stock[pick]!--;
+    b.food = b.def.foodPer ?? 2;
+    return true;
+  }
+
+  private findJobTarget(b: Building, s: Settler): number {
+    const land = this.land;
+    const def = b.def;
+    const open = (t: number) =>
+      land.isLand(t) && land.use[t] === Use.Free && land.feature[t] === Feature.None && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
+    switch (def.job) {
+      case "fell":
+        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE);
+      case "quarry":
+        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
+      case "plant":
+        return this.findWorkTile(b, open);
+      case "farm": {
+        const ripe = this.findWorkTile(b, (t) => land.feature[t] === Feature.Field && (land.amount[t] as number) >= FIELD_RIPE);
+        if (ripe >= 0) return ripe;
+        const fields = land.ring(b.tile, def.radius ?? 3).filter((t) => land.feature[t] === Feature.Field).length;
+        return fields < 8 ? this.findWorkTile(b, open) : -1;
+      }
+      case "fish": {
+        for (const t of land.ring(b.tile, def.radius ?? 5)) {
+          if (!land.isLand(t) || !land.walkable(t)) continue;
+          for (const w of land.planet.grid.neighborsOf(t)) {
+            if (land.isLand(w) || (land.fish[w] as number) === 0) continue;
+            if (this.settlers.some((o) => o.alive && o.role === "worker" && o.target === t && o.id !== s.id)) continue;
+            s.home = w;
+            return t;
+          }
+        }
+        return -1;
+      }
+      default:
+        return -1;
+    }
+  }
+
   private stepWorker(s: Settler): void {
     const b = this.buildings[s.building] as Building;
     if (!b || !b.alive) {
@@ -1063,26 +1303,41 @@ export class Economy {
             return;
           }
           s.state = "drop";
+          s.carrying = b.outputTypes[0] ?? -1;
           this.setPath(s, [b.tile, flag.tile]);
           return;
         }
         if (def.job === "craft") {
-          const inputs = goodsArray(def.inputs);
-          if (inputs.every((n, i) => (b.stock[i] as number) >= n)) {
-            inputs.forEach((n, i) => (b.stock[i] = (b.stock[i] as number) - n));
+          const out = this.producedType(b);
+          if (out >= 0 && this.consumeInputs(b)) {
             s.state = "craft";
+            s.target = out;
             s.timer = def.workTicks ?? 60;
           } else s.timer = 15;
           return;
         }
-        let target = -1;
-        if (def.job === "fell") target = this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE);
-        else if (def.job === "quarry") target = this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
-        else if (def.job === "plant")
-          target = this.findWorkTile(
-            b,
-            (t) => land.isLand(t) && land.use[t] === Use.Free && land.feature[t] === Feature.None && land.slope(t) < 2 && land.planet.grid.degree(t) === 6,
-          );
+        if (def.job === "mine") {
+          if (b.exhausted) {
+            s.timer = 200;
+            return;
+          }
+          const t = this.mineTile(b);
+          if (t < 0) {
+            b.exhausted = true;
+            this.notices.push(`${def.name} has run out.`);
+            s.timer = 200;
+            return;
+          }
+          if (!this.feedMiner(b)) {
+            s.timer = 30;
+            return;
+          }
+          s.state = "mining";
+          s.target = t;
+          s.timer = def.workTicks ?? 90;
+          return;
+        }
+        const target = this.findJobTarget(b, s);
         if (target < 0) {
           s.timer = 60;
           return;
@@ -1107,16 +1362,17 @@ export class Economy {
         if (--s.timer > 0) return;
         const t = s.target;
         let got = -1;
+        const produced = def.produces ? goodId(def.produces) : -1;
         if (def.job === "fell" && land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE) {
           land.feature[t] = Feature.Stump;
           land.amount[t] = 12;
           land.featureVersion++;
-          got = GOODS.findIndex((g) => g.id === def.produces);
+          got = produced;
         } else if (def.job === "quarry" && land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0) {
           land.amount[t]!--;
           if (land.amount[t] === 0) land.feature[t] = Feature.None;
           land.featureVersion++;
-          got = GOODS.findIndex((g) => g.id === def.produces);
+          got = produced;
         } else if (def.job === "plant" && land.feature[t] === Feature.None && land.use[t] === Use.Free) {
           land.feature[t] = Feature.Tree;
           land.amount[t] = 0;
@@ -1124,17 +1380,33 @@ export class Economy {
           land.nextGrowth[t] = this.tick + TREE_GROWTH_TICKS;
           this.growing.push(t);
           land.featureVersion++;
+        } else if (def.job === "farm") {
+          if (land.feature[t] === Feature.Field && (land.amount[t] as number) >= FIELD_RIPE) {
+            land.feature[t] = Feature.None;
+            land.amount[t] = 0;
+            got = produced;
+          } else if (land.feature[t] === Feature.None && land.use[t] === Use.Free) {
+            land.feature[t] = Feature.Field;
+            land.amount[t] = 0;
+            land.nextGrowth[t] = this.tick + FIELD_GROWTH_TICKS;
+            this.fieldTiles.push(t);
+          }
+          land.featureVersion++;
+        } else if (def.job === "fish" && s.home >= 0 && (land.fish[s.home] as number) > 0) {
+          land.fish[s.home]!--;
+          got = produced;
         }
         s.carrying = got;
         const back = land.findPath(t, b.tile, (x) => land.walkable(x) || x === b.tile, 3000);
         s.state = "back";
         s.target = -1;
+        s.home = -1;
         this.setPath(s, back ?? [t, b.tile]);
         return;
       }
       case "back":
         if (this.walk(s)) {
-          if (s.carrying >= 0) b.output++;
+          if (s.carrying >= 0) this.produce(b, s.carrying);
           s.carrying = -1;
           s.state = "rest";
           s.timer = def.restTicks ?? 30;
@@ -1142,22 +1414,37 @@ export class Economy {
         return;
       case "craft":
         if (--s.timer > 0) return;
-        b.output++;
+        this.produce(b, s.target);
+        s.target = -1;
         s.state = "rest";
         s.timer = def.restTicks ?? 10;
         return;
+      case "mining": {
+        if (--s.timer > 0) return;
+        const t = s.target;
+        if ((land.depositAmount[t] as number) > 0) {
+          land.depositAmount[t]!--;
+          if (land.depositAmount[t] === 0) land.deposit[t] = Deposit.None;
+          b.food--;
+          this.produce(b, def.produces ? goodId(def.produces) : -1);
+        }
+        s.target = -1;
+        s.state = "rest";
+        s.timer = def.restTicks ?? 20;
+        return;
+      }
       case "drop":
         if (this.walk(s)) {
-          const type = GOODS.findIndex((g) => g.id === def.produces);
-          if (b.output > 0 && type >= 0 && flag.goods.length + flag.reserved < FLAG_CAPACITY) {
+          if (b.output > 0 && flag.goods.length + flag.reserved < FLAG_CAPACITY) {
             b.output--;
+            const type = b.outputTypes.shift() as number;
             const g = this.spawnGood(type, flag.id);
             this.assignDestination(g);
           }
           s.carrying = -1;
           s.state = "enter";
           this.setPath(s, [flag.tile, b.tile]);
-        } else s.carrying = GOODS.findIndex((g) => g.id === def.produces);
+        }
         return;
       case "enter":
         if (this.walk(s)) {
@@ -1168,16 +1455,67 @@ export class Economy {
     }
   }
 
+  /** Geologists wander around their flag, inspect the ground and plant signposts. */
+  private stepGeologist(s: Settler): void {
+    const land = this.land;
+    switch (s.state) {
+      case "goto":
+      case "walk":
+        if (this.walk(s)) {
+          if (s.state === "goto") s.state = "pick";
+          else {
+            s.state = "inspect";
+            s.timer = 50;
+          }
+        }
+        return;
+      case "pick": {
+        if (s.visits <= 0) {
+          this.sendHome(s);
+          return;
+        }
+        const options = land.ring(s.home, 4).filter((t) => land.walkable(t) && land.use[t] !== Use.Road && land.sign[t] === 0);
+        if (!options.length) {
+          this.sendHome(s);
+          return;
+        }
+        const t = options[mix32(this.tick, s.id) % options.length] as number;
+        const here = s.path[s.pi] as number;
+        const path = land.findPath(here, t, (x) => land.walkable(x), 1500);
+        s.visits--;
+        if (!path) return;
+        this.setPath(s, path);
+        s.state = "walk";
+        return;
+      }
+      case "inspect": {
+        if (--s.timer > 0) return;
+        const t = s.path[s.pi] as number;
+        land.sign[t] = land.deposit[t] !== Deposit.None ? (land.deposit[t] as number) + 1 : 1;
+        land.signExpire[t] = this.tick + SIGN_TICKS;
+        land.signVersion++;
+        if (land.deposit[t] !== Deposit.None && land.deposit[t] !== Deposit.Granite)
+          this.notices.push(`Geologist found ${DEPOSIT_IDS[land.deposit[t] as number]}.`);
+        s.state = "pick";
+        return;
+      }
+    }
+  }
+
   private stepSettler(s: Settler): void {
     if (s.state === "home") {
       if (this.walk(s)) {
         s.alive = false;
-        (this.buildings[this.keeps[s.owner] as number] as Building).residents++;
+        const keep = this.buildings[this.keeps[s.owner] as number] as Building;
+        keep.residents++;
+        if (s.tool >= 0) keep.stock[s.tool]!++;
+        s.tool = -1;
       }
       return;
     }
     if (s.role === "carrier") this.stepCarrier(s);
     else if (s.role === "builder") this.stepBuilder(s);
+    else if (s.role === "geologist") this.stepGeologist(s);
     else this.stepWorker(s);
   }
 
@@ -1200,6 +1538,18 @@ export class Economy {
         else land.nextGrowth[t] = this.tick + TREE_GROWTH_TICKS;
       }
     }
+    for (let i = this.fieldTiles.length - 1; i >= 0; i--) {
+      const t = this.fieldTiles[i] as number;
+      if (land.feature[t] !== Feature.Field) {
+        this.fieldTiles.splice(i, 1);
+        continue;
+      }
+      if ((land.amount[t] as number) < FIELD_RIPE && (land.nextGrowth[t] as number) <= this.tick) {
+        land.amount[t]!++;
+        land.nextGrowth[t] = this.tick + FIELD_GROWTH_TICKS;
+        changed = true;
+      }
+    }
     // Stumps rot away slowly (checked on a rotating slice of tiles).
     const n = land.planet.grid.count;
     const slice = 200;
@@ -1210,6 +1560,11 @@ export class Economy {
         land.wear[t] = Math.max(0, (land.wear[t] as number) - 6);
         land.wearVersion++;
       }
+      if (land.sign[t] !== 0 && (land.signExpire[t] as number) <= this.tick) {
+        land.sign[t] = 0;
+        land.signVersion++;
+      }
+      if (!land.isLand(t) && (land.fish[t] as number) > 0 && (land.fish[t] as number) < 12 && (mix32(t, this.tick) & 7) === 0) land.fish[t]!++;
       if (land.feature[t] === Feature.Stump) {
         if ((land.amount[t] as number) <= 1) {
           land.feature[t] = Feature.None;

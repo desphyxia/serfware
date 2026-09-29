@@ -1,5 +1,5 @@
 import type { World } from "../world";
-import { BUILDINGS, buildingType } from "./defs";
+import { BUILDINGS, buildingType, type BuildingDef } from "./defs";
 import { Feature } from "./landuse";
 
 /**
@@ -12,7 +12,7 @@ export function placeConnected(w: World, type: string, opts: { minDist?: number;
   const player = opts.player ?? 0;
   const keep = eco.buildings[eco.keeps[player] ?? -1];
   if (!keep) return false;
-  const large = !!BUILDINGS[buildingType(type)]?.large;
+  const def = BUILDINGS[buildingType(type)] as BuildingDef;
   const minDist = opts.minDist ?? 2;
   const inner = new Set(land.ring(keep.tile, minDist - 1));
   const candidates = land.ring(keep.tile, opts.maxDist ?? 8).filter((t) => !inner.has(t));
@@ -26,7 +26,7 @@ export function placeConnected(w: World, type: string, opts: { minDist?: number;
   const ranked = candidates.map((t, i) => [Math.max(score(t), -6) + i / 6, t] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   for (const [, t] of ranked) {
     const flagTile = land.bestFlagTile(t, player);
-    if (flagTile < 0 || !land.canBuild(t, flagTile, large, player)) continue;
+    if (flagTile < 0 || !land.canBuildDef(t, flagTile, def, player)) continue;
     const existing = eco.flagAt(flagTile);
     if (existing && existing.building >= 0) continue;
     // Connect to the nearest existing flag.
@@ -52,5 +52,22 @@ export function starterChain(w: World, player = 0): number {
   if (placeConnected(w, "forester", { minDist: 3, near: Feature.Tree, player })) n++;
   if (placeConnected(w, "quarry", { minDist: 3, near: Feature.Rock, player })) n++;
   if (placeConnected(w, "sawmill", { minDist: 2, player })) n++;
+  return n;
+}
+
+/** A fuller demo settlement: materials, food chain, a fisher and a toolsmith. */
+export function demoSettlement(w: World, player = 0): number {
+  let n = starterChain(w, player);
+  for (const [type, near] of [
+    ["farm", undefined],
+    ["mill", undefined],
+    ["bakery", undefined],
+    ["fisher", undefined],
+    ["pasture", undefined],
+    ["butcher", undefined],
+    ["toolsmith", undefined],
+  ] as const) if (placeConnected(w, type, { minDist: 2, maxDist: 9, near, player })) n++;
+  const keep = w.economy.buildings[w.economy.keeps[player] ?? -1];
+  if (keep) w.command({ t: "geologist", flagTile: w.economy.flags[keep.flag]!.tile, player });
   return n;
 }

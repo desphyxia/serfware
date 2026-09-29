@@ -1,4 +1,5 @@
-import { GOODS } from "../sim/econ/defs";
+import { GOODS, goodsFor } from "../sim/econ/defs";
+import { DEPOSIT_IDS } from "../sim/econ/landuse";
 import { FLAG_CAPACITY, type Economy } from "../sim/econ/economy";
 import { GOOD_COLORS } from "../render/econView";
 import { h, Panel } from "./dom";
@@ -38,7 +39,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -73,7 +74,14 @@ export class InfoPanel extends Panel {
         body.push(h("div", { class: "bar" }, h("i", { style: `width:${Math.round((b.consumed / Math.max(1, b.costTotal)) * 100)}%` })));
       } else {
         const w = b.worker >= 0 ? eco.settlers[b.worker] : null;
-        body.push(h("p", { class: "status" }, w ? `Worker ${STATE_TEXT[w.state] ?? w.state}.` : "Waiting for a worker. Is it connected to the Hearthship?"));
+        const waiting = eco.waitingFor(b);
+        body.push(h("p", { class: waiting ? "status warn" : "status" }, waiting ?? (w ? `Worker ${STATE_TEXT[w.state] ?? w.state}.` : "Waiting for a worker. Is it connected to the Hearthship?")));
+        if (b.def.job === "mine") {
+          const land = eco.land;
+          let left = 0;
+          for (const t of [b.tile, ...land.ring(b.tile, b.def.radius ?? 2)]) if (land.deposit[t] && DEPOSIT_IDS[land.deposit[t] as number] === b.def.resource) left += land.depositAmount[t] as number;
+          body.push(h("p", { class: "hint" }, `About ${left} loads left in reach. Food for ${b.food} more.`));
+        }
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));
         if (b.output > 0) body.push(h("p", { class: "hint" }, `${b.output} finished, waiting to go out.`));
       }
@@ -90,6 +98,7 @@ export class InfoPanel extends Panel {
       }
       if (counts.size) body.push(h("div", { class: "chips" }, ...[...counts].map(([t, n]) => goodChip(t, n))));
       if (f.goods.length >= 6) body.push(h("p", { class: "hint warn" }, "This flag is crowded. Add a parallel road or split long roads with flags."));
+      body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", onclick: () => this.actions.geologist(f.tile) }, "Send geologist")));
       if (!eco.keeps.includes(f.building)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(f.tile) }, "Remove flag")));
     } else {
       const r = eco.roads[this.sel.id];
@@ -110,8 +119,12 @@ export class StockBar {
   update(eco: Economy, player = 0): void {
     const totals = eco.storageTotals(player);
     const pop = eco.population(player);
+    const idx = (id: string) => GOODS.findIndex((g) => g.id === id);
+    const food = goodsFor("food").reduce((s, g) => s + (totals[g] ?? 0), 0);
     this.root.replaceChildren(
-      ...totals.map((n, i) => goodChip(i, n)),
+      ...["log", "stone", "plank"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
+      h("span", { class: "chip-good" }, h("i", { style: "background:#d98f4e" }), `Food ${food}`),
+      ...["coal", "iron", "gold"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
       h("span", { class: "chip-good pop", title: "Settlers resting / at work" }, `Settlers ${pop.idle} / ${pop.working}`),
     );
   }

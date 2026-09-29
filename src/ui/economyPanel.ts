@@ -1,0 +1,138 @@
+import { BUILDINGS, GOODS, TOOLS } from "../sim/econ/defs";
+import type { Command, Economy } from "../sim/econ/economy";
+import { GOOD_COLORS } from "../render/econView";
+import { h, Panel } from "./dom";
+
+const GROUPS: { title: string; ids: string[] }[] = [
+  { title: "Materials", ids: ["log", "stone", "plank"] },
+  { title: "Food", ids: ["grain", "flour", "bread", "fish", "livestock", "meat"] },
+  { title: "Mining and metal", ids: ["coal", "ironore", "iron", "goldore", "gold"] },
+];
+
+const KEY_TITLES: Record<string, string> = {
+  food: "Food to the mines",
+  coal: "Coal",
+  grain: "Grain",
+  plank: "Planks",
+  iron: "Iron",
+};
+
+function targetName(id: string): string {
+  if (id === "site") return "Construction sites";
+  return BUILDINGS.find((b) => b.id === id)?.name ?? id;
+}
+
+/**
+ * Economy overview (P): stock of every good, distribution weights for scarce goods, and tool
+ * priorities for the toolsmith. Changes are sent as commands, so they stay in sync in multiplayer.
+ */
+export class EconomyPanel extends Panel {
+  private readonly pages: Record<string, HTMLElement> = {};
+  private active = "Stock";
+
+  constructor(
+    private readonly eco: () => Economy,
+    private readonly player: () => number,
+    private readonly command: (cmd: Command) => void,
+  ) {
+    super("economy", "Economy", { width: 380, className: "economy" });
+    const tabs = h("div", { class: "tabs", role: "tablist" });
+    for (const name of ["Stock", "Distribution", "Tools"]) {
+      const page = h("div", { class: "form" });
+      this.pages[name] = page;
+      tabs.append(
+        h(
+          "button",
+          {
+            class: "tab",
+            role: "tab",
+            onclick: () => {
+              this.active = name;
+              this.render(true);
+            },
+          },
+          name,
+        ),
+      );
+    }
+    this.body.append(tabs, ...Object.values(this.pages));
+  }
+
+  protected override onShow(): void {
+    this.render(true);
+  }
+
+  refresh(): void {
+    if (this.visible) this.render(false);
+  }
+
+  private render(full: boolean): void {
+    const tabs = this.body.querySelectorAll(".tab");
+    tabs.forEach((t) => t.classList.toggle("on", t.textContent === this.active));
+    for (const [name, page] of Object.entries(this.pages)) page.hidden = name !== this.active;
+    const eco = this.eco();
+    const pl = this.player();
+    const totals = eco.storageTotals(pl);
+    if (this.active === "Stock") {
+      const idx = (id: string) => GOODS.findIndex((g) => g.id === id);
+      const pop = eco.population(pl);
+      (this.pages.Stock as HTMLElement).replaceChildren(
+        ...GROUPS.flatMap((g) => [
+          h("h3", { class: "sub" }, g.title),
+          h(
+            "div",
+            { class: "stock-grid" },
+            ...g.ids.map((id) =>
+              h("div", { class: "stock-cell" }, h("i", { style: `background:${GOOD_COLORS[id] ?? "#ccc"}` }), h("span", {}, GOODS[idx(id)]?.name ?? id), h("b", {}, String(totals[idx(id)] ?? 0))),
+            ),
+          ),
+        ]),
+        h("h3", { class: "sub" }, "Tools"),
+        h(
+          "div",
+          { class: "stock-grid" },
+          ...TOOLS.map((t) => h("div", { class: "stock-cell" }, h("i", { style: "background:#9aa1b3" }), h("span", {}, GOODS[t]?.name ?? "?"), h("b", {}, String(totals[t] ?? 0)))),
+        ),
+        h("p", { class: "hint" }, `${pop.idle} settlers resting, ${pop.working} at work.`),
+      );
+      return;
+    }
+    const prefs = eco.prefs[pl];
+    if (!prefs) return;
+    if (!full) {
+      // Only update numbers of sliders not being dragged.
+      for (const input of this.body.querySelectorAll<HTMLInputElement>("input[type=range]")) {
+        if (document.activeElement === input) continue;
+        const [kind, key, target] = (input.dataset.k ?? "").split("|");
+        const v = kind === "d" ? prefs.dist[key ?? ""]?.[target ?? ""] : prefs.tools[key ?? ""];
+        if (v !== undefined) input.value = String(v);
+      }
+      if (this.active === "Tools") for (const out of this.body.querySelectorAll<HTMLElement>("[data-tool-count]")) out.textContent = String(totals[Number(out.dataset.toolCount)] ?? 0);
+      return;
+    }
+    const slider = (label: string, k: string, value: number, onChange: (v: number) => void, extra?: HTMLElement) => {
+      const id = `eco-${k.replace(/\W/g, "-")}`;
+      const input = h("input", { type: "range", id, min: 0, max: 1, step: 0.05, "data-k": k }) as HTMLInputElement;
+      input.value = String(value);
+      input.addEventListener("change", () => onChange(Number(input.value)));
+      return h("div", { class: "row" }, h("label", { for: id }, label), input, extra ?? h("span"));
+    };
+    if (this.active === "Distribution") {
+      (this.pages.Distribution as HTMLElement).replaceChildren(
+        h("p", { class: "hint" }, "When a good is scarce, buildings with a higher weight get it first. Zero means none."),
+        ...Object.entries(prefs.dist).flatMap(([key, table]) => [
+          h("h3", { class: "sub" }, KEY_TITLES[key] ?? key),
+          ...Object.entries(table).map(([target, v]) => slider(targetName(target), `d|${key}|${target}`, v, (value) => this.command({ t: "prio", key, target, value }))),
+        ]),
+      );
+    } else {
+      (this.pages.Tools as HTMLElement).replaceChildren(
+        h("p", { class: "hint" }, "The toolsmith makes whichever tool has the highest priority for how many you already have. A tool decides who can take up a trade."),
+        ...TOOLS.map((t) => {
+          const id = GOODS[t]?.id ?? "";
+          return slider(GOODS[t]?.name ?? id, `t|${id}`, prefs.tools[id] ?? 0, (value) => this.command({ t: "toolprio", tool: id, value }), h("output", { "data-tool-count": String(t) }, String(totals[t] ?? 0)));
+        }),
+      );
+    }
+  }
+}
