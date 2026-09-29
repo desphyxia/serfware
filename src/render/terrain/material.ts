@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import {
+  abs,
   attribute,
   cameraViewMatrix,
   clamp,
@@ -16,6 +17,7 @@ import {
   positionWorld,
   sin,
   smoothstep,
+  step,
   uniform,
   varying,
   vec3,
@@ -23,6 +25,7 @@ import {
   vertexColor,
 } from "three/tsl";
 import { PainterlyMaterial } from "../painterly";
+import { ROAD_HALF } from "./field";
 import type { TileData } from "./tileData";
 
 /**
@@ -67,7 +70,12 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   // Rock on steep slopes, with warm strata along the height.
   const strata = sin(height.mul(5.5).add(mid.mul(2.5))).mul(0.5).add(0.5);
   const rock = mix(vec3(0.52, 0.49, 0.45), vec3(0.64, 0.58, 0.5), strata).mul(float(0.85).add(fine.mul(0.15)));
-  const rockMix = smoothstep(0.2, 0.48, slope.add(fine.mul(0.04)));
+  // Distances to the nearest road centreline and to the river's water edge (world units).
+  const roadD = attribute("aRoad", "float");
+  const riverD = attribute("aRiver", "float");
+  // Riverbanks are grassy and damp, not bare rock.
+  const bank = smoothstep(1.8, 0.0, riverD);
+  const rockMix = smoothstep(0.2, 0.48, slope.add(fine.mul(0.04))).mul(float(1).sub(bank.mul(0.9)));
   c = mix(c, rock, rockMix);
 
   // Beaches: wet dark sand at the waterline, dry pale sand just above.
@@ -77,6 +85,28 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
 
   // Footpaths worn by settlers.
   c = mix(c, vec3(0.5, 0.4, 0.27), smoothstep(0.04, 1, wear).mul(0.7));
+  // Riverbanks: damp ground, and a dark wet band right at the waterline.
+  c = c.mul(float(1).sub(bank.mul(0.1)));
+  const wetEdge = smoothstep(0.6, 0.0, abs(riverD.sub(0.08)));
+  c = mix(c, c.mul(0.5).add(vec3(0.05, 0.04, 0.02)), wetEdge.mul(0.75));
+
+  // Roads, part of the ground: a packed-earth surface with a worn grass shoulder, cart ruts and
+  // edge stones on busy roads, and puddles in the ruts when the ground is muddy.
+  const W = ROAD_HALF;
+  const onRoad = smoothstep(W + 0.04, W - 0.03, roadD);
+  const shoulder = smoothstep(W + 0.22, W, roadD).mul(float(1).sub(onRoad));
+  c = c.mul(float(1).sub(shoulder.mul(0.14))).add(vec3(0.03, 0.02, 0).mul(shoulder));
+  const busy = smoothstep(0.15, 0.7, wear);
+  let road: THREE.Node<"vec3"> = mix(vec3(0.571, 0.407, 0.216), vec3(0.451, 0.305, 0.171), smoothstep(W * 0.3, W, roadD));
+  road = road.mul(float(0.9).add(fine.mul(0.08)).add(mid.mul(0.04)));
+  const wob = mx_noise_float(p.mul(0.9)).mul(0.03);
+  const ruts = smoothstep(0.05, 0.0, abs(roadD.sub(W * 0.45).add(wob))).mul(float(0.25).add(busy.mul(0.55)));
+  road = road.mul(float(1).sub(ruts.mul(0.3)));
+  const stones = smoothstep(W * 0.76, W * 0.94, roadD).mul(busy).mul(step(0.05, mx_noise_float(p.mul(7))));
+  road = mix(road, vec3(0.42, 0.4, 0.37).mul(float(0.85).add(fine.mul(0.15))), stones.mul(0.9));
+  const puddle = smoothstep(0.2, 0.6, mud).mul(smoothstep(0.1, 0.35, mx_noise_float(p.mul(1.6)))).mul(ruts.add(0.3).min(1));
+  road = mix(road, mix(road.mul(0.3), vec3(0.3, 0.37, 0.45), 0.4), puddle.mul(0.9));
+  c = mix(c, road, onRoad);
   // Build-mode hex grid.
   const w = fwidth(edge).mul(1.4);
   const line = float(1).sub(smoothstep(0, w.add(0.02), edge));
@@ -86,7 +116,10 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   c = mix(c, vec3(0.62, 0.48, 0.22).mul(luma.mul(1.9).add(0.1)), autumn.mul(green).mul(0.9));
   c = c.mul(float(1).sub(mud.mul(0.28)));
   // Snow drifts: patchy edges, deeper in hollows, sliding off steep ground.
-  const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08))).mul(float(1).sub(smoothstep(0.35, 0.6, slope)));
+  const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08)))
+    .mul(float(1).sub(smoothstep(0.35, 0.6, slope)))
+    // Roads are trodden clear.
+    .mul(float(1).sub(onRoad.mul(0.6)));
   c = mix(c, vec3(0.9, 0.93, 0.97), snowCover.mul(0.95));
   // Fog of war: remembered land a little faded, unexplored land dark and grey.
   const grey = dot(c, vec3(0.3, 0.59, 0.11));
@@ -107,7 +140,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const grad = vec3(bumpAt(p.add(vec3(eps, 0, 0))).sub(h0), bumpAt(p.add(vec3(0, eps, 0))).sub(h0), bumpAt(p.add(vec3(0, 0, eps))).sub(h0)).div(eps);
   const nW = normalize(normalWorld);
   const tangential = grad.sub(nW.mul(dot(grad, nW)));
-  const strength = mix(float(0.03), float(0.14), rockMix).mul(float(1).sub(snowCover.mul(0.8)));
+  const strength = mix(float(0.03), float(0.14), rockMix).mul(float(1).sub(snowCover.mul(0.8))).mul(float(1).sub(onRoad.mul(0.6)));
   const bumped = normalize(nW.sub(tangential.mul(strength)));
   mat.normalNode = normalize(cameraViewMatrix.mul(vec4(bumped, 0)).xyz);
   mat.vertexColors = false;

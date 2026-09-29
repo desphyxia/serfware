@@ -279,6 +279,10 @@ export class ChunkedTerrain {
     const col = new Float32Array(total * 3);
     const coarse = new Float32Array(total * 3);
     const tileAttr = new Float32Array(total);
+    // Distances (world units) to the nearest road centreline and to the river's water edge,
+    // interpolated per pixel by the ground material to draw roads and banks crisply.
+    const roadAttr = new Float32Array(total);
+    const riverAttr = new Float32Array(total);
     const edgeAttr = new Float32Array(total);
     const color = new THREE.Color();
     const e = field.spacing * 0.07;
@@ -311,6 +315,8 @@ export class ChunkedTerrain {
       col[i * 3 + 2] = color.b;
       tileAttr[i] = s.tile;
       edgeAttr[i] = edge[i] as number;
+      roadAttr[i] = Math.min(9, field.roadDistance(x, y, z, hint));
+      riverAttr[i] = Math.min(9, field.riverEdge(x, y, z, hint));
       if (!onBorder[i]) continue;
       // Normal from central differences on the field.
       p0.set(x, y, z);
@@ -375,6 +381,8 @@ export class ChunkedTerrain {
       col.copyWithin(i * 3, top * 3, top * 3 + 3);
       tileAttr[i] = tileAttr[top] as number;
       edgeAttr[i] = 0;
+      roadAttr[i] = roadAttr[top] as number;
+      riverAttr[i] = riverAttr[top] as number;
     }
     for (let j = 0; j < skirtTop.length; j += 2) {
       const a0 = skirtTop[j] as number;
@@ -390,6 +398,8 @@ export class ChunkedTerrain {
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     g.setAttribute("aTile", new THREE.BufferAttribute(tileAttr, 1));
     g.setAttribute("aEdge", new THREE.BufferAttribute(edgeAttr, 1));
+    g.setAttribute("aRoad", new THREE.BufferAttribute(roadAttr, 1));
+    g.setAttribute("aRiver", new THREE.BufferAttribute(riverAttr, 1));
     g.setIndex(total > 65535 ? new THREE.BufferAttribute(new Uint32Array(tris), 1) : new THREE.BufferAttribute(new Uint16Array(tris), 1));
     g.computeBoundingSphere();
     if (c.mesh) {

@@ -4,6 +4,7 @@ import { Biome } from "../sim/planet/terrain";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { PainterlyMaterial } from "./painterly";
+import { ROAD_HALF } from "./terrain/field";
 
 const MAX = 6000;
 const RING = 18;
@@ -184,11 +185,18 @@ export class Undergrowth {
         p.copy(d).multiplyScalar(this.frames.groundAt(d, t) - 0.02);
         this.frames.orient(p, null, q);
         q.multiply(turn.setFromAxisAngle(Y, SurfaceFrames.hash(t, salt + 2) * 6.28));
+        // Keep the road surface and open water clear (-1 = skip); reeds stand at the waterline.
+        const field = this.frames.field;
+        if (field.roadDistance(d.x, d.y, d.z, t) < ROAD_HALF + 0.25) return -1;
+        const edge = field.riverEdge(d.x, d.y, d.z, t);
+        if (salt >= 3000 ? edge < -0.35 : edge < 0.2) return -1;
+        if (p.length() < field.R + 0.05) return -1;
         return SurfaceFrames.hash(t, salt + 3);
       };
       const count = (x: number, salt: number) => Math.floor(x * density + SurfaceFrames.hash(t, salt));
       for (let i = 0, n = count(bushes, 901); i < n && nb < MAX; i++) {
         const h = place(1000 + i * 7, 1.6);
+        if (h < 0) continue;
         const sc = 0.7 + h * 0.9;
         m.compose(p, q, s.set(sc, sc * (0.8 + h * 0.4), sc));
         this.bushes.setMatrixAt(nb, m);
@@ -197,6 +205,7 @@ export class Undergrowth {
       }
       for (let i = 0, n = count(boulders, 902); i < n && nd < MAX / 2; i++) {
         const h = place(2000 + i * 7, 1.7);
+        if (h < 0) continue;
         const sc = 0.6 + h * h * 2.2;
         m.compose(p, q, s.set(sc, sc * (0.7 + h * 0.5), sc * (0.8 + h * 0.3)));
         this.boulders.setMatrixAt(nd, m);
@@ -205,6 +214,7 @@ export class Undergrowth {
       }
       for (let i = 0, n = count(reeds, 903); i < n && nr < MAX; i++) {
         const h = place(3000 + i * 7, 1.75);
+        if (h < 0) continue;
         const sc = 0.8 + h * 0.8;
         m.compose(p, q, s.set(sc, sc, sc));
         this.reeds.setMatrixAt(nr, m);

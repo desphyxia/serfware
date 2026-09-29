@@ -4,6 +4,7 @@ import { Biome } from "../sim/planet/terrain";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { PainterlyMaterial } from "./painterly";
+import { ROAD_HALF } from "./terrain/field";
 
 const MAX = 24000;
 
@@ -164,6 +165,11 @@ export class GrassPatch {
         const r = Math.sqrt(h1) * 1.7;
         const a = h2 * Math.PI * 2;
         ground(p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r), t);
+        // No grass on the road surface itself.
+        const fx = p.x / p.length();
+        const fy = p.y / p.length();
+        const fz = p.z / p.length();
+        if (this.frames.field.roadDistance(fx, fy, fz, t) < ROAD_HALF + 0.06 || this.frames.field.riverEdge(fx, fy, fz, t) < 0.05) continue;
         this.frames.orient(p, null, q);
         q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h3 * 6.28));
         const sc = 0.6 + h3 * 0.7;
