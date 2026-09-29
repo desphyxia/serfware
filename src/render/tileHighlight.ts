@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import type { Planet } from "../sim/planet/planet";
 
 /** Glowing outline of the hovered tile. */

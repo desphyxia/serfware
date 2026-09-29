@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import { Biome } from "../sim/planet/terrain";
 
 /** Ground colours per placeholder biome: [base, variation]. Tuned for warm, painterly light. */

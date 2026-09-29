@@ -1,8 +1,10 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import type { Economy } from "../sim/econ/economy";
 import { Feature, type LandUse } from "../sim/econ/landuse";
 import { Biome } from "../sim/planet/terrain";
 import { SurfaceFrames } from "./frames";
+import { PainterlyMaterial } from "./painterly";
+import { SpriteBatch } from "./sprites";
 
 /**
  * Ambient wildlife around the camera: bird flocks, grazing deer, butterflies by day and
@@ -79,64 +81,35 @@ function deerGeometry(): THREE.BufferGeometry {
   return merged;
 }
 
-const SPRITE_VERT = /* glsl */ `
-  attribute float aSize; attribute vec3 aColor; attribute float aAlpha;
-  uniform float uPixel; varying vec3 vColor; varying float vAlpha;
-  void main() {
-    vColor = aColor; vAlpha = aAlpha;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = aSize * uPixel * (60.0 / -mv.z);
-    gl_Position = projectionMatrix * mv;
-  }`;
-const SPRITE_FRAG = /* glsl */ `
-  varying vec3 vColor; varying float vAlpha;
-  void main() {
-    float d = length(gl_PointCoord - 0.5);
-    float a = smoothstep(0.5, 0.0, d) * vAlpha;
-    gl_FragColor = vec4(vColor * a, a);
-  }`;
-
+/** Small glowing or coloured motes (butterflies, fireflies) drawn as camera-facing sprites. */
 class SpriteCloud {
-  readonly points: THREE.Points;
+  private readonly batch: SpriteBatch;
+  readonly points: THREE.Mesh;
   readonly pos: Float32Array;
   readonly color: Float32Array;
-  readonly size: Float32Array;
   readonly alpha: Float32Array;
-  readonly mat: THREE.ShaderMaterial;
+  /** Sizes in the old point units; converted to world units on flush. */
+  readonly size: Float32Array;
 
   constructor(
     readonly count: number,
     additive: boolean,
   ) {
-    this.pos = new Float32Array(count * 3);
-    this.color = new Float32Array(count * 3);
+    this.batch = new SpriteBatch(count, { additive, glow: additive ? 2 : 0 });
+    this.points = this.batch.mesh;
+    this.pos = this.batch.pos;
+    this.color = this.batch.color;
+    this.alpha = this.batch.alpha;
     this.size = new Float32Array(count);
-    this.alpha = new Float32Array(count);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aColor", new THREE.BufferAttribute(this.color, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aSize", new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aAlpha", new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
-    this.mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-      uniforms: { uPixel: { value: 1 } },
-      vertexShader: SPRITE_VERT,
-      fragmentShader: SPRITE_FRAG,
-    });
-    this.points = new THREE.Points(g, this.mat);
-    this.points.frustumCulled = false;
   }
 
   flush(): void {
-    const g = this.points.geometry;
-    for (const k of ["position", "aColor", "aSize", "aAlpha"]) (g.getAttribute(k) as THREE.BufferAttribute).needsUpdate = true;
+    for (let i = 0; i < this.count; i++) this.batch.size[i] = (this.size[i] as number) * 0.05;
+    this.batch.flush(this.count);
   }
 
   dispose(): void {
-    this.points.geometry.dispose();
-    this.mat.dispose();
+    this.batch.dispose();
   }
 }
 
@@ -159,11 +132,11 @@ export class Fauna {
     private readonly eco: Economy,
     private readonly frames: SurfaceFrames,
   ) {
-    const birdMat = new THREE.MeshStandardMaterial({ color: "#3b3a44", side: THREE.DoubleSide, roughness: 1 });
+    const birdMat = new PainterlyMaterial({ color: "#3b3a44", side: THREE.DoubleSide, brush: 0 });
     this.birds = new THREE.InstancedMesh(birdGeometry(), birdMat, 60);
     this.birds.frustumCulled = false;
     this.birds.count = 0;
-    this.deerMesh = new THREE.InstancedMesh(deerGeometry(), new THREE.MeshStandardMaterial({ color: "#9a6a44", roughness: 0.9, flatShading: true }), 12);
+    this.deerMesh = new THREE.InstancedMesh(deerGeometry(), new PainterlyMaterial({ color: "#9a6a44", flatShading: true, brush: 0.5 }), 12);
     this.deerMesh.frustumCulled = false;
     this.deerMesh.castShadow = true;
     this.deerMesh.count = 0;
@@ -265,7 +238,7 @@ export class Fauna {
     }
     this.birds.count = n;
     this.birds.instanceMatrix.needsUpdate = true;
-    (this.birds.material as THREE.MeshStandardMaterial).color.set(this.flocks[2]?.sea ? "#e8e6e0" : "#3b3a44");
+    (this.birds.material as PainterlyMaterial).color.set(this.flocks[2]?.sea ? "#e8e6e0" : "#3b3a44");
   }
 
   private updateDeer(time: number, dt: number, amount: number): void {
@@ -310,7 +283,6 @@ export class Fauna {
 
   private updateSprites(time: number, daylight: number, pixelRatio: number, amount: number): void {
     const bf = this.butterflies;
-    bf.mat.uniforms.uPixel!.value = pixelRatio;
     this.bfState.forEach((b, i) => {
       const t = time * 0.6 + b.phase;
       const up = b.home.clone().normalize();
@@ -329,7 +301,6 @@ export class Fauna {
     });
     bf.flush();
     const ff = this.fireflies;
-    ff.mat.uniforms.uPixel!.value = pixelRatio;
     const night = Math.max(0, 1 - daylight * 1.6);
     this.ffState.forEach((f, i) => {
       const t = time * 0.3 + f.phase;

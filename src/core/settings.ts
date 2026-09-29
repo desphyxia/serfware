@@ -18,6 +18,12 @@ export interface GraphicsSettings {
   maxFps: 0 | 30 | 60 | 120;
   terrainDetail: "low" | "medium" | "high";
   atmosphere: "simple" | "scattering";
+  /** Screen-space ambient occlusion (GTAO). */
+  ao: boolean;
+  /** Tilt-shift depth of field in close-up views. */
+  dof: boolean;
+  /** Graphics API: WebGPU where available, or force WebGL2. Applies after a reload. */
+  backend: "auto" | "webgl";
 }
 
 export interface AudioSettings {
@@ -54,6 +60,9 @@ export const PRESETS: Record<PresetName, GraphicsSettings> = {
     maxFps: 30,
     terrainDetail: "low",
     atmosphere: "simple",
+    ao: false,
+    dof: false,
+    backend: "auto",
   },
   medium: {
     resolutionScale: 1,
@@ -66,6 +75,9 @@ export const PRESETS: Record<PresetName, GraphicsSettings> = {
     maxFps: 60,
     terrainDetail: "medium",
     atmosphere: "scattering",
+    ao: true,
+    dof: false,
+    backend: "auto",
   },
   high: {
     resolutionScale: 1,
@@ -78,6 +90,9 @@ export const PRESETS: Record<PresetName, GraphicsSettings> = {
     maxFps: 0,
     terrainDetail: "high",
     atmosphere: "scattering",
+    ao: true,
+    dof: true,
+    backend: "auto",
   },
 };
 

@@ -1,4 +1,5 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { SpriteBatch } from "./sprites";
 
 export interface Emitter {
   pos: THREE.Vector3;
@@ -14,7 +15,10 @@ const MAX = 700;
  * local up direction and drift with the wind; they grow and fade as they age.
  */
 export class Particles {
-  readonly points: THREE.Points;
+  /** The drawable (kept as `points` for callers). */
+  readonly points: THREE.Mesh;
+  private readonly smoke = new SpriteBatch(MAX, { renderOrder: 7 });
+  private readonly sparks = new SpriteBatch(160, { additive: true, renderOrder: 8, glow: 1.5 });
   private readonly pos = new Float32Array(MAX * 3);
   private readonly vel = new Float32Array(MAX * 3);
   private readonly age = new Float32Array(MAX).fill(99);
@@ -25,41 +29,12 @@ export class Particles {
   private readonly kind = new Uint8Array(MAX);
   private next = 0;
   private readonly acc = new Map<Emitter, number>();
-  private readonly mat: THREE.ShaderMaterial;
   private seed = 7;
 
   constructor() {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aSize", new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aAlpha", new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aShade", new THREE.BufferAttribute(this.shade, 1).setUsage(THREE.DynamicDrawUsage));
-    this.mat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms: { uPixel: { value: 1 }, uLight: { value: new THREE.Color(1, 1, 1) } },
-      vertexShader: /* glsl */ `
-        attribute float aSize; attribute float aAlpha; attribute float aShade;
-        uniform float uPixel; varying float vAlpha; varying float vShade;
-        void main() {
-          vAlpha = aAlpha; vShade = aShade;
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * uPixel * (120.0 / -mv.z);
-          gl_Position = projectionMatrix * mv;
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform vec3 uLight; varying float vAlpha; varying float vShade;
-        void main() {
-          vec2 c = gl_PointCoord - 0.5;
-          float d = length(c);
-          float a = smoothstep(0.5, 0.1, d) * vAlpha;
-          vec3 col = vec3(vShade) * uLight;
-          gl_FragColor = vec4(col, a);
-        }`,
-    });
-    this.points = new THREE.Points(g, this.mat);
-    this.points.frustumCulled = false;
-    this.points.renderOrder = 7;
+    const g = new THREE.Group();
+    g.add(this.smoke.mesh, this.sparks.mesh);
+    this.points = g as unknown as THREE.Mesh;
   }
 
   private rand(): number {
@@ -67,9 +42,7 @@ export class Particles {
     return this.seed / 4294967296;
   }
 
-  update(dt: number, emitters: readonly Emitter[], wind: THREE.Vector3, light: THREE.Color, pixelRatio: number, amount: number): void {
-    this.mat.uniforms.uPixel!.value = pixelRatio;
-    (this.mat.uniforms.uLight!.value as THREE.Color).copy(light);
+  update(dt: number, emitters: readonly Emitter[], wind: THREE.Vector3, light: THREE.Color, _pixelRatio: number, amount: number): void {
     for (const e of emitters) {
       let a = (this.acc.get(e) ?? this.rand()) + dt * e.rate * amount;
       while (a >= 1) {
@@ -80,11 +53,12 @@ export class Particles {
     }
     if (this.acc.size > emitters.length * 2) this.acc.clear();
     const up = new THREE.Vector3();
+    let n = 0;
+    let ns = 0;
+    const sm = this.smoke;
+    const sp = this.sparks;
     for (let i = 0; i < MAX; i++) {
-      if (this.age[i]! >= this.life[i]!) {
-        this.alpha[i] = 0;
-        continue;
-      }
+      if (this.age[i]! >= this.life[i]!) continue;
       this.age[i]! += dt;
       const t = this.age[i]! / this.life[i]!;
       up.set(this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!).normalize();
@@ -97,9 +71,25 @@ export class Particles {
       const base = k === 0 ? 0.5 : k === 1 ? 0.35 : k === 3 ? 1 : 0.45;
       this.size[i] = k === 3 ? 0.35 * (1 - t) : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
       this.alpha[i] = base * Math.sin(Math.min(1, t) * Math.PI) * (1 - t * 0.4);
+      if (k === 3) {
+        if (ns >= sp.capacity) continue;
+        sp.pos.set([this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!], ns * 3);
+        sp.color.set([1.6, 1.0, 0.45], ns * 3);
+        sp.size[ns] = this.size[i]! * 0.5;
+        sp.alpha[ns] = this.alpha[i]!;
+        ns++;
+      } else {
+        sm.pos.set([this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!], n * 3);
+        const s = this.shade[i]!;
+        sm.color.set([s * light.r, s * light.g, s * light.b], n * 3);
+        // Old point sizes were in pixels at a reference distance; about a tenth of a unit each.
+        sm.size[n] = this.size[i]! * 0.55;
+        sm.alpha[n] = this.alpha[i]!;
+        n++;
+      }
     }
-    const g = this.points.geometry;
-    for (const key of ["position", "aSize", "aAlpha", "aShade"]) (g.getAttribute(key) as THREE.BufferAttribute).needsUpdate = true;
+    sm.flush(n);
+    sp.flush(ns);
   }
 
   private spawn(e: Emitter): void {
@@ -120,25 +110,8 @@ export class Particles {
   }
 
   dispose(): void {
-    this.points.geometry.dispose();
-    this.mat.dispose();
+    this.smoke.dispose();
+    this.sparks.dispose();
   }
 }
 
-/** Night glow for windows: vertex colours matching the window tone become emissive. */
-export function patchWindows(mat: THREE.MeshStandardMaterial, night: { value: number }): void {
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uNight = night;
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uNight;")
-      .replace(
-        "#include <emissivemap_fragment>",
-        `#include <emissivemap_fragment>
-        #ifdef USE_COLOR
-          float win = step(0.95, vColor.r) * step(0.55, vColor.g) * step(vColor.g, 0.8) * step(0.15, vColor.b) * step(vColor.b, 0.4);
-          totalEmissiveRadiance += vec3(1.0, 0.68, 0.32) * win * (0.15 + uNight * 2.2);
-        #endif`,
-      );
-  };
-  mat.customProgramCacheKey = () => "windows";
-}

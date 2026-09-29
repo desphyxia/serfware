@@ -35,7 +35,16 @@ const all = [
   { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
-const only = process.env.SHOTS?.split(",");
+// The art shot list (docs/ART_DIRECTION.md § How we check it): rendered after every art batch.
+const ART = ["hamlet-noon", "hamlet-dusk", "hamlet-night", "closeup-art", "region-art", "river", "battle", "orbit"];
+all.push(
+  { name: "hamlet-noon", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 34); g.setHour(12); g.setView(34, 0.5); } },
+  { name: "hamlet-dusk", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 30); g.setHour(19.4); g.setView(30, 2.4); } },
+  { name: "hamlet-night", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 30); g.setHour(23.5); g.setView(30, 1.2); } },
+  { name: "closeup-art", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 9); g.setHour(10); g.setView(9, 2.2); } },
+  { name: "region-art", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 70); g.setHour(15); g.setView(70, 0.3); } },
+);
+const only = process.env.SHOTS === "art" ? ART : process.env.SHOTS?.split(",");
 const shots = only ? all.filter((s) => only.includes(s.name)) : all;
 
 const browser = await launch();
@@ -47,13 +56,20 @@ try {
       await page.evaluate(() => {
         const g = window.__seedfall.game;
         g.speed = 0;
-        g.renderFrames(90);
+        g.hold = true;
+        g.renderFrames(60);
       });
     }
     for (const k of shot.keys ?? []) await page.keyboard.press(k);
     if (shot.after) await page.evaluate(shot.after);
-    await page.waitForTimeout(shot.wait);
-    await page.screenshot({ path: `${outDir}/${shot.name}.png` });
+    await page.waitForTimeout(shot.setup ? 300 : shot.wait);
+    // The software GPU is slow: freeze the loop, draw the last frames on demand, then capture.
+    await page.evaluate(() => {
+      const g = window.__seedfall.game;
+      g.hold = true;
+      g.renderFrames(3);
+    });
+    await page.screenshot({ path: `${outDir}/${shot.name}.png`, timeout: 180000 });
     console.log(`${outDir}/${shot.name}.png${errors.length ? ` (errors: ${errors.join("; ")})` : ""}`);
     await page.close();
   }

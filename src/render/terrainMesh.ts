@@ -1,4 +1,6 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { attribute, clamp, dot, float, fwidth, materialColor, max, mix, smoothstep, uniform, vec3, vec4, vertexColor } from "three/tsl";
+import { PainterlyMaterial } from "./painterly";
 import type { Planet } from "../sim/planet/planet";
 import { Biome } from "../sim/planet/terrain";
 import { Noise3 } from "./noise";
@@ -161,36 +163,36 @@ function makeGeometry(verts: Vert[], tris: number[], radius: (v: Vert) => number
   return g;
 }
 
-/** Terrain material: standard lighting plus an optional hex-grid overlay and soft rim darkening in hollows. */
-export function makeTerrainMaterial(): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
-  const uniforms = { uGrid: { value: 0 } };
-  mat.userData.uniforms = uniforms;
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uGrid = uniforms.uGrid;
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute float aEdge;\nattribute float aWear;\nattribute float aFog;\nattribute vec3 aClimate;\nvarying float vEdge;\nvarying float vWear;\nvarying float vFog;\nvarying vec3 vClimate;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvEdge = aEdge;\nvWear = aWear;\nvFog = aFog;\nvClimate = aClimate;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uGrid;\nvarying float vEdge;\nvarying float vWear;\nvarying float vFog;\nvarying vec3 vClimate;")
-      .replace(
-        "#include <color_fragment>",
-        `#include <color_fragment>
-        float w = fwidth(vEdge) * 1.4;
-        float line = 1.0 - smoothstep(0.0, w + 0.02, vEdge);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.33, 0.2), smoothstep(0.04, 1.0, vWear) * 0.7);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + vec3(0.06, 0.05, 0.02), line * uGrid * 0.85);
-        // Seasons: grass goes gold in autumn; mud darkens; snow lies white.
-        float green = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 4.0, 0.0, 1.0);
-        float luma = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.48, 0.22) * (luma * 1.9 + 0.1), vClimate.y * green * 0.9);
-        diffuseColor.rgb *= 1.0 - 0.28 * vClimate.z;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.93, 0.97), smoothstep(0.08, 0.55, vClimate.x) * 0.95);
-        // Fog of war: remembered land is a little faded, unexplored land dark and grey.
-        float grey = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-        diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(grey), diffuseColor.rgb, 0.7) * 0.86, smoothstep(0.1, 0.5, vFog));
-        diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(grey), diffuseColor.rgb, 0.3) * 0.1 + vec3(0.008, 0.011, 0.02), smoothstep(0.55, 1.0, vFog));`,
-      );
-  };
+/**
+ * Terrain material: painterly lighting, wear from footpaths, an optional hex-grid overlay for
+ * build mode, seasons (autumn grass, mud, snow) and fog of war.
+ */
+export function makeTerrainMaterial(): PainterlyMaterial {
+  const mat = new PainterlyMaterial({ vertexColors: true, brush: 1.3 });
+  const uGrid = uniform(0);
+  mat.userData.uniforms = { uGrid };
+  const edge = attribute("aEdge", "float");
+  const wear = attribute("aWear", "float");
+  const fog = attribute("aFog", "float");
+  const climate = attribute("aClimate", "vec3");
+  const base = (mat.colorNode ?? materialColor) as THREE.Node<"vec4">;
+  const c0 = vec3(base.mul(vertexColor()).xyz);
+  const w = fwidth(edge).mul(1.4);
+  const line = float(1).sub(smoothstep(0, w.add(0.02), edge));
+  let c = mix(c0, vec3(0.42, 0.33, 0.2), smoothstep(0.04, 1, wear).mul(0.7));
+  c = mix(c, c.mul(0.55).add(vec3(0.06, 0.05, 0.02)), line.mul(uGrid).mul(0.85));
+  // Seasons: grass goes gold in autumn; mud darkens; snow lies white.
+  const green = clamp(c.g.sub(max(c.r, c.b)).mul(4), 0, 1);
+  const luma = dot(c, vec3(0.3, 0.59, 0.11));
+  c = mix(c, vec3(0.62, 0.48, 0.22).mul(luma.mul(1.9).add(0.1)), climate.y.mul(green).mul(0.9));
+  c = c.mul(float(1).sub(climate.z.mul(0.28)));
+  c = mix(c, vec3(0.9, 0.93, 0.97), smoothstep(0.08, 0.55, climate.x).mul(0.95));
+  // Fog of war: remembered land is a little faded, unexplored land dark and grey.
+  const grey = dot(c, vec3(0.3, 0.59, 0.11));
+  c = mix(c, mix(vec3(grey), c, 0.7).mul(0.86), smoothstep(0.1, 0.5, fog));
+  c = mix(c, mix(vec3(grey), c, 0.3).mul(0.1).add(vec3(0.008, 0.011, 0.02)), smoothstep(0.55, 1, fog));
+  // Vertex colours are already applied above.
+  mat.vertexColors = false;
+  mat.colorNode = vec4(c, 1);
   return mat;
 }

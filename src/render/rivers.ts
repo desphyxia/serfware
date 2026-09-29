@@ -1,4 +1,6 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { abs, attribute, dot, float, min, mix, positionWorld, pow, sin, smoothstep, time, uniform, vec3 } from "three/tsl";
+import { rgb } from "./painterly";
 import type { LandUse } from "../sim/econ/landuse";
 import type { SurfaceFrames } from "./frames";
 
@@ -8,64 +10,39 @@ import type { SurfaceFrames } from "./frames";
  */
 export class RiverView {
   readonly group = new THREE.Group();
-  private readonly riverMat: THREE.ShaderMaterial;
-  private readonly lakeMat: THREE.ShaderMaterial;
+  private readonly riverMat: THREE.MeshBasicNodeMaterial;
+  private readonly lakeMat: THREE.MeshBasicNodeMaterial;
+  private readonly u = { day: uniform(1), sky: uniform(new THREE.Color("#8fb6d8")) };
 
   constructor(land: LandUse, frames: SurfaceFrames) {
-    const uniforms = { uTime: { value: 0 }, uDay: { value: 1 }, uSky: { value: new THREE.Color("#8fb6d8") } };
-    this.riverMat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -8,
-      vertexShader: /* glsl */ `
-        attribute float aAlong; attribute float aAcross; attribute float aWidth; attribute float aFog;
-        varying float vAlong; varying float vAcross; varying float vWidth; varying float vFog; varying vec3 vW;
-        void main() {
-          vAlong = aAlong; vAcross = aAcross; vWidth = aWidth; vFog = aFog;
-          vec4 w = modelMatrix * vec4(position, 1.0);
-          vW = w.xyz;
-          gl_Position = projectionMatrix * viewMatrix * w;
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform float uTime; uniform float uDay; uniform vec3 uSky;
-        varying float vAlong; varying float vAcross; varying float vWidth; varying float vFog; varying vec3 vW;
-        void main() {
-          float edge = 1.0 - abs(vAcross);
-          float ripple = sin(vAlong * 7.0 - uTime * 2.4 + vAcross * 2.0) * 0.5 + 0.5;
-          float ripple2 = sin(vAlong * 13.0 - uTime * 3.7 - vAcross * 3.0) * 0.5 + 0.5;
-          vec3 deep = vec3(0.12, 0.34, 0.45);
-          vec3 shallow = vec3(0.35, 0.62, 0.62);
-          vec3 col = mix(shallow, deep, smoothstep(0.0, 0.8, edge) * min(1.0, vWidth));
-          col += vec3(0.9, 0.95, 1.0) * pow(ripple * ripple2, 6.0) * 0.35;
-          col = mix(col, uSky, 0.18) * mix(0.3, 1.0, uDay);
-          col = mix(col, col * 0.15, smoothstep(0.55, 1.0, vFog));
-          float a = smoothstep(0.0, 0.35, edge) * 0.9;
-          gl_FragColor = vec4(col, a);
-          #include <colorspace_fragment>
-        }`,
-    });
-    this.lakeMat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      uniforms,
-      vertexShader: /* glsl */ `
-        attribute float aFog; varying float vFog; varying vec3 vW;
-        void main() { vFog = aFog; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-      fragmentShader: /* glsl */ `
-        uniform float uTime; uniform float uDay; uniform vec3 uSky;
-        varying float vFog; varying vec3 vW;
-        void main() {
-          float r = sin(dot(vW, vec3(1.3, 0.7, 1.1)) * 2.2 + uTime * 0.9) * sin(dot(vW, vec3(-0.6, 1.2, 0.8)) * 3.1 - uTime * 0.7);
-          vec3 col = mix(vec3(0.16, 0.38, 0.46), uSky, 0.25) + vec3(r * 0.03);
-          col *= mix(0.3, 1.0, uDay);
-          col = mix(col, col * 0.15, smoothstep(0.55, 1.0, vFog));
-          gl_FragColor = vec4(col, 0.88);
-          #include <colorspace_fragment>
-        }`,
-    });
+    const u = this.u;
+    this.riverMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+    this.riverMat.polygonOffset = true;
+    this.riverMat.polygonOffsetFactor = -3;
+    this.riverMat.polygonOffsetUnits = -8;
+    const along = attribute("aAlong", "float");
+    const across = attribute("aAcross", "float");
+    const width = attribute("aWidth", "float");
+    const fogR = attribute("aFog", "float");
+    const edge = float(1).sub(abs(across));
+    const ripple = sin(along.mul(7).sub(time.mul(2.4)).add(across.mul(2))).mul(0.5).add(0.5);
+    const ripple2 = sin(along.mul(13).sub(time.mul(3.7)).sub(across.mul(3))).mul(0.5).add(0.5);
+    let rc = mix(vec3(0.35, 0.62, 0.62), vec3(0.12, 0.34, 0.45), smoothstep(0, 0.8, edge).mul(min(width, 1)));
+    rc = rc.add(vec3(0.9, 0.95, 1.0).mul(pow(ripple.mul(ripple2), 6)).mul(0.35));
+    rc = mix(rc, rgb(u.sky), 0.18).mul(mix(0.3, 1, u.day));
+    rc = mix(rc, rc.mul(0.15), smoothstep(0.55, 1, fogR));
+    this.riverMat.colorNode = rc;
+    this.riverMat.opacityNode = smoothstep(0, 0.35, edge).mul(0.9);
+
+    this.lakeMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+    const fogL = attribute("aFog", "float");
+    const w = positionWorld;
+    const r = sin(dot(w, vec3(1.3, 0.7, 1.1)).mul(2.2).add(time.mul(0.9))).mul(sin(dot(w, vec3(-0.6, 1.2, 0.8)).mul(3.1).sub(time.mul(0.7))));
+    let lc = mix(vec3(0.16, 0.38, 0.46), rgb(u.sky), 0.25).add(vec3(r.mul(0.03)));
+    lc = lc.mul(mix(0.3, 1, u.day));
+    lc = mix(lc, lc.mul(0.15), smoothstep(0.55, 1, fogL));
+    this.lakeMat.colorNode = lc;
+    this.lakeMat.opacityNode = float(0.88);
     this.group.add(this.buildRivers(land, frames), this.buildLakes(land));
     this.group.name = "rivers";
   }
@@ -161,10 +138,9 @@ export class RiverView {
     return mesh;
   }
 
-  update(time: number, daylight: number, sky: THREE.Color): void {
-    this.riverMat.uniforms.uTime!.value = time;
-    this.riverMat.uniforms.uDay!.value = daylight;
-    (this.riverMat.uniforms.uSky!.value as THREE.Color).copy(sky);
+  update(_time: number, daylight: number, sky: THREE.Color): void {
+    this.u.day.value = daylight;
+    this.u.sky.value.copy(sky);
   }
 
   /** Fog of war: per-tile values (0 seen, 0.5 remembered, 1 unknown). */

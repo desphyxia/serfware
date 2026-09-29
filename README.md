@@ -84,7 +84,9 @@ tomorrow's forecast and the soil in its tooltip. The debug dialog can summon wea
 | P | Economy panel (stock, people and Glow, distribution, tools) |
 | Click a settler | Their card: age, skills, journal; Follow keeps the camera on them |
 | G | Hex grid overlay |
-| WASD, Q/E, R/F | Move, turn, tilt the camera |
+| WASD, Q/E | Move and turn the camera |
+| R | Reset to north-up overview |
+| Page Up / Page Down | Tilt the camera |
 
 ## Reporting bugs
 

@@ -1,4 +1,6 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { abs, float, mrt, pow, sin, time, uniform, uv, vec3, vec4 } from "three/tsl";
+import { PainterlyMaterial } from "./painterly";
 import type { Planet } from "../sim/planet/planet";
 
 /**
@@ -7,35 +9,31 @@ import type { Planet } from "../sim/planet/planet";
  */
 export class StarWellMarkers {
   readonly group = new THREE.Group();
-  private readonly beamMat: THREE.ShaderMaterial;
-  private readonly inlayMat: THREE.MeshBasicMaterial;
+  private readonly beamMat: THREE.MeshBasicNodeMaterial;
+  private readonly inlayMat: THREE.MeshBasicNodeMaterial;
+  private readonly beamStrength = uniform(1);
+  private readonly inlayGlow = uniform(0.6);
 
   constructor(planet: Planet) {
     const { grid } = planet;
     const stoneGeo = new THREE.CylinderGeometry(0.16, 0.24, 1.3, 5, 1);
     stoneGeo.translate(0, 0.6, 0);
-    const stoneMat = new THREE.MeshStandardMaterial({ color: "#8f8a80", roughness: 0.95, flatShading: true });
+    const stoneMat = new PainterlyMaterial({ color: "#8f8a80", flatShading: true, brush: 1.4 });
     const stones = new THREE.InstancedMesh(stoneGeo, stoneMat, grid.pentagons.length * 5);
     stones.castShadow = true;
     stones.receiveShadow = true;
 
-    this.inlayMat = new THREE.MeshBasicMaterial({ color: "#ffd58a", transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
-    this.beamMat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      uniforms: { uTime: { value: 0 }, uStrength: { value: 1 } },
-      vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: /* glsl */ `
-        uniform float uTime; uniform float uStrength; varying vec2 vUv;
-        void main() {
-          float fade = pow(1.0 - vUv.y, 2.2);
-          float pulse = 0.7 + 0.3 * sin(uTime * 0.8 + vUv.y * 6.0);
-          float edge = 1.0 - abs(vUv.x - 0.5) * 2.0;
-          gl_FragColor = vec4(vec3(1.0, 0.82, 0.52) * fade * pulse * edge * 0.35 * uStrength, 1.0);
-        }`,
-    });
+    this.inlayMat = new THREE.MeshBasicNodeMaterial({ color: "#ffd58a", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.inlayMat.opacityNode = this.inlayGlow;
+    this.inlayMat.mrtNode = mrt({ emissive: vec4(vec3(1.0, 0.8, 0.5).mul(this.inlayGlow).mul(0.6), 1) });
+    this.beamMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const vUv = uv();
+    const fade = pow(float(1).sub(vUv.y), 2.2);
+    const pulse = sin(time.mul(0.8).add(vUv.y.mul(6))).mul(0.3).add(0.7);
+    const edge = float(1).sub(abs(vUv.x.sub(0.5)).mul(2));
+    const beam = vec3(1.0, 0.82, 0.52).mul(fade).mul(pulse).mul(edge).mul(0.35).mul(this.beamStrength);
+    this.beamMat.colorNode = beam;
+    this.beamMat.mrtNode = mrt({ emissive: vec4(beam.mul(0.5), 1) });
     const beamGeo = new THREE.CylinderGeometry(0.9, 1.3, 26, 20, 1, true);
     beamGeo.translate(0, 13, 0);
 
@@ -90,9 +88,8 @@ export class StarWellMarkers {
   }
 
   update(time: number, night: number, closeness: number): void {
-    this.beamMat.uniforms.uTime!.value = time;
-    this.beamMat.uniforms.uStrength!.value = (0.45 + night * 0.9) * (0.25 + 0.75 * closeness);
-    this.inlayMat.opacity = 0.35 + 0.25 * Math.sin(time * 0.8) + night * 0.4;
+    this.beamStrength.value = (0.45 + night * 0.9) * (0.25 + 0.75 * closeness);
+    this.inlayGlow.value = Math.min(1, 0.35 + 0.25 * Math.sin(time * 0.8) + night * 0.4);
   }
 }
 

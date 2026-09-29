@@ -1,9 +1,9 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import { Feature, Use, type LandUse } from "../sim/econ/landuse";
 import { Biome } from "../sim/planet/terrain";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { patchWind } from "./wind";
+import { PainterlyMaterial } from "./painterly";
 
 const MAX = 24000;
 
@@ -41,8 +41,7 @@ export class GrassPatch {
     blades.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     blades.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
     blades.computeVertexNormals();
-    const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1 });
-    patchWind(grassMat, 0.25);
+    const grassMat = new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, wind: 0.25, brush: 0.6 });
     this.tufts = new THREE.InstancedMesh(blades, grassMat, MAX);
     this.tufts.count = 0;
     this.tufts.frustumCulled = false;
@@ -61,8 +60,7 @@ export class GrassPatch {
     for (let i = 0; i < fp.length / 3; i++) fc.push(...(i < 3 ? [0.3, 0.5, 0.2] : [1, 1, 1]));
     flower.setAttribute("color", new THREE.Float32BufferAttribute(fc, 3));
     flower.computeVertexNormals();
-    const flowerMat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, emissive: "#140c04" });
-    patchWind(flowerMat, 0.3);
+    const flowerMat = new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: "#140c04", wind: 0.3, brush: 0 });
     this.flowers = new THREE.InstancedMesh(flower, flowerMat, MAX / 4);
     this.flowers.count = 0;
     this.flowers.frustumCulled = false;
