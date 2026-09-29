@@ -20,14 +20,20 @@ export function ticksPerDay(dayLengthHours: number): number {
 /** Start each world at 06:30 on day 1 so the first view is a sunrise. */
 export const START_FRACTION = 6.5 / 24;
 
-export function dayInfo(tick: number, dayLengthHours: number): DayInfo {
+/**
+ * Day and time for a tick. `lonFraction` (longitude / full turn, east positive) shifts the result
+ * to local solar time; 0 is the prime meridian, where the world starts at 06:30.
+ */
+export function dayInfo(tick: number, dayLengthHours: number, lonFraction = 0): DayInfo {
   const perDay = ticksPerDay(dayLengthHours);
-  const startOffset = Math.round(START_FRACTION * perDay);
-  const t = tick + startOffset;
+  const startOffset = Math.round((START_FRACTION + lonFraction) * perDay) + perDay;
+  const t = tick + startOffset - perDay;
   const day = Math.floor(t / perDay) + 1;
   const within = t - (day - 1) * perDay;
   const fraction = within / perDay;
-  const hoursFloat = fraction * dayLengthHours;
+  // Clock hours are always shown on a 24-hour dial; the planet's day length changes only how
+  // long a day lasts in real time.
+  const hoursFloat = fraction * 24;
   const hour = Math.floor(hoursFloat);
   const minute = Math.floor((hoursFloat - hour) * 60);
   return { day, hour, minute, fraction };

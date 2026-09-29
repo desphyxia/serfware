@@ -9,6 +9,7 @@ export interface DebugSource {
   memory: () => readonly MemSample[];
   sim: () => { tick: number; ticksPerSec: number; checksum: number; speed: number };
   warnings: () => readonly string[];
+  extra?: () => Record<string, string>;
   actions: Record<string, () => void>;
 }
 
@@ -58,6 +59,7 @@ export class DebugPanel extends Panel {
       ["Sim tick", `${sim.tick} (${sim.ticksPerSec.toFixed(1)}/s, ×${sim.speed})`],
       ["Checksum", sim.checksum.toString(16).padStart(8, "0")],
       ["GPU", r.gpu],
+      ...Object.entries(this.src.extra?.() ?? {}),
     ];
     this.stats.replaceChildren(...rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
     const warnings = this.src.warnings();

@@ -1,14 +1,12 @@
 import { dayInfo, type DayInfo } from "./clock";
 import { StateHasher } from "./hash";
+import type { GridSize } from "./planet/grid";
+import { Planet } from "./planet/planet";
 import { Rng } from "./rng";
 
-export interface PlanetParams {
-  /** Hours in one rotation. */
-  dayLengthHours: number;
-  /** Axial tilt in radians. */
-  axialTilt: number;
-  /** Radius in world units used by the renderer. */
-  radius: number;
+export interface WorldOptions {
+  /** Force a planet size (tests and benchmarks); otherwise the seed decides. */
+  size?: GridSize;
 }
 
 /**
@@ -17,30 +15,34 @@ export interface PlanetParams {
  */
 export class World {
   readonly seed: string;
-  readonly planet: PlanetParams;
+  readonly planet: Planet;
   tick = 0;
   private readonly rng: Rng;
 
-  constructor(seed: string) {
+  constructor(seed: string, opts: WorldOptions = {}) {
     this.seed = seed;
     this.rng = new Rng(seed);
-    const pr = this.rng.fork("planet");
-    this.planet = {
-      dayLengthHours: 24,
-      axialTilt: pr.range(0.12, 0.45),
-      radius: 100,
-    };
+    this.planet = Planet.generate(this.rng.fork("planet"), opts.size);
   }
 
   step(): void {
     this.tick++;
   }
 
+  /** Time at the prime meridian. */
   day(): DayInfo {
-    return dayInfo(this.tick, this.planet.dayLengthHours);
+    return dayInfo(this.tick, this.planet.params.dayLengthHours);
+  }
+
+  /** Local solar time at a longitude given as a fraction of a full turn (east positive). */
+  localDay(lonFraction: number): DayInfo {
+    return dayInfo(this.tick, this.planet.params.dayLengthHours, lonFraction);
   }
 
   checksum(): number {
-    return new StateHasher().str(this.seed).int(this.tick).int(this.rng.state()[0] ?? 0).value();
+    const h = new StateHasher().str(this.seed).int(this.tick);
+    for (const v of this.rng.state()) h.int(v);
+    this.planet.hash(h);
+    return h.value();
   }
 }
