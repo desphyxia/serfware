@@ -190,7 +190,7 @@ export class EconView {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
-    const edge = new THREE.Color("#8f7654");
+    const edge = new THREE.Color("#b39673");
     const mid = new THREE.Color("#c7ab80");
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
@@ -207,7 +207,7 @@ export class EconView {
       // Each vertex sits just above the detailed ground under it, so the road follows the terrain.
       const onGround = (v: THREE.Vector3) => {
         const d = v.clone().normalize();
-        return d.multiplyScalar(this.frames.groundAt(d, hint) + 0.045);
+        return d.multiplyScalar(this.frames.groundAt(d, hint) + 0.03);
       };
       // Round caps where the road meets its flags, so roads joining at a flag close up.
       for (const end of [pts[0] as THREE.Vector3, pts[pts.length - 1] as THREE.Vector3]) {
