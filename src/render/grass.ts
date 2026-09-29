@@ -15,6 +15,7 @@ export class GrassPatch {
   readonly group = new THREE.Group();
   private readonly tufts: THREE.InstancedMesh;
   private readonly flowers: THREE.InstancedMesh;
+  private readonly pebbles: THREE.InstancedMesh;
   private centerTile = -1;
   private key = "";
 
@@ -64,7 +65,21 @@ export class GrassPatch {
     this.flowers = new THREE.InstancedMesh(flower, flowerMat, MAX / 4);
     this.flowers.count = 0;
     this.flowers.frustumCulled = false;
-    this.group.add(this.tufts, this.flowers);
+    // Pebbles: small flattened stones, darker underneath.
+    const pebble = new THREE.DodecahedronGeometry(0.05, 0).scale(1.2, 0.55, 1).translate(0, 0.012, 0).toNonIndexed();
+    pebble.computeVertexNormals();
+    const pp = pebble.getAttribute("position");
+    const pc = new Float32Array(pp.count * 3);
+    for (let i = 0; i < pp.count; i++) {
+      const k = 0.7 + 0.3 * Math.min(1, Math.max(0, pp.getY(i) / 0.04));
+      pc.set([k, k, k], i * 3);
+    }
+    pebble.setAttribute("color", new THREE.BufferAttribute(pc, 3));
+    this.pebbles = new THREE.InstancedMesh(pebble, new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 0.8 }), MAX / 4);
+    this.pebbles.count = 0;
+    this.pebbles.frustumCulled = false;
+    this.pebbles.receiveShadow = true;
+    this.group.add(this.tufts, this.flowers, this.pebbles);
   }
 
   update(focus: THREE.Vector3, closeness: number, density: number): void {
@@ -96,6 +111,12 @@ export class GrassPatch {
     const flowerColors = ["#f4d35e", "#ee964b", "#f2f2f2", "#c38bd9", "#e56b6f", "#7fb7e8"].map((x) => new THREE.Color(x));
     let n = 0;
     let f = 0;
+    let st = 0;
+    const stoneColors = ["#9b958b", "#a8a296", "#8a847a", "#b3aa98"].map((x) => new THREE.Color(x));
+    const ground = (v: THREE.Vector3, t: number) => {
+      const len = this.frames.groundAt(v.normalize(), t);
+      return v.multiplyScalar(len - 0.02);
+    };
     for (const t of tiles) {
       if (!land.isLand(t) || land.use[t] === Use.Building || hiddenAt(this.mask, t)) continue;
       const b = terrain.biome[t] as Biome;
@@ -127,7 +148,7 @@ export class GrassPatch {
         const h3 = SurfaceFrames.hash(t, i * 5 + 13);
         const r = Math.sqrt(h1) * 1.7;
         const a = h2 * Math.PI * 2;
-        p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r);
+        ground(p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r), t);
         this.frames.orient(p, null, q);
         q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h3 * 6.28));
         const sc = 0.6 + h3 * 0.7;
@@ -146,16 +167,46 @@ export class GrassPatch {
         }
       }
     }
+    // Pebbles on every land tile: a few in grass, more on rocky, dry and sandy ground.
+    for (const t of tiles) {
+      if (!land.isLand(t) || land.use[t] === Use.Building || hiddenAt(this.mask, t)) continue;
+      const b = terrain.biome[t] as Biome;
+      let per = land.feature[t] === Feature.Rock ? 10 : b === Biome.Steppe || b === Biome.Beach || b === Biome.Tundra ? 5 : 2;
+      if (land.use[t] === Use.Road) per += 3;
+      per = Math.round(per * density);
+      const up = this.frames.dir(t);
+      const tA = new THREE.Vector3(0, 1, 0).cross(up);
+      if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
+      tA.normalize();
+      const tB = up.clone().cross(tA);
+      const base = this.frames.pos(t);
+      for (let i = 0; i < per && st < this.pebbles.instanceMatrix.count; i++) {
+        const h1 = SurfaceFrames.hash(t, i * 7 + 301);
+        const h2 = SurfaceFrames.hash(t, i * 7 + 302);
+        const h3 = SurfaceFrames.hash(t, i * 7 + 303);
+        const r = Math.sqrt(h1) * 1.75;
+        const a = h2 * Math.PI * 2;
+        ground(p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r), t);
+        this.frames.orient(p, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h3 * 6.28));
+        const sc = 0.5 + h3 * h3 * 1.6;
+        m.compose(p, q, s.set(sc, sc, sc));
+        this.pebbles.setMatrixAt(st, m);
+        this.pebbles.setColorAt(st, stoneColors[Math.floor(h1 * 97) % stoneColors.length] as THREE.Color);
+        st++;
+      }
+    }
     this.tufts.count = n;
     this.flowers.count = f;
-    for (const mesh of [this.tufts, this.flowers]) {
+    this.pebbles.count = st;
+    for (const mesh of [this.tufts, this.flowers, this.pebbles]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
   }
 
   dispose(): void {
-    for (const mesh of [this.tufts, this.flowers]) {
+    for (const mesh of [this.tufts, this.flowers, this.pebbles]) {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
       mesh.dispose();

@@ -1,6 +1,7 @@
 # Seedfall art direction
 
-Status: **draft for review**. No art batch starts until this is agreed.
+Status: **agreed**. A1 (renderer foundation) is merged. A2 (visual target scene) is built and
+waiting for approval of the look; the debug dialog's **Visit hamlet** opens the scene.
 
 Reference: the original *Serf City* (*The Settlers*, 1993), rebuilt with 2026 techniques.
 Decisions taken: **stylised painterly** look, **everything procedural** (no bought or downloaded
@@ -177,12 +178,27 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 
 | # | Batch | Result |
 |---|---|---|
-| A1 | Renderer foundation | WebGPU renderer with WebGL2 fallback; current materials ported to TSL; new post-processing pipeline (ambient occlusion, AgX, grading); cascaded shadows; overview camera |
-| A2 | **Visual target scene** | A riverside hamlet at final quality: detailed terrain (all three layers), water, trees, three buildings, settlers, goods, day/night. **Approval gate** |
+| A1 ✓ | Renderer foundation | WebGPU renderer with WebGL2 fallback; current materials ported to TSL; new post-processing pipeline (ambient occlusion, AgX, grading); cascaded shadows; overview camera |
+| A2 ✓ | **Visual target scene** | A riverside hamlet at final quality: detailed terrain (all three layers), water, trees, three buildings, settlers, goods, day/night. **Approval gate** |
 | A3 | Terrain everywhere | Chunked detail levels for the whole planet; procedural sculpting, cliffs, riverbeds, shores; blended materials; levelled pads under buildings; paths and roads pressed into the ground; near-camera scatter |
 | A4 | Water, sky and weather | Sea, lakes and rivers; physically based sky and painted clouds; haze and light shafts; rain, snow, mud and seasons in the new style |
 | A5 | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
 | A6 | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
 | A7 | Vegetation, effects and polish | Tree species per biome, undergrowth, particles, shot-list pass, performance tuning on the presets |
+
+### What A2 delivered
+
+- **Terrain:** a continuous height field (kernel-blended tile heights, rolling noise, ridged
+  rock, carved riverbeds, lake basins, levelled pads) drawn as chunks that refine near the
+  camera. The ground material paints grass tufts, soil, rock strata on slopes and beaches along
+  shores. Roads, grass, pebbles, flowers, settlers and buildings all stand on the same field.
+- **Building kit:** plinths, timber-framed or log walls, shingle or thatch roofs, framed windows
+  with shutters, doors, chimneys and props, with baked ambient occlusion and seeded variants.
+  The cottage, house, sawmill and fisher are rebuilt from it; other buildings that use the
+  cottage shell pick it up too.
+- **Settlers:** articulated figures in a single draw, animated in the vertex shader (walk, carry,
+  chop, hammer, dig, duel), with a hat and tool per trade. Goods are real miniatures.
+- **Trees:** fluffy broadleaf crowns and drooping conifer tiers with soft normals.
+- **Rivers** fill their carved beds (they were invisible before because of a triangle winding bug).
 
 After A7 we return to batch 11. The later biome batches (13–16) follow this document.

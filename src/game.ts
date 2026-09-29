@@ -19,7 +19,7 @@ import type { Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
-import { starterChain } from "./sim/econ/planner";
+import { demoSettlement, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
@@ -170,6 +170,7 @@ export class Game {
           this.fogOn = !this.fogOn;
           this.view.setViewer(this.session.player, this.fogOn);
         },
+        "Visit hamlet": () => this.visitHamlet(),
         "Starter chain": () => this.toasts.show(`Placed ${starterChain(this.world)} buildings with roads.`, "good"),
         "Test crash": () =>
           setTimeout(() => {
@@ -400,6 +401,15 @@ export class Game {
     if (!front) return;
     Object.assign(front, { x: f.x, y: f.y, z: f.z, radius: 0.35, strength, age: 20, life: 400 });
     this.world.climate.step(this.world.tick);
+  }
+
+  /** The art target scene: a grown demo settlement seen from the overview camera in fair weather. */
+  visitHamlet(): void {
+    const n = demoSettlement(this.world);
+    for (let i = 0; i < 6000; i++) this.world.step();
+    this.focusPlayer(0, 30);
+    this.clearWeather();
+    this.toasts.show(`Hamlet: ${n} buildings placed.`, "good");
   }
 
   /** Screenshot hook: push every weather front to the far side of the planet. */
