@@ -4,6 +4,7 @@ import { SimNoise } from "../noise";
 import type { Rng } from "../rng";
 import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
+import { computeHydrology, type Hydrology } from "../planet/hydrology";
 
 /** What stands on a tile. */
 export enum Use {
@@ -78,6 +79,13 @@ export class LandUse {
   territoryVersion = 0;
   /** Typical angle between neighbouring tile centres. */
   readonly spacing: number;
+  /** Rivers and lakes. */
+  readonly hydro: Hydrology;
+  /** Soil nitrogen per tile, 0..1: fields drain it, rest and hedgerows restore it. */
+  readonly soil: Float32Array;
+  /** Weather on the ground, kept up to date by the climate: mud (0..1) and snow cover (0..1). */
+  readonly mud: Float32Array;
+  readonly snowCover: Float32Array;
 
   constructor(readonly planet: Planet) {
     const n = planet.grid.count;
@@ -95,6 +103,23 @@ export class LandUse {
     this.sign = new Uint8Array(n);
     this.signExpire = new Int32Array(n);
     this.spacing = Math.sqrt((4 * Math.PI) / n);
+    this.mud = new Float32Array(n);
+    this.snowCover = new Float32Array(n);
+    this.hydro = computeHydrology(planet);
+    this.soil = new Float32Array(n);
+    for (let t = 0; t < n; t++) this.soil[t] = Math.min(1, 0.35 + 0.5 * (planet.terrain.moisture[t] as number) + (this.isRiver(t) ? 0.15 : 0));
+  }
+
+  /** A river runs through this tile. */
+  isRiver(t: number): boolean {
+    return this.isLand(t) && (this.hydro.flow[t] as number) >= this.hydro.riverFlow;
+  }
+
+  /** Fresh or salt water within `r` steps, for irrigation. */
+  nearWater(t: number, r = 2): boolean {
+    if (this.isRiver(t)) return true;
+    for (const n of this.ring(t, r)) if (!this.isLand(n) || this.isRiver(n)) return true;
+    return false;
   }
 
   /** Scatter trees and rocks from terrain. */
@@ -140,7 +165,7 @@ export class LandUse {
     const nGold = new SimNoise(rng.nextU32());
     for (let t = 0; t < grid.count; t++) {
       const e = terrain.elevation[t] as number;
-      if (e <= 0) {
+      if (e <= 0 || this.hydro.lake[t]) {
         if (e > -peak * 0.5) this.fish[t] = 6 + (t % 5);
         continue;
       }
@@ -185,7 +210,7 @@ export class LandUse {
   }
 
   isLand(t: number): boolean {
-    return (this.planet.terrain.elevation[t] as number) > 0.05;
+    return (this.planet.terrain.elevation[t] as number) > 0.05 && this.hydro?.lake[t] !== 1;
   }
 
   /** Height difference to the steepest neighbour, in world units. */
@@ -299,7 +324,9 @@ export class LandUse {
   stepCost(a: number, b: number): number {
     const e = this.planet.terrain.elevation;
     const dh = (e[b] as number) - (e[a] as number);
-    const base = this.use[b] === Use.Road || this.use[b] === Use.Flag ? 0.7 : 1;
+    const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
+    // Fording a river off-road is slow; mud and snow slow everyone.
+    const base = (road ? 0.7 : this.isRiver(b) ? 1.4 : 1) * (1 + 0.5 * (this.mud[b] as number) + 0.4 * (this.snowCover[b] as number));
     return base * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15);
   }
 

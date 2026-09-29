@@ -10,6 +10,8 @@ import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
 import { NatureView } from "./natureView";
 import { Overlays } from "./overlays";
+import { RiverView } from "./rivers";
+import { WeatherFx } from "./weatherFx";
 import type { FogMask } from "./fogMask";
 import { playerColor } from "./players";
 import { StarWellMarkers } from "./starWells";
@@ -33,6 +35,10 @@ export class WorldView {
   readonly grass: GrassPatch;
   readonly fauna: Fauna;
   readonly particles = new Particles();
+  readonly rivers: RiverView;
+  readonly weather = new WeatherFx();
+  private climateVersion = -1;
+  private climateTimer = 0;
   private wearVersion = -1;
   /** Fog of war for the viewing player. */
   readonly mask: FogMask = { explored: undefined, visible: undefined, version: 0 };
@@ -66,7 +72,8 @@ export class WorldView {
     this.clouds = new CloudLayer(R, seed);
     this.wells = new StarWellMarkers(planet);
     this.frames = new SurfaceFrames(planet);
-    this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask);
+    this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask, (t) => this.seasonAt(t));
+    this.rivers = new RiverView(world.land, this.frames);
     this.econ = new EconView(world.economy, this.frames);
     this.overlays = new Overlays(world.land, this.frames);
     this.grass = new GrassPatch(world.land, this.frames, this.mask);
@@ -74,6 +81,8 @@ export class WorldView {
     this.group.add(
       this.land,
       this.water,
+      this.rivers.group,
+      this.weather.group,
       this.nature.group,
       this.econ.group,
       this.overlays.group,
@@ -95,6 +104,54 @@ export class WorldView {
     this.econ.fog = fog;
   }
 
+  /** Autumn colour, bare branches and snow per tile, for trees. */
+  private seasonAt(t: number): { autumn: number; bare: number; snow: number } {
+    const w = this.world;
+    const y = w.planet.grid.center[t * 3 + 1] as number;
+    let ph = w.climate.yearPhase(w.tick);
+    if (y < 0) ph = (ph + 0.5) % 1;
+    const lat = THREE.MathUtils.smoothstep(Math.abs(y), 0.12, 0.4);
+    const autumn = Math.min(1, Math.max(0, 1.3 - Math.abs(ph - 0.63) / 0.14)) * lat;
+    const bare = Math.max(0, 1 - Math.abs(ph - 0.88) / 0.12) * lat * 0.8;
+    return { autumn, bare, snow: w.land.snowCover[t] as number };
+  }
+
+  private updateClimate(p: { dt: number; time: number; daylight: number; sky: THREE.Color; closeness: number; ground?: THREE.Vector3; distance?: number; focus: THREE.Vector3 }): void {
+    const w = this.world;
+    this.clouds.setFronts(w.climate.fronts);
+    this.rivers.update(p.time, p.daylight, p.sky);
+    // Rain or snow where the view is, when close enough to the ground to see it.
+    if (p.ground && p.closeness > 0.25) {
+      const t = w.planet.grid.nearestTile([p.focus.x, p.focus.y, p.focus.z], 0);
+      const amount = (w.climate.rain[t] as number) * THREE.MathUtils.smoothstep(p.closeness, 0.25, 0.6);
+      const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.4);
+      this.weather.update(p.dt, p.ground, amount, (w.climate.temp[t] as number) < 0.5, Math.max(8, (p.distance ?? 20) * 0.9), wind);
+    } else this.weather.update(p.dt, p.focus, 0, false, 1, p.focus);
+    this.climateTimer -= p.dt;
+    if (this.climateTimer > 0 || w.climate.version === this.climateVersion) return;
+    this.climateTimer = 1;
+    this.climateVersion = w.climate.version;
+    const g = this.land.geometry;
+    const owner = g.userData.owner as Int32Array;
+    const attr = g.getAttribute("aClimate") as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    const perTile = new Map<number, { autumn: number }>();
+    for (let i = 0; i < owner.length; i++) {
+      const t = owner[i] as number;
+      let s = perTile.get(t);
+      if (!s) {
+        s = this.seasonAt(t);
+        perTile.set(t, s);
+      }
+      arr[i * 3] = w.land.snowCover[t] as number;
+      arr[i * 3 + 1] = s.autumn;
+      arr[i * 3 + 2] = w.land.mud[t] as number;
+    }
+    attr.needsUpdate = true;
+    // Trees follow a few times a day.
+    this.nature.seasonKey = Math.floor(w.climate.version / 40);
+  }
+
   private updateFog(): void {
     const eco = this.world.economy;
     const key = `${this.viewer}:${this.fogOn}:${eco.visionVersion}`;
@@ -103,6 +160,9 @@ export class WorldView {
     this.mask.explored = this.fogOn ? eco.explored[this.viewer] : undefined;
     this.mask.visible = this.fogOn ? eco.visible[this.viewer] : undefined;
     this.mask.version++;
+    const exp = this.mask.explored;
+    const vis = this.mask.visible;
+    this.rivers.setFog((t) => (!exp ? 0 : exp[t] !== 1 ? 1 : vis && vis[t] === 1 ? 0 : 0.5));
     for (const g of [this.land.geometry, this.water.geometry]) {
       const owner = g.userData.owner as Int32Array;
       const attr = g.getAttribute("aFog") as THREE.BufferAttribute;
@@ -138,6 +198,9 @@ export class WorldView {
     orbit: number;
     fog: THREE.Fog | null;
     closeness: number;
+    /** Surface point under the view and camera distance, for rain and snow. */
+    ground?: THREE.Vector3;
+    distance?: number;
   }): void {
     WIND.uTime.value = p.time;
     this.nature.update(p.vegetation);
@@ -155,6 +218,7 @@ export class WorldView {
       this.updateWear();
     }
     this.updateFog();
+    this.updateClimate(p);
     this.overlays.update(p.time, 1 - p.daylight, this.mask.explored, this.mask.version, playerColor);
     const w = this.water.material.uniforms;
     w.uTime!.value = p.time;

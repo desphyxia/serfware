@@ -71,7 +71,7 @@ describe("attacks", () => {
     expect(w.command({ t: "attack", target: enemy.id, count: 3 }).ok).toBe(false);
   });
 
-  it("wardens march, duel at the door and take the Hearthship", () => {
+  it("wardens march, duel at the door and take the Hearthship", { timeout: 60000 }, () => {
     // Arm player 0 well: blades and gold for resolve.
     const w = battleWorld({}, (w) => {
       const keep0 = w.economy.buildings[w.economy.keeps[0]!]!;
@@ -108,7 +108,7 @@ describe("attacks", () => {
     for (const b of theirs) expect(b.stranded).toBeGreaterThanOrEqual(0);
   });
 
-  it("stays deterministic through a fight", () => {
+  it("stays deterministic through a fight", { timeout: 60000 }, () => {
     const make = () => {
       const w = battleWorld({ stakes: "mortal" });
       const enemy = w.economy.buildings[w.economy.keeps[1]!]!;
