@@ -23,6 +23,10 @@ const all = [
   { name: "person", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(9.5); g.showPerson(true); g.setView(16, 0.7, 0.1); } },
   { name: "people", wait: 2000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(16); g.setView(28, 1.1); g.economyTab("People"); } },
   { name: "economy", wait: 2000, keys: ["p"], setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(11); g.setView(30, 0.4); } },
+  { name: "territory", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 12000; i++) g.world.step(); g.setHour(19); g.setView(70, 0.5, 0.1); } },
+  { name: "lanterns", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 12000; i++) g.world.step(); g.focusBuilding("beacon", 22); g.setHour(21.5); g.setView(22, 2.4, 0.15); } },
+  { name: "rival", wait: 3000, setup: () => { const g = window.__seedfall.game; for (let i = 0; i < 30000; i++) g.world.step(); g.setFog(false); g.focusPlayer(1, 60); g.setHour(16.5); g.setView(60, 0.8, 0.1); } },
+  { name: "fog", wait: 2500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 12000; i++) g.world.step(); g.focusPlayer(1, g.cam.maxDistance * 0.55); g.setHour(12); g.setView(g.cam.maxDistance * 0.55); } },
   { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];

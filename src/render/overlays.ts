@@ -6,7 +6,7 @@ import { buildingGeometry, flagGeometry } from "./models";
 /** Build-mode helpers: territory border, placement markers, road preview and ghost buildings. */
 export class Overlays {
   readonly group = new THREE.Group();
-  private border: THREE.LineSegments | null = null;
+  private border: THREE.Mesh | null = null;
   private territoryVersion = -1;
   private readonly markers: THREE.InstancedMesh;
   private readonly preview: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
@@ -35,42 +35,93 @@ export class Overlays {
     this.group.add(this.markers, this.preview, this.ghostFlag);
   }
 
-  update(): void {
-    if (this.land.territoryVersion !== this.territoryVersion) {
+  private visionKey = "";
+  private readonly borderMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: { uTime: { value: 0 }, uNight: { value: 0 } },
+    vertexShader: /* glsl */ `
+      attribute float aV;
+      varying float vV; varying vec3 vCol; varying vec3 vW;
+      void main() {
+        vV = aV; vCol = color;
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime; uniform float uNight;
+      varying float vV; varying vec3 vCol; varying vec3 vW;
+      void main() {
+        float shimmer = 0.75 + 0.25 * sin(uTime * 1.3 + dot(vW, vec3(0.9, 0.7, 1.1)) * 1.7);
+        float a = pow(1.0 - vV, 2.4) * shimmer * (0.45 + uNight * 0.55);
+        a += smoothstep(0.1, 0.0, vV) * 0.35;
+        gl_FragColor = vec4(vCol * a, a);
+      }`,
+    vertexColors: true,
+  });
+
+  /**
+   * Rebuild borders when territory or the viewer's explored area changes. Borders glow in the
+   * owner's colour as a low curtain of light.
+   */
+  update(time = 0, night = 0, explored?: Uint8Array, visionVersion = 0, colors?: (owner: number) => THREE.Color): void {
+    this.borderMat.uniforms.uTime!.value = time;
+    this.borderMat.uniforms.uNight!.value = night;
+    const key = `${this.land.territoryVersion}:${visionVersion}`;
+    if (key !== this.visionKey) {
+      this.visionKey = key;
       this.territoryVersion = this.land.territoryVersion;
-      this.rebuildBorder();
+      this.rebuildBorder(explored, colors);
     }
   }
 
-  private rebuildBorder(): void {
+  private rebuildBorder(explored?: Uint8Array, colors?: (owner: number) => THREE.Color): void {
     if (this.border) {
       this.group.remove(this.border);
       this.border.geometry.dispose();
     }
     const { grid } = this.land.planet;
-    const pts: number[] = [];
+    const pos: number[] = [];
+    const col: number[] = [];
+    const vs: number[] = [];
     const R = this.land.planet.params.radius;
-    const corner = (c: number) => {
+    const corner = (c: number, lift: number) => {
       let h = 0;
       for (let j = 0; j < 3; j++) h += Math.max(0, this.land.planet.terrain.elevation[grid.cornerTiles[c * 3 + j] as number] as number);
-      const r = R + h / 3 + 0.3;
+      const r = R + h / 3 + lift;
       return [(grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r];
     };
+    const fallback = new THREE.Color("#f0b25a");
     for (let t = 0; t < grid.count; t++) {
-      if (!this.land.territory[t]) continue;
+      const o = this.land.territory[t] as number;
+      if (!o || (explored && !explored[t])) continue;
+      const c = colors ? colors(o - 1) : fallback;
       const ns = grid.neighborsOf(t);
       const cs = grid.cornersOf(t);
       for (let k = 0; k < ns.length; k++) {
-        if (this.land.territory[ns[k] as number]) continue;
+        if (this.land.territory[ns[k] as number] === o) continue;
         const c0 = cs[(k - 1 + cs.length) % cs.length] as number;
         const c1 = cs[k] as number;
-        pts.push(...corner(c0), ...corner(c1));
+        // A vertical strip: bright at the ground, fading upward.
+        const a0 = corner(c0, 0.08);
+        const a1 = corner(c1, 0.08);
+        const b0 = corner(c0, 0.75);
+        const b1 = corner(c1, 0.75);
+        pos.push(...a0, ...a1, ...b1, ...a0, ...b1, ...b0);
+        vs.push(0, 0, 1, 0, 1, 1);
+        for (let i = 0; i < 6; i++) col.push(c.r, c.g, c.b);
       }
     }
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    this.border = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#f0b25a", transparent: true, opacity: 0.85 }));
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute("aV", new THREE.Float32BufferAttribute(vs, 1));
+    this.border = new THREE.Mesh(g, this.borderMat);
     this.border.renderOrder = 5;
+    this.border.frustumCulled = false;
     this.group.add(this.border);
   }
 

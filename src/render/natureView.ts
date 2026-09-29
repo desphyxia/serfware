@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MEMORIAL } from "../sim/econ/economy";
 import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
+import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { broadleafGeometry, coniferGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
 import { patchWind } from "./wind";
@@ -21,12 +22,14 @@ export class NatureView {
   private readonly signs: THREE.InstancedMesh;
   private signVersion = -1;
   private version = -1;
+  private maskVersion = -1;
   private density = -1;
 
   constructor(
     private readonly land: LandUse,
     private readonly frames: SurfaceFrames,
     capacity: number,
+    private readonly mask: FogMask,
   ) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
     const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
@@ -58,8 +61,9 @@ export class NatureView {
       this.signVersion = this.land.signVersion;
       this.updateSigns();
     }
-    if (this.land.featureVersion === this.version && density === this.density) return;
+    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion) return;
     this.version = this.land.featureVersion;
+    this.maskVersion = this.mask.version;
     this.density = density;
     const land = this.land;
     const n = land.planet.grid.count;
@@ -74,7 +78,7 @@ export class NatureView {
     const perTile = 1 + Math.round(density * 2);
     for (let t = 0; t < n; t++) {
       const f = land.feature[t];
-      if (f === Feature.None) continue;
+      if (f === Feature.None || hiddenAt(this.mask, t)) continue;
       const base = this.frames.pos(t);
       const up = base.clone().normalize();
       const tA = new THREE.Vector3(0, 1, 0).cross(up);

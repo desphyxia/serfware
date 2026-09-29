@@ -2,6 +2,7 @@ import { dayInfo, START_FRACTION, ticksPerDay, type DayInfo } from "./clock";
 import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { LandUse } from "./econ/landuse";
+import { AiBuilder } from "./ai/builder";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet } from "./planet/planet";
@@ -12,6 +13,8 @@ export interface WorldOptions {
   size?: GridSize;
   /** Number of players with their own keep (neighbours co-op / PvP). Shared co-op uses 1. */
   players?: number;
+  /** AI rivals, added after the human players. */
+  rivals?: number;
 }
 
 /**
@@ -24,6 +27,10 @@ export class World {
   readonly land: LandUse;
   readonly economy: Economy;
   readonly players: number;
+  /** Players 0..humans-1 are people; the rest are AI rivals. */
+  readonly humans: number;
+  readonly rivals: number;
+  readonly ai: AiBuilder[] = [];
   tick = 0;
   private readonly rng: Rng;
 
@@ -34,8 +41,11 @@ export class World {
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
     this.economy = new Economy(this.land);
-    this.players = Math.max(1, Math.min(8, opts.players ?? 1));
+    this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
+    this.rivals = Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
+    this.players = this.humans + this.rivals;
     for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
+    for (let p = this.humans; p < this.players; p++) this.ai.push(new AiBuilder(p, this.rng.fork(`ai-${p}`)));
     // Start the clock so it is early morning at the first Hearthship.
     const keep = this.economy.buildings[this.economy.keeps[0] ?? -1];
     if (keep) {
@@ -56,6 +66,7 @@ export class World {
   step(): void {
     this.tick++;
     this.economy.step(this.tick);
+    for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0) ai.think(this);
   }
 
   /** Time at the prime meridian. */

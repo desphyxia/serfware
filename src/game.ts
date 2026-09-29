@@ -77,6 +77,10 @@ export class Game {
   private downAt: { x: number; y: number; button: number } | null = null;
   private readonly loading: HTMLElement;
   private readonly raycaster = new THREE.Raycaster();
+  /** AI rivals in new solo worlds. */
+  private rivals = 1;
+  /** Fog of war drawn (the debug dialog can lift it). */
+  private fogOn = true;
   /** Person the camera follows, or -1. */
   private following = -1;
   private readonly pointer = new THREE.Vector2(9, 9);
@@ -111,7 +115,7 @@ export class Game {
     this.loading = h("div", { class: "loading", hidden: true }, h("div", { class: "loading-seed" }), h("div", { class: "loading-msg" }, "Shaping the planet…"));
     container.append(this.loading);
 
-    this.world = new World(seed);
+    this.world = new World(seed, { rivals: this.rivals });
     this.session = new SoloSession(this.world);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 9000);
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
@@ -125,6 +129,7 @@ export class Game {
     this.cam = this.makeCamera(canvas);
     this.audio = new Ambience(settings.get().audio);
     this.view = new WorldView(this.world, settings.get().graphics, hashString(seed));
+    this.view.setViewer(this.session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.focusStart();
 
@@ -137,7 +142,8 @@ export class Game {
     this.inspector = h("div", { class: "inspector", hidden: true, "aria-live": "polite" });
     this.settingsPanel = new SettingsPanel(settings, {
       seed: () => this.world.seed,
-      newWorld: (s) => void this.newWorld(s),
+      newWorld: (s, rivals) => void this.newWorld(s, rivals),
+      rivals: () => this.rivals,
     });
     this.report = new ReportPanel();
     this.debug = new DebugPanel({
@@ -154,6 +160,10 @@ export class Game {
         "×64": () => (this.speed = 64),
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
+        "Fog of war": () => {
+          this.fogOn = !this.fogOn;
+          this.view.setViewer(this.session.player, this.fogOn);
+        },
         "Starter chain": () => this.toasts.show(`Placed ${starterChain(this.world)} buildings with roads.`, "good"),
         "Test crash": () =>
           setTimeout(() => {
@@ -176,6 +186,7 @@ export class Game {
         this.info.refresh();
       },
       following: () => this.following,
+      player: () => this.session.player,
     });
     this.economyPanel = new EconomyPanel(
       () => this.world.economy,
@@ -273,6 +284,24 @@ export class Game {
     this.focusCoast();
   }
 
+  /** Look at a player's Hearthship (screenshots and tests). */
+  focusPlayer(player: number, distance = 40): void {
+    const keep = this.world.economy.buildings[this.world.economy.keeps[player] ?? -1];
+    if (keep) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(keep.tile)), distance);
+  }
+
+  /** Look at the first building of a type owned by the local player. */
+  focusBuilding(type: string, distance = 20): boolean {
+    const b = this.world.economy.buildings.find((x) => x.alive && x.def.id === type && x.owner === this.session.player);
+    if (b) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(b.tile)), distance);
+    return !!b;
+  }
+
+  setFog(on: boolean): void {
+    this.fogOn = on;
+    this.view.setViewer(this.session.player, on);
+  }
+
   /** Fallback: a pleasant coast, the land tile with some water nearby. */
   private focusCoast(): void {
     const { grid, terrain } = this.world.planet;
@@ -363,13 +392,14 @@ export class Game {
     requestAnimationFrame(frame);
   }
 
-  async newWorld(seedInput?: string): Promise<void> {
+  async newWorld(seedInput?: string, rivals = this.rivals): Promise<void> {
+    this.rivals = rivals;
     const seed = seedInput && seedInput.trim() ? normaliseSeed(seedInput) : randomSeedWord(Math.floor(Math.random() * 2 ** 32));
     this.loading.hidden = false;
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed)));
+    this.useSession(new SoloSession(new World(seed, { rivals })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -387,6 +417,7 @@ export class Game {
     this.session = session;
     this.world = session.world;
     this.view = new WorldView(this.world, this.settings.get().graphics, hashString(this.world.seed));
+    this.view.setViewer(session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
@@ -657,7 +688,10 @@ export class Game {
     this.updateHover();
     this.tools.hoverTile(this.hoverTile);
     const eco = this.world.economy;
-    while (eco.notices.length) this.toasts.show(eco.notices.shift() as string, "good");
+    while (eco.notices.length) {
+      const n = eco.notices.shift() as { owner: number; text: string };
+      if (n.owner === this.session.player) this.toasts.show(n.text, "good");
+    }
     this.audioTimer -= dt;
     if (this.audioTimer <= 0) {
       this.audioTimer = 100;
@@ -784,7 +818,7 @@ export class Game {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     const id = this.view.econ.pickSettler(this.raycaster, Math.max(0.35, this.cam.distance * 0.012));
     const s = id >= 0 ? this.world.economy.settlers[id] : undefined;
-    if (!s || s.person < 0) return false;
+    if (!s || s.person < 0 || s.owner !== this.session.player) return false;
     this.info.select({ kind: "person", id: s.person });
     return true;
   }

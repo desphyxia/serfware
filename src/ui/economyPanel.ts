@@ -150,6 +150,9 @@ export class EconomyPanel extends Panel {
     const prefs = eco.prefs[pl];
     if (!prefs) return;
     if (!full) {
+      for (const input of this.body.querySelectorAll<HTMLInputElement>("input[data-g]")) {
+        if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "inland"]);
+      }
       // Only update numbers of sliders not being dragged.
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[type=range]")) {
         if (document.activeElement === input) continue;
@@ -176,7 +179,17 @@ export class EconomyPanel extends Panel {
         ]),
       );
     } else {
+      const garrison = (zone: "frontier" | "inland", label: string) => {
+        const row = slider(label, `g|${zone}`, prefs.garrison[zone], (value) => this.command({ t: "garrison", zone, value }));
+        row.querySelector("input")?.setAttribute("data-g", zone);
+        return row;
+      };
       (this.pages.Tools as HTMLElement).replaceChildren(
+        h("h3", { class: "sub" }, "Wardens"),
+        h("p", { class: "hint" }, "How full to keep lantern buildings. Frontier lanterns stand near another settlement's border. Every lit lantern keeps at least one warden."),
+        garrison("frontier", "Frontier"),
+        garrison("inland", "Inland"),
+        h("h3", { class: "sub" }, "Toolsmith"),
         h("p", { class: "hint" }, "The toolsmith makes whichever tool has the highest priority for how many you already have. A tool decides who can take up a trade."),
         ...TOOLS.map((t) => {
           const id = GOODS[t]?.id ?? "";

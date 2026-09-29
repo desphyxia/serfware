@@ -15,6 +15,7 @@ const ICONS: Record<string, string> = {
   food: svg(`<path d="M12 3v18M12 7c-3 0-4-2-4-4 3 0 4 2 4 4zM12 7c3 0 4-2 4-4-3 0-4 2-4 4zM12 12c-3 0-4-2-4-4 3 0 4 2 4 4zM12 12c3 0 4-2 4-4-3 0-4 2-4 4zM12 17c-3 0-4-2-4-4 3 0 4 2 4 4zM12 17c3 0 4-2 4-4-3 0-4 2-4 4z" ${STROKE}/>`),
   metal: svg(`<path d="M4 18h16M6 18l2-6h8l2 6M9 12V8h6v4M12 8V4" ${STROKE}/>`),
   storage: svg(`<path d="M3 10l9-6 9 6v10H3zM9 20v-6h6v6" ${STROKE}/>`),
+  lantern: svg(`<path d="M12 2v3M8 7h8l-1 9H9zM9 16l-1 5h8l-1-5M12 10v3" ${STROKE}/>`),
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
 
@@ -23,6 +24,7 @@ const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "food", label: "Food", key: "4" },
   { id: "metal", label: "Mining", key: "5" },
   { id: "storage", label: "Homes", key: "6" },
+  { id: "lantern", label: "Lanterns", key: "7" },
 ];
 
 function costText(def: BuildingDef): string {
@@ -33,7 +35,7 @@ function costText(def: BuildingDef): string {
 
 /**
  * Bottom toolbar: select, flag, road, four building categories (each opens a list), demolish
- * and the economy panel. Keys: Esc, 1, 2, 3–6, X, P.
+ * and the economy panel. Keys: Esc, 1, 2, 3–7, X, P.
  */
 export class BuildBar {
   readonly root: HTMLElement;

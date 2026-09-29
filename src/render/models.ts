@@ -361,6 +361,71 @@ function toolsmith(): THREE.BufferGeometry {
 
 const cache = new Map<string, THREE.BufferGeometry>();
 
+function lanternPost(): THREE.BufferGeometry {
+  const parts: Part[] = [
+    [cyl(0.34, 0.42, 0.22, 7), STONE],
+    [cyl(0.06, 0.08, 1.35, 6, 0, 0.2), TIMBER],
+    [box(0.5, 0.06, 0.06, 0.2, 1.42), TIMBER],
+    [box(0.04, 0.16, 0.04, 0.4, 1.28), "#3a3a3a"],
+    [box(0.2, 0.24, 0.2, 0.4, 1.02), "#3a3a3a"],
+    [box(0.16, 0.2, 0.16, 0.4, 1.04), WINDOW],
+    [new THREE.ConeGeometry(0.16, 0.14, 4).rotateY(Math.PI / 4).translate(0.4, 1.33, 0), "#3a3a3a"],
+    // A warden's bench and a stack of lamp oil.
+    [box(0.5, 0.06, 0.18, -0.35, 0.22, 0.35), TIMBER],
+    [box(0.06, 0.22, 0.14, -0.55, 0, 0.35), TIMBER],
+    [box(0.06, 0.22, 0.14, -0.15, 0, 0.35), TIMBER],
+    [cyl(0.09, 0.09, 0.2, 7, 0.35, 0, -0.35), "#7a5a3a"],
+    [cyl(0.09, 0.09, 0.2, 7, 0.5, 0, -0.22), "#7a5a3a"],
+  ];
+  return merge(parts);
+}
+
+function lampHouse(): THREE.BufferGeometry {
+  const parts: Part[] = [
+    [box(1.0, 0.16, 1.0), STONE],
+    [box(0.9, 1.1, 0.9, 0, 0.16), WALL_DARK],
+    [box(0.16, 0.22, 0.05, 0, 0.8, 0.46), WINDOW],
+    [box(0.3, 0.5, 0.05, 0, 0.16, 0.46), TIMBER],
+    [box(1.02, 0.1, 1.02, 0, 1.26), TIMBER],
+  ];
+  // Lantern room on top: four posts, glass and a pointed roof.
+  for (const [x, z] of [[-0.24, -0.24], [0.24, -0.24], [-0.24, 0.24], [0.24, 0.24]] as const) parts.push([box(0.06, 0.42, 0.06, x, 1.36, z), TIMBER]);
+  parts.push([box(0.38, 0.34, 0.38, 0, 1.4), WINDOW]);
+  parts.push([new THREE.ConeGeometry(0.46, 0.5, 4).rotateY(Math.PI / 4).translate(0, 2.03, 0), ROOF_SLATE]);
+  parts.push([cyl(0.02, 0.02, 0.25, 4, 0, 2.25), "#3a3a3a"]);
+  return merge(parts);
+}
+
+function beacon(): THREE.BufferGeometry {
+  const parts: Part[] = [
+    [cyl(1.0, 1.15, 0.3, 8), STONE],
+    [cyl(0.62, 0.8, 2.6, 8, 0, 0.3), "#c9bca0"],
+    [cyl(0.64, 0.64, 0.12, 8, 0, 1.2), STONE],
+    [cyl(0.64, 0.64, 0.12, 8, 0, 2.0), STONE],
+    [cyl(0.85, 0.7, 0.2, 8, 0, 2.9), STONE],
+    [box(0.36, 0.6, 0.06, 0, 0.3, 0.76), TIMBER],
+    [box(0.14, 0.24, 0.05, 0.0, 1.5, 0.7), WINDOW],
+    [box(0.14, 0.24, 0.05, 0.0, 2.3, -0.66), WINDOW],
+    [cyl(0.42, 0.42, 0.62, 8, 0, 3.1), WINDOW],
+    [new THREE.ConeGeometry(0.72, 0.8, 8).translate(0, 4.12, 0), "#8a4a3a"],
+    [cyl(0.03, 0.03, 0.4, 4, 0, 4.5), "#3a3a3a"],
+  ];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    parts.push([box(0.07, 0.62, 0.07, Math.cos(a) * 0.5, 3.1, Math.sin(a) * 0.5), "#3a3a3a"]);
+    parts.push([box(0.12, 0.16, 0.12, Math.cos(a) * 0.8, 3.1, Math.sin(a) * 0.8), STONE]);
+  }
+  return merge(parts);
+}
+
+/** Where the flame sits in each lantern building, in model space. */
+export const LANTERN_FLAME: Record<string, THREE.Vector3> = {
+  keep: new THREE.Vector3(0.55, 3.99, 0.9),
+  lantern: new THREE.Vector3(0.4, 1.14, 0),
+  lamphouse: new THREE.Vector3(0, 1.57, 0),
+  beacon: new THREE.Vector3(0, 3.41, 0),
+};
+
 export function buildingGeometry(id: string): THREE.BufferGeometry {
   let g = cache.get(id);
   if (!g) {
@@ -385,6 +450,9 @@ export function buildingGeometry(id: string): THREE.BufferGeometry {
       case "smelter": g = smelter(); break;
       case "goldsmith": g = smelter(true); break;
       case "toolsmith": g = toolsmith(); break;
+      case "lantern": g = lanternPost(); break;
+      case "lamphouse": g = lampHouse(); break;
+      case "beacon": g = beacon(); break;
       default: g = cottage(1.2, 1.0, 0.8, ROOF_RED);
     }
     cache.set(id, g);
@@ -466,7 +534,8 @@ export function pennantGeometry(): THREE.BufferGeometry {
   const shape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.42, -0.1), new THREE.Vector2(0, -0.22)]);
   const g = new THREE.ShapeGeometry(shape);
   g.translate(0.03, 1.02, 0);
-  return tint(g, "#f0b25a");
+  // White, so the owner's colour can be applied per instance.
+  return tint(g, "#ffffff");
 }
 
 export function settlerBodyGeometry(): THREE.BufferGeometry {

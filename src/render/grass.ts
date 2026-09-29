@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Feature, Use, type LandUse } from "../sim/econ/landuse";
 import { Biome } from "../sim/planet/terrain";
+import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { patchWind } from "./wind";
 
@@ -20,6 +21,7 @@ export class GrassPatch {
   constructor(
     private readonly land: LandUse,
     private readonly frames: SurfaceFrames,
+    private readonly mask: FogMask,
   ) {
     const blades = new THREE.BufferGeometry();
     const pos: number[] = [];
@@ -73,7 +75,7 @@ export class GrassPatch {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}`;
     if (this.centerTile >= 0 && key === this.key) {
       // Only rebuild once the focus has moved a few tiles.
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
@@ -97,7 +99,7 @@ export class GrassPatch {
     let n = 0;
     let f = 0;
     for (const t of tiles) {
-      if (!land.isLand(t) || land.use[t] === Use.Building) continue;
+      if (!land.isLand(t) || land.use[t] === Use.Building || hiddenAt(this.mask, t)) continue;
       const b = terrain.biome[t] as Biome;
       let per: number;
       let hue = 0;

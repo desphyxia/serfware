@@ -152,6 +152,7 @@ function makeGeometry(verts: Vert[], tris: number[], radius: (v: Vert) => number
   g.setAttribute("aEdge", new THREE.BufferAttribute(edge, 1));
   g.setAttribute("aDepth", new THREE.BufferAttribute(depth, 1));
   g.setAttribute("aWear", new THREE.BufferAttribute(new Float32Array(used.length), 1).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute("aFog", new THREE.BufferAttribute(new Float32Array(used.length), 1).setUsage(THREE.DynamicDrawUsage));
   g.userData.owner = owner;
   g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeVertexNormals();
@@ -167,17 +168,21 @@ export function makeTerrainMaterial(): THREE.MeshStandardMaterial {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uGrid = uniforms.uGrid;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute float aEdge;\nattribute float aWear;\nvarying float vEdge;\nvarying float vWear;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvEdge = aEdge;\nvWear = aWear;");
+      .replace("#include <common>", "#include <common>\nattribute float aEdge;\nattribute float aWear;\nattribute float aFog;\nvarying float vEdge;\nvarying float vWear;\nvarying float vFog;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvEdge = aEdge;\nvWear = aWear;\nvFog = aFog;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uGrid;\nvarying float vEdge;\nvarying float vWear;")
+      .replace("#include <common>", "#include <common>\nuniform float uGrid;\nvarying float vEdge;\nvarying float vWear;\nvarying float vFog;")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
         float w = fwidth(vEdge) * 1.4;
         float line = 1.0 - smoothstep(0.0, w + 0.02, vEdge);
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.33, 0.2), smoothstep(0.04, 1.0, vWear) * 0.7);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + vec3(0.06, 0.05, 0.02), line * uGrid * 0.85);`,
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + vec3(0.06, 0.05, 0.02), line * uGrid * 0.85);
+        // Fog of war: remembered land is a little faded, unexplored land dark and grey.
+        float grey = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(grey), diffuseColor.rgb, 0.7) * 0.86, smoothstep(0.1, 0.5, vFog));
+        diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(grey), diffuseColor.rgb, 0.3) * 0.1 + vec3(0.008, 0.011, 0.02), smoothstep(0.55, 1.0, vFog));`,
       );
   };
   return mat;

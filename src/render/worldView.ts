@@ -10,6 +10,8 @@ import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
 import { NatureView } from "./natureView";
 import { Overlays } from "./overlays";
+import type { FogMask } from "./fogMask";
+import { playerColor } from "./players";
 import { StarWellMarkers } from "./starWells";
 import { buildSurface, makeTerrainMaterial } from "./terrainMesh";
 import { TileHighlight } from "./tileHighlight";
@@ -32,6 +34,11 @@ export class WorldView {
   readonly fauna: Fauna;
   readonly particles = new Particles();
   private wearVersion = -1;
+  /** Fog of war for the viewing player. */
+  readonly mask: FogMask = { explored: undefined, visible: undefined, version: 0 };
+  private viewer = 0;
+  private fogOn = true;
+  private fogKey = "";
   private wearTimer = 0;
   private gridOn = false;
 
@@ -59,10 +66,10 @@ export class WorldView {
     this.clouds = new CloudLayer(R, seed);
     this.wells = new StarWellMarkers(planet);
     this.frames = new SurfaceFrames(planet);
-    this.nature = new NatureView(world.land, this.frames, planet.grid.count);
+    this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask);
     this.econ = new EconView(world.economy, this.frames);
     this.overlays = new Overlays(world.land, this.frames);
-    this.grass = new GrassPatch(world.land, this.frames);
+    this.grass = new GrassPatch(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.group.add(
       this.land,
@@ -78,6 +85,36 @@ export class WorldView {
       this.atmosphere.mesh,
       this.highlight.line,
     );
+  }
+
+  /** Whose eyes the view uses, and whether fog of war is drawn. */
+  setViewer(player: number, fog: boolean): void {
+    this.viewer = player;
+    this.fogOn = fog;
+    this.econ.viewer = player;
+    this.econ.fog = fog;
+  }
+
+  private updateFog(): void {
+    const eco = this.world.economy;
+    const key = `${this.viewer}:${this.fogOn}:${eco.visionVersion}`;
+    if (key === this.fogKey) return;
+    this.fogKey = key;
+    this.mask.explored = this.fogOn ? eco.explored[this.viewer] : undefined;
+    this.mask.visible = this.fogOn ? eco.visible[this.viewer] : undefined;
+    this.mask.version++;
+    for (const g of [this.land.geometry, this.water.geometry]) {
+      const owner = g.userData.owner as Int32Array;
+      const attr = g.getAttribute("aFog") as THREE.BufferAttribute;
+      const arr = attr.array as Float32Array;
+      const exp = this.mask.explored;
+      const vis = this.mask.visible;
+      for (let i = 0; i < owner.length; i++) {
+        const t = owner[i] as number;
+        arr[i] = !exp ? 0 : exp[t] !== 1 ? 1 : vis && vis[t] === 1 ? 0 : 0.5;
+      }
+      attr.needsUpdate = true;
+    }
   }
 
   setGrid(on: boolean): void {
@@ -117,7 +154,8 @@ export class WorldView {
       this.wearVersion = this.world.land.wearVersion;
       this.updateWear();
     }
-    this.overlays.update();
+    this.updateFog();
+    this.overlays.update(p.time, 1 - p.daylight, this.mask.explored, this.mask.version, playerColor);
     const w = this.water.material.uniforms;
     w.uTime!.value = p.time;
     w.uSunDir!.value.copy(p.sunDir);

@@ -96,6 +96,12 @@ export interface Building {
   food: number;
   /** Mines: nothing left to dig. */
   exhausted: boolean;
+  /** Lantern buildings: wardens assigned (walking there or on watch). */
+  garrison: number[];
+  /** Lantern buildings: lit once the first warden arrives; only lit lanterns hold territory. */
+  lit: boolean;
+  /** Lantern buildings: close to another player's border. */
+  frontier: boolean;
   alive: boolean;
 }
 
@@ -103,9 +109,11 @@ export interface Building {
 export interface Prefs {
   dist: Record<string, Record<string, number>>;
   tools: Record<string, number>;
+  /** Share of warden places to fill, near other players' borders and further inside. */
+  garrison: { frontier: number; inland: number };
 }
 
-export type Role = "carrier" | "builder" | "worker" | "geologist";
+export type Role = "carrier" | "builder" | "worker" | "geologist" | "warden";
 
 export interface Settler {
   id: number;
@@ -155,6 +163,7 @@ export type Command = (
   | { t: "geologist"; flagTile: number }
   | { t: "prio"; key: string; target: string; value: number }
   | { t: "toolprio"; tool: string; value: number }
+  | { t: "garrison"; zone: "frontier" | "inland"; value: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -184,8 +193,14 @@ export class Economy {
   private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
   tick = 0;
-  /** Messages for the player (the UI shows and clears them). */
-  readonly notices: string[] = [];
+  /** Messages for players (the UI shows its own player's and clears them). */
+  readonly notices: { owner: number; text: string }[] = [];
+  /** Per player: tiles lit right now, and tiles ever seen (fog of war). */
+  readonly visible: Uint8Array[] = [];
+  readonly explored: Uint8Array[] = [];
+  /** Bumped when territory or sight changes. */
+  visionVersion = 0;
+  private territoryDirty = false;
 
   constructor(readonly land: LandUse) {
     this.dayTicks = ticksPerDay(land.planet.params.dayLengthHours);
@@ -274,6 +289,7 @@ export class Economy {
     const flag = this.createFlag(flagTile, player);
     const keep = this.createBuilding(buildingType("keep"), best, flag.id, player);
     keep.built = true;
+    keep.lit = true;
     this.lifeRng ??= rng.fork("life");
     const r = rng.fork(`people-${player}`);
     let family = randomFamily(r);
@@ -286,10 +302,11 @@ export class Economy {
     keep.stock = goodsArray(START.stock);
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
-    this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY })) as Prefs;
+    this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison })) as Prefs;
     this.glow[player] = 60;
     this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1 };
     this.hungry[player] = false;
+    this.updateTerritory();
   }
 
   private addPerson(owner: number, first: string, family: string, born: number, r: Rng): Person {
@@ -320,6 +337,12 @@ export class Economy {
   // ------------------------------------------------------------------ commands
 
   apply(cmd: Command): CommandResult {
+    const r = this.applyCommand(cmd);
+    if (this.territoryDirty) this.updateTerritory();
+    return r;
+  }
+
+  private applyCommand(cmd: Command): CommandResult {
     const p = cmd.player ?? 0;
     if (this.keeps[p] === undefined) return { ok: false, reason: "Unknown player." };
     switch (cmd.t) {
@@ -340,6 +363,10 @@ export class Economy {
       }
       case "toolprio":
         (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
+        return { ok: true };
+      case "garrison":
+        if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
+        (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
     }
   }
@@ -549,6 +576,9 @@ export class Economy {
       outputTypes: [],
       food: 0,
       exhausted: false,
+      garrison: [],
+      lit: false,
+      frontier: false,
       alive: true,
     };
     this.buildings.push(b);
@@ -654,7 +684,12 @@ export class Economy {
     land.ref[b.tile] = -1;
     const flag = this.flags[b.flag] as Flag;
     flag.building = -1;
-    for (const id of [b.worker, b.builder]) if (id >= 0) this.sendHome(this.settlers[id] as Settler);
+    for (const id of [b.worker, b.builder, ...b.garrison]) if (id >= 0) this.sendHome(this.settlers[id] as Settler);
+    b.garrison = [];
+    if (b.def.light && b.lit) {
+      b.lit = false;
+      this.territoryDirty = true;
+    }
     // Goods heading here need a new destination.
     for (const g of this.goods) if (g.alive && g.dest === b.id) g.dest = -1;
     this.structureVersion++;
@@ -941,6 +976,10 @@ export class Economy {
       const b = this.buildings[s.building] as Building;
       if (b.worker === s.id) b.worker = -1;
     }
+    if (s.role === "warden" && s.building >= 0) {
+      const b = this.buildings[s.building] as Building;
+      b.garrison = b.garrison.filter((id) => id !== s.id);
+    }
     this.releaseReservations(s);
     if (s.role === "builder" && s.building >= 0) {
       const b = this.buildings[s.building] as Building;
@@ -1004,8 +1043,160 @@ export class Economy {
         s.building = b.id;
         s.tool = tool;
         b.worker = s.id;
+      } else if (b.built && b.def.slots) {
+        const want = this.garrisonWant(b);
+        if (b.garrison.length < want) {
+          const pick = this.pickPerson(b.flag, "warden");
+          if (!pick) continue;
+          const p = this.roadPath(pick.origin.flag, b.flag);
+          if (!p) continue;
+          const s = this.spawnSettler("warden", pick.origin, [...p, b.tile], pick.person);
+          note(this.people[pick.person.id] as Person, `Took up the watch at a ${b.def.name.toLowerCase()}.`);
+          s.building = b.id;
+          b.garrison.push(s.id);
+        } else if (b.garrison.length > want && b.garrison.length > 1) {
+          const id = [...b.garrison].reverse().find((g) => (this.settlers[g] as Settler).state === "guard");
+          if (id !== undefined) this.sendHome(this.settlers[id] as Settler);
+        }
       }
     }
+  }
+
+  /** Wardens a lantern building should have under its owner's garrison policy (at least one). */
+  garrisonWant(b: Building): number {
+    const slots = b.def.slots ?? 0;
+    const g = (this.prefs[b.owner] as Prefs).garrison;
+    return Math.max(1, Math.min(slots, Math.ceil(slots * (b.frontier ? g.frontier : g.inland) - 1e-9)));
+  }
+
+  private stepWarden(s: Settler): void {
+    const b = this.buildings[s.building];
+    if (!b || !b.alive) {
+      this.sendHome(s);
+      return;
+    }
+    if (s.state === "goto" && this.walk(s)) {
+      s.state = "guard";
+      if (!b.lit) {
+        b.lit = true;
+        this.territoryDirty = true;
+        this.notify(b.owner, `The ${b.def.name.toLowerCase()} is lit. Your border grows.`);
+      }
+    }
+  }
+
+  notify(owner: number, text: string): void {
+    this.notices.push({ owner, text });
+    if (this.notices.length > 50) this.notices.shift();
+  }
+
+  /**
+   * Territory comes from light. A tile stays with its owner while any of their lit lanterns
+   * reaches it; otherwise it goes to the nearest lit lantern (ties to the older building).
+   * Structures on land a player loses burn down. Also refreshes sight and explored tiles.
+   */
+  updateTerritory(): void {
+    for (let guard = 0; guard < 4; guard++) {
+      this.territoryDirty = false;
+      this.recomputeTerritory();
+      if (!this.territoryDirty) break;
+    }
+    this.updateVision();
+  }
+
+  private sources(): Building[] {
+    return this.buildings.filter((b) => b.alive && b.lit && !!b.def.light);
+  }
+
+  /** Visit tiles within `radius` steps of `center` with their distance. */
+  private flood(center: number, radius: number, visit: (t: number, d: number) => void): void {
+    const grid = this.land.planet.grid;
+    const dist = new Map<number, number>([[center, 0]]);
+    const queue = [center];
+    for (let i = 0; i < queue.length; i++) {
+      const t = queue[i] as number;
+      const d = dist.get(t) as number;
+      visit(t, d);
+      if (d >= radius) continue;
+      for (const n of grid.neighborsOf(t))
+        if (!dist.has(n)) {
+          dist.set(n, d + 1);
+          queue.push(n);
+        }
+    }
+  }
+
+  private recomputeTerritory(): void {
+    const land = this.land;
+    const n = land.planet.grid.count;
+    const bestD = new Int16Array(n).fill(32767);
+    const bestO = new Uint8Array(n);
+    const held = new Uint8Array(n);
+    const sources = this.sources();
+    for (const b of sources) {
+      this.flood(b.tile, b.def.light as number, (t, d) => {
+        if (land.territory[t] === b.owner + 1) held[t] = 1;
+        if (d < (bestD[t] as number)) {
+          bestD[t] = d;
+          bestO[t] = b.owner + 1;
+        }
+      });
+    }
+    const lost: number[] = [];
+    let changed = false;
+    for (let t = 0; t < n; t++) {
+      const old = land.territory[t] as number;
+      const next = held[t] ? old : (bestO[t] as number);
+      if (next === old) continue;
+      land.territory[t] = next;
+      changed = true;
+      if (old) lost.push(t);
+    }
+    if (changed) land.territoryVersion++;
+    // Burn what stands on lost land.
+    for (const t of lost) {
+      const ref = land.ref[t] as number;
+      if (land.use[t] === Use.Building) {
+        const b = this.buildings[ref] as Building;
+        if (b.alive && land.territory[t] !== b.owner + 1 && !this.keeps.includes(b.id)) {
+          this.notify(b.owner, `Your ${b.def.name.toLowerCase()} was left in the dark and burned down.`);
+          this.removeBuilding(b);
+        }
+      } else if (land.use[t] === Use.Flag) {
+        const f = this.flags[ref] as Flag;
+        if (f.alive && land.territory[t] !== f.owner + 1 && !this.keeps.includes(f.building)) this.removeFlag(f);
+      } else if (land.use[t] === Use.Road) {
+        const r = this.roads[ref] as Road;
+        if (r.alive && land.territory[t] !== r.owner + 1) this.removeRoad(r);
+      }
+    }
+    // Frontier lanterns: another player's land within a few steps of their light.
+    for (const b of sources) {
+      if (!b.def.slots) continue;
+      let frontier = false;
+      this.flood(b.tile, (b.def.light as number) + 3, (t) => {
+        const o = land.territory[t] as number;
+        if (o && o !== b.owner + 1) frontier = true;
+      });
+      b.frontier = frontier;
+    }
+  }
+
+  private updateVision(): void {
+    const n = this.land.planet.grid.count;
+    for (let p = 0; p < this.keeps.length; p++) {
+      this.visible[p] = new Uint8Array(n);
+      this.explored[p] ??= new Uint8Array(n);
+    }
+    for (const b of this.sources()) {
+      const vis = this.visible[b.owner] as Uint8Array;
+      const exp = this.explored[b.owner] as Uint8Array;
+      this.flood(b.tile, (b.def.light as number) + 3, (t) => {
+        vis[t] = 1;
+        exp[t] = 1;
+      });
+    }
+    this.visionVersion++;
   }
 
   /** Advance along the current path. Returns true when the last tile is reached. */
@@ -1221,7 +1412,7 @@ export class Economy {
         if (b.consumed >= b.costTotal) {
           b.built = true;
           b.builder = -1;
-          this.notices.push(`${b.def.name} finished.`);
+          this.notify(b.owner, `${b.def.name} finished.`);
           this.structureVersion++;
           this.sendHome(s);
         }
@@ -1424,7 +1615,7 @@ export class Economy {
           const t = this.mineTile(b);
           if (t < 0) {
             b.exhausted = true;
-            this.notices.push(`${def.name} has run out.`);
+            this.notify(b.owner, `${def.name} has run out.`);
             s.timer = 200;
             return;
           }
@@ -1598,7 +1789,7 @@ export class Economy {
         land.signExpire[t] = this.tick + SIGN_TICKS;
         land.signVersion++;
         if (land.deposit[t] !== Deposit.None && land.deposit[t] !== Deposit.Granite)
-          this.notices.push(`Geologist found ${DEPOSIT_IDS[land.deposit[t] as number]}.`);
+          this.notify(s.owner, `Geologist found ${DEPOSIT_IDS[land.deposit[t] as number]}.`);
         s.state = "pick";
         return;
       }
@@ -1620,6 +1811,7 @@ export class Economy {
     if (s.role === "carrier") this.stepCarrier(s);
     else if (s.role === "builder") this.stepBuilder(s);
     else if (s.role === "geologist") this.stepGeologist(s);
+    else if (s.role === "warden") this.stepWarden(s);
     else this.stepWorker(s);
   }
 
@@ -1741,7 +1933,7 @@ export class Economy {
     }
     const wasHungry = this.hungry[owner];
     this.hungry[owner] = need > 0;
-    if (this.hungry[owner] && !wasHungry) this.notices.push("Your people are going hungry. Bread, fish or meat are needed.");
+    if (this.hungry[owner] && !wasHungry) this.notify(owner, "Your people are going hungry. Bread, fish or meat are needed.");
     // Growing up, retiring, farewells.
     for (const p of all) {
       const age = this.ageDays(p);
@@ -1772,13 +1964,13 @@ export class Economy {
       // Births: a household with room and at least two adults, in a content settlement.
       const adults = occupants.filter((p) => p.stage !== "child");
       const glow = this.glow[owner] ?? 0;
-      if (occupants.length < HOUSE_CAPACITY && adults.length >= 2 && glow >= 45 && !this.hungry[owner] && r.chance(0.12 + glow / 400)) {
+      if (occupants.length < HOUSE_CAPACITY && adults.length >= 2 && glow >= 45 && !this.hungry[owner] && r.chance(0.2 + glow / 250)) {
         const fam = adults[0]?.family ?? randomFamily(r);
         const child = this.addPerson(owner, randomFirst(r), fam, this.tick, r);
         child.stage = "child";
         child.house = h.id;
         note(child, `Born to the ${fam} family.`);
-        this.notices.push(`${fullName(child)} was born.`);
+        this.notify(owner, `${fullName(child)} was born.`);
       }
     }
   }
@@ -1787,7 +1979,7 @@ export class Economy {
     p.alive = false;
     const house = p.house;
     p.house = -1;
-    this.notices.push(`Remembering ${fullName(p)}, ${this.ageDays(p)} days old.`);
+    this.notify(p.owner, `Remembering ${fullName(p)}, ${this.ageDays(p)} days old.`);
     // A memorial tree near where they lived.
     const home = this.buildings[house >= 0 ? house : this.keeps[p.owner] ?? -1];
     if (!home) return;
@@ -1819,6 +2011,7 @@ export class Economy {
     for (const s of this.settlers) if (s.alive) this.stepSettler(s);
     this.stepNature();
     this.stepLife();
+    if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();
   }
 
@@ -1849,6 +2042,9 @@ export class Economy {
     let wear = 0;
     for (let t = 0; t < this.land.wear.length; t += 13) wear += this.land.wear[t] as number;
     h.int(wear);
-    for (const b of this.buildings) if (b.alive) h.int(b.consumed).int(b.output).int(b.residents);
+    for (const b of this.buildings) if (b.alive) h.int(b.consumed).int(b.output).int(b.residents).int(b.garrison.length).int(b.lit ? 1 : 0);
+    let owned = 0;
+    for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
+    h.int(owned);
   }
 }

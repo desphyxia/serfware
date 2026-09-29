@@ -3,7 +3,9 @@ import { GOODS } from "../sim/econ/defs";
 import type { Economy, Settler } from "../sim/econ/economy";
 import { SurfaceFrames } from "./frames";
 import { patchWindows, type Emitter } from "./smoke";
+import { playerColor } from "./players";
 import {
+  LANTERN_FLAME,
   WINDMILL_HUB,
   windmillRotor,
   buildingGeometry,
@@ -32,8 +34,8 @@ export const GOOD_COLORS: Record<string, string> = {
   gold: "#f0c85a",
 };
 
-const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0") };
-const HIDDEN_STATES = new Set(["rest", "craft"]);
+const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0"), warden: new THREE.Color("#d8b25a") };
+const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS = 6000;
 
@@ -57,7 +59,13 @@ export class EconView {
   private readonly heads: THREE.InstancedMesh;
   private readonly carried: THREE.InstancedMesh;
   private readonly crates: THREE.InstancedMesh;
-  private structure = -1;
+  private structure = "";
+  private readonly flames: THREE.InstancedMesh;
+  private readonly halos: THREE.InstancedMesh;
+  /** The player whose view this is: other players' things are hidden in the fog. */
+  viewer = 0;
+  /** Fog of war on or off (off in the debug view). */
+  fog = true;
   private readonly display = new Map<number, THREE.Vector3>();
   /** Settler id drawn at each body instance, for picking. */
   readonly instanceSettler: number[] = [];
@@ -89,21 +97,100 @@ export class EconView {
     this.heads = inst(settlerHeadGeometry(), propMat, MAX_SETTLERS);
     this.carried = inst(crateGeometry(), plain, MAX_SETTLERS);
     this.crates = inst(crateGeometry(), plain, MAX_GOODS);
+    this.flames = inst(new THREE.IcosahedronGeometry(0.1, 1), new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false }), 1024, false);
+    this.halos = inst(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          varying vec2 vUv; varying vec3 vCol;
+          void main() {
+            vUv = uv;
+            #ifdef USE_INSTANCING_COLOR
+              vCol = instanceColor;
+            #else
+              vCol = vec3(1.0);
+            #endif
+            // Billboard: keep the instance position, face the camera.
+            vec4 c = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+            float sc = length(instanceMatrix[0].xyz);
+            c.xy += position.xy * sc;
+            gl_Position = projectionMatrix * c;
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec2 vUv; varying vec3 vCol;
+          void main() {
+            float d = length(vUv - 0.5) * 2.0;
+            float a = pow(max(0.0, 1.0 - d), 2.2);
+            gl_FragColor = vec4(vCol * a, a);
+          }`,
+      }),
+      1024,
+      false,
+    );
+    this.halos.renderOrder = 9;
+    for (const mesh of [this.flames, this.halos]) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1024 * 3), 3);
     this.goodColors = GOODS.map((g) => new THREE.Color(GOOD_COLORS[g.id] ?? (g.tool ? "#9aa1b3" : "#ffffff")));
     this.group.name = "economy";
   }
 
   update(time: number, dt: number): void {
     this.spin(dt);
-    if (this.eco.structureVersion !== this.structure) {
-      this.structure = this.eco.structureVersion;
+    const key = `${this.eco.structureVersion}:${this.fog ? this.eco.visionVersion : -1}:${this.viewer}`;
+    if (key !== this.structure) {
+      this.structure = key;
       this.rebuildRoads();
       this.rebuildFlags();
     }
     this.syncBuildings();
     this.updatePennants(time);
+    this.updateFlames(time);
     this.updateGoods();
     this.updateSettlers(time, dt);
+  }
+
+  /** Whether the viewer can see something of `owner` at `t` (explored ground, or lit right now if `live`). */
+  seen(t: number, owner: number, live = false): boolean {
+    if (!this.fog || owner === this.viewer) return true;
+    const arr = live ? this.eco.visible[this.viewer] : this.eco.explored[this.viewer];
+    return !arr || arr[t] === 1;
+  }
+
+  /** Flames and soft halos over lit lanterns and each Hearthship, in the owner's colour. */
+  private updateFlames(time: number): void {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const c = new THREE.Color();
+    const warm = new THREE.Color("#ffd9a0");
+    const night = this.night.value;
+    let n = 0;
+    for (const b of this.eco.buildings) {
+      if (!b.alive || !b.built || !b.lit || !b.def.light || n >= 1024) continue;
+      const v = this.buildings.get(b.id);
+      const at = LANTERN_FLAME[b.def.id];
+      if (!v || !at) continue;
+      v.mesh.updateMatrix();
+      p.copy(at).applyMatrix4(v.mesh.matrix);
+      const flicker = 0.9 + Math.sin(time * 7.1 + b.id * 1.7) * 0.06 + Math.sin(time * 13.3 + b.id) * 0.04;
+      const big = b.def.id === "beacon" || b.def.id === "keep" ? 1.6 : b.def.id === "lamphouse" ? 1.2 : 1;
+      c.copy(playerColor(b.owner)).lerp(warm, 0.45).multiplyScalar((1.4 + night * 1.6) * flicker);
+      m.compose(p, q, s.setScalar(big * flicker));
+      this.flames.setMatrixAt(n, m);
+      this.flames.setColorAt(n, c);
+      m.compose(p, q, s.setScalar(big * (1.3 + night * 1.6) * flicker));
+      this.halos.setMatrixAt(n, m);
+      this.halos.setColorAt(n, c.multiplyScalar(0.25 + night * 0.45));
+      n++;
+    }
+    for (const mesh of [this.flames, this.halos]) {
+      mesh.count = n;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
   }
 
   /** Windmill sails turn in the wind, faster while grinding. */
@@ -130,7 +217,7 @@ export class EconView {
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
     for (const road of this.eco.roads) {
-      if (!road.alive) continue;
+      if (!road.alive || !this.seen(road.tiles[1] ?? road.tiles[0] as number, road.owner)) continue;
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i < road.tiles.length - 1; i++) {
         const a = road.tiles[i] as number;
@@ -172,7 +259,7 @@ export class EconView {
     const q = new THREE.Quaternion();
     let n = 0;
     for (const f of this.eco.flags) {
-      if (!f.alive || n >= this.flagPoles.instanceMatrix.count) continue;
+      if (!f.alive || n >= this.flagPoles.instanceMatrix.count || !this.seen(f.tile, f.owner)) continue;
       const p = this.frames.pos(f.tile);
       this.frames.orient(p, null, q);
       m.compose(p, q, new THREE.Vector3(1, 1, 1));
@@ -189,7 +276,8 @@ export class EconView {
     const axis = new THREE.Vector3(0, 1, 0);
     let n = 0;
     for (const f of this.eco.flags) {
-      if (!f.alive || n >= this.pennants.instanceMatrix.count) continue;
+      if (!f.alive || n >= this.pennants.instanceMatrix.count || !this.seen(f.tile, f.owner)) continue;
+      this.pennants.setColorAt(n, playerColor(f.owner));
       const p = this.frames.pos(f.tile);
       this.frames.orient(p, null, q);
       yaw.setFromAxisAngle(axis, 0.6 + Math.sin(time * 2.3 + f.id) * 0.35 + Math.sin(time * 5.1 + f.id * 3) * 0.08);
@@ -199,12 +287,13 @@ export class EconView {
     }
     this.pennants.count = n;
     this.pennants.instanceMatrix.needsUpdate = true;
+    if (this.pennants.instanceColor) this.pennants.instanceColor.needsUpdate = true;
   }
 
   private syncBuildings(): void {
     const seen = new Set<number>();
     for (const b of this.eco.buildings) {
-      if (!b.alive) continue;
+      if (!b.alive || !this.seen(b.tile, b.owner)) continue;
       seen.add(b.id);
       const stage = b.built ? "built" : `site${Math.min(4, Math.floor((b.consumed / Math.max(1, b.costTotal)) * 5))}`;
       const key = `${b.def.id}:${stage}`;
@@ -246,7 +335,7 @@ export class EconView {
     const s = new THREE.Vector3(1, 1, 1);
     let n = 0;
     for (const f of this.eco.flags) {
-      if (!f.alive || f.goods.length === 0) continue;
+      if (!f.alive || f.goods.length === 0 || !this.seen(f.tile, f.owner, true)) continue;
       const center = this.frames.pos(f.tile);
       const up = center.clone().normalize();
       const tA = new THREE.Vector3(0, 1, 0).cross(up);
@@ -302,7 +391,7 @@ export class EconView {
         heading.copy(this.frames.pos(nt)).sub(d);
       }
       d.lerp(target, k);
-      if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS) continue;
+      if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || !this.seen(s.path[s.pi] as number, s.owner, true)) continue;
       const working = s.state === "work";
       const bob = moving ? Math.abs(Math.sin(time * 13 + s.id)) * 0.05 : working ? Math.abs(Math.sin(time * 6 + s.id)) * 0.06 : 0;
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);

@@ -36,6 +36,17 @@ multiplayer needs `npm run dev` or the desktop build.
 Press M for the game menu. Saves are the seed plus every command; loading replays them.
 "Copy save" puts the save on the clipboard so it can be attached to bug reports.
 
+## Territory, rivals and fog
+
+Your border is made of light. Lantern posts, lamp houses and beacon towers are lit once a warden
+walks in, and their light claims the land around them. Put out a lantern (demolish it) and
+whatever stood only in its light burns down. Wardens per lantern follow the garrison sliders in
+Economy → Tools (frontier and inland). Land you have never lit stays in fog.
+
+Solo worlds start with one AI rival (Settings → World sets 0–3). The rival builds and expands
+with lanterns like a player would, from inside the deterministic simulation. The debug dialog
+can lift the fog.
+
 ## Keys
 
 | Key | Action |
@@ -46,7 +57,7 @@ Press M for the game menu. Saves are the seed plus every command; loading replay
 | Space | Pause / resume |
 | M | Game menu (saves, multiplayer) |
 | 1 / 2 | Flag / road tools |
-| 3–6 | Buildings |
+| 3–7 | Buildings (7: lanterns, which light up and widen your border) |
 | X | Demolish |
 | P | Economy panel (stock, people and Glow, distribution, tools) |
 | Click a settler | Their card: age, skills, journal; Follow keeps the camera on them |
