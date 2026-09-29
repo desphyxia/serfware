@@ -1,5 +1,8 @@
 import * as THREE from "three/webgpu";
-import type { PainterlyMaterial } from "./painterly";
+import { ChunkedTerrain } from "./terrain/chunks";
+import { TerrainField, type Pad } from "./terrain/field";
+import { makeGroundMaterial } from "./terrain/material";
+import { TileData } from "./terrain/tileData";
 import type { GraphicsSettings } from "../core/settings";
 import type { World } from "../sim/world";
 import { AtmosphereShell, CloudLayer } from "./atmosphere";
@@ -16,14 +19,19 @@ import { WeatherFx } from "./weatherFx";
 import type { FogMask } from "./fogMask";
 import { playerColor } from "./players";
 import { StarWellMarkers } from "./starWells";
-import { buildSurface, makeTerrainMaterial } from "./terrainMesh";
+import { buildSurface } from "./terrainMesh";
 import { TileHighlight } from "./tileHighlight";
 import { makeWaterMaterial } from "./water";
 
 /** Everything drawn for one planet. Created per world and disposed when the world changes. */
 export class WorldView {
   readonly group = new THREE.Group();
-  readonly land: THREE.Mesh<THREE.BufferGeometry, PainterlyMaterial>;
+  /** The detailed ground: a height field and the chunked mesh built on it. */
+  readonly field: TerrainField;
+  readonly terrain: ChunkedTerrain;
+  readonly tileData: TileData;
+  private readonly groundMat: ReturnType<typeof makeGroundMaterial>;
+  private padKey = -1;
   readonly water: THREE.Mesh<THREE.BufferGeometry, ReturnType<typeof makeWaterMaterial>>;
   readonly atmosphere: AtmosphereShell;
   readonly clouds: CloudLayer;
@@ -56,14 +64,13 @@ export class WorldView {
   ) {
     const planet = world.planet;
     const R = planet.params.radius;
-    const baseSub = { low: 0, medium: 1, high: 2 }[graphics.terrainDetail];
-    const sub = Math.max(0, baseSub - (planet.grid.count > 20000 ? 1 : 0));
-    const surface = buildSurface(planet, sub, seed);
-
-    this.land = new THREE.Mesh(surface.land, makeTerrainMaterial());
-    this.land.castShadow = true;
-    this.land.receiveShadow = true;
-    this.land.name = "land";
+    // The sea keeps a coarse surface mesh; the ground is the chunked terrain field.
+    const surface = buildSurface(planet, 0, seed);
+    surface.land.dispose();
+    this.field = new TerrainField(planet, world.land, seed);
+    this.tileData = new TileData(planet.grid.count);
+    this.groundMat = makeGroundMaterial(this.tileData, R);
+    this.terrain = new ChunkedTerrain(planet, this.field, this.groundMat, graphics.terrainDetail);
 
     this.water = new THREE.Mesh(surface.water, makeWaterMaterial());
     this.water.renderOrder = 1;
@@ -72,7 +79,7 @@ export class WorldView {
     this.atmosphere = new AtmosphereShell(R);
     this.clouds = new CloudLayer(R, seed);
     this.wells = new StarWellMarkers(planet);
-    this.frames = new SurfaceFrames(planet);
+    this.frames = new SurfaceFrames(planet, this.field);
     this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask, (t) => this.seasonAt(t));
     this.rivers = new RiverView(world.land, this.frames);
     this.econ = new EconView(world.economy, this.frames);
@@ -80,7 +87,7 @@ export class WorldView {
     this.grass = new GrassPatch(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.group.add(
-      this.land,
+      this.terrain.group,
       this.water,
       this.rivers.group,
       this.weather.group,
@@ -132,23 +139,14 @@ export class WorldView {
     if (this.climateTimer > 0 || w.climate.version === this.climateVersion) return;
     this.climateTimer = 1;
     this.climateVersion = w.climate.version;
-    const g = this.land.geometry;
-    const owner = g.userData.owner as Int32Array;
-    const attr = g.getAttribute("aClimate") as THREE.BufferAttribute;
-    const arr = attr.array as Float32Array;
-    const perTile = new Map<number, { autumn: number }>();
-    for (let i = 0; i < owner.length; i++) {
-      const t = owner[i] as number;
-      let s = perTile.get(t);
-      if (!s) {
-        s = this.seasonAt(t);
-        perTile.set(t, s);
-      }
-      arr[i * 3] = w.land.snowCover[t] as number;
-      arr[i * 3 + 1] = s.autumn;
-      arr[i * 3 + 2] = w.land.mud[t] as number;
+    const td = this.tileData;
+    for (let t = 0; t < w.planet.grid.count; t++) {
+      td.set(t, "snow", w.land.snowCover[t] as number);
+      td.set(t, "autumn", this.seasonAt(t).autumn);
+      td.set(t, "mud", w.land.mud[t] as number);
+      td.set(t, "soil", w.land.soil[t] as number);
     }
-    attr.needsUpdate = true;
+    td.commit();
     // Trees follow a few times a day.
     this.nature.seasonKey = Math.floor(w.climate.version / 40);
   }
@@ -164,7 +162,9 @@ export class WorldView {
     const exp = this.mask.explored;
     const vis = this.mask.visible;
     this.rivers.setFog((t) => (!exp ? 0 : exp[t] !== 1 ? 1 : vis && vis[t] === 1 ? 0 : 0.5));
-    for (const g of [this.land.geometry, this.water.geometry]) {
+    for (let t = 0; t < this.world.planet.grid.count; t++) this.tileData.set(t, "fog", !exp ? 0 : exp[t] !== 1 ? 1 : vis && vis[t] === 1 ? 0 : 0.5);
+    this.tileData.commit("a");
+    for (const g of [this.water.geometry]) {
       const owner = g.userData.owner as Int32Array;
       const attr = g.getAttribute("aFog") as THREE.BufferAttribute;
       const arr = attr.array as Float32Array;
@@ -228,19 +228,36 @@ export class WorldView {
     this.atmosphere.update(p.sunDir, p.orbit);
     this.clouds.update(p.time, p.sunDir, THREE.MathUtils.clamp(1.25 - p.closeness * 1.9, 0, 1));
     this.wells.update(p.time, 1 - p.daylight, p.closeness);
-    const grid = (this.land.material.userData.uniforms as { uGrid: { value: number } }).uGrid;
+    const grid = this.groundMat.userData.uniforms.uGrid;
     const target = this.gridOn ? 1 : 0;
     grid.value += (target - grid.value) * 0.2;
   }
 
   private updateWear(): void {
-    const g = this.land.geometry;
-    const owner = g.userData.owner as Int32Array;
-    const attr = g.getAttribute("aWear") as THREE.BufferAttribute;
     const wear = this.world.land.wear;
-    const arr = attr.array as Float32Array;
-    for (let i = 0; i < owner.length; i++) arr[i] = Math.min(1, (wear[owner[i] as number] as number) / 900);
-    attr.needsUpdate = true;
+    for (let t = 0; t < wear.length; t++) this.tileData.set(t, "wear", Math.min(1, (wear[t] as number) / 900));
+    this.tileData.commit("a");
+  }
+
+  /** Level the ground under buildings and flags; rebuild the chunks whose pads changed. */
+  private updatePads(): void {
+    const eco = this.world.economy;
+    if (eco.structureVersion === this.padKey) return;
+    this.padKey = eco.structureVersion;
+    const pads: Pad[] = [];
+    for (const b of eco.buildings) if (b.alive) pads.push({ tile: b.tile, radius: b.def.large ? 0.55 : 0.42 });
+    for (const f of eco.flags) if (f.alive) pads.push({ tile: f.tile, radius: 0.2 });
+    const changed = this.field.setPads(pads);
+    if (changed.length) {
+      this.terrain.invalidate(changed);
+      this.frames.invalidate();
+    }
+  }
+
+  /** Refine terrain chunks around the camera (call every frame; bounded work). */
+  updateTerrain(camPos: THREE.Vector3, budgetMs = 5): void {
+    this.updatePads();
+    this.terrain.update(camPos, budgetMs);
   }
 
   /** Tile under a ray: intersect the sea-level sphere, then refine against tile heights. */
@@ -255,12 +272,13 @@ export class WorldView {
       if (!ray.intersectSphere(sphere, hit)) return tile;
       const d = hit.clone().normalize();
       tile = planet.grid.nearestTile([d.x, d.y, d.z], tile >= 0 ? tile : hint);
-      r = planet.surfaceRadius(tile);
+      r = this.field.tileRadius(tile);
     }
     return tile;
   }
 
   dispose(): void {
+    this.terrain.dispose();
     this.nature.dispose();
     this.grass.dispose();
     this.fauna.dispose();

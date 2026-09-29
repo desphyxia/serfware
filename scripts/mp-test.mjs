@@ -22,6 +22,8 @@ try {
     await page.evaluate(() => {
       const s = window.__seedfall.game.settings;
       s.applyPreset("low");
+      // This test is about the simulation and the network; software rendering only slows it down.
+      window.__seedfall.game.hold = true;
     });
     return { page, errors };
   };

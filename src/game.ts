@@ -134,6 +134,7 @@ export class Game {
     this.view.setViewer(this.session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.focusStart();
+    this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
 
     this.hud = new Hud({
       settings: () => this.settingsPanel.toggle(),
@@ -264,7 +265,7 @@ export class Game {
       planet.params.radius,
       (dir) => {
         const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.hoverTile : 0);
-        return planet.surfaceRadius(t);
+        return this.view ? this.view.frames.groundAt(dir, t) : planet.surfaceRadius(t);
       },
       { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll },
     );
@@ -536,6 +537,7 @@ export class Game {
     this.following = -1;
     this.tools.set("select");
     this.focusStart();
+    this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
     session.onDesync = (detail) => {
       crash.capture({ kind: "desync", message: detail });
       this.toasts.show("The game went out of sync. A report has been prepared (F8).", "warn");
@@ -815,6 +817,7 @@ export class Game {
       this.info.refresh();
       this.economyPanel.refresh();
     }
+    this.view.updateTerrain(this.camera.position);
     this.gfx.render();
 
     const day = this.world.localDay(this.focusLon());

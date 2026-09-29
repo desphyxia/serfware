@@ -64,11 +64,17 @@ try {
     if (shot.after) await page.evaluate(shot.after);
     await page.waitForTimeout(shot.setup ? 300 : shot.wait);
     // The software GPU is slow: freeze the loop, draw the last frames on demand, then capture.
+    // Then let the live loop present a few real frames (a held canvas can show a stale image).
     await page.evaluate(() => {
       const g = window.__seedfall.game;
       g.hold = true;
       g.renderFrames(3);
+      g.hold = false;
     });
+    await page.evaluate(
+      () => new Promise((done) => { let n = 0; const tick = () => (++n >= 3 ? done() : requestAnimationFrame(tick)); requestAnimationFrame(tick); }),
+    );
+    await page.evaluate(() => { window.__seedfall.game.hold = true; });
     await page.screenshot({ path: `${outDir}/${shot.name}.png`, timeout: 180000 });
     console.log(`${outDir}/${shot.name}.png${errors.length ? ` (errors: ${errors.join("; ")})` : ""}`);
     await page.close();
