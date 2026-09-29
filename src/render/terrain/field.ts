@@ -68,8 +68,13 @@ export class TerrainField {
       this.baseH[t] = land.hydro.lake[t] ? (land.hydro.lakeLevel[t] as number) - 0.7 : e;
     }
     this.tileCol = [];
+    const wet = (t: number) => !land.isLand(t) || land.hydro.lake[t] === 1;
     for (let t = 0; t < grid.count; t++) {
-      const c = biomeColor(terrain.biome[t] as Biome, tileHash(t), new THREE.Color());
+      let b = terrain.biome[t] as Biome;
+      // Sand only where the water is: inland "beach" tiles are dry meadow.
+      if (b === Biome.Beach && !wet(t) && !grid.neighborsOf(t).some(wet)) b = Biome.Steppe;
+      const c = biomeColor(b, tileHash(t), new THREE.Color());
+      if (b === Biome.Steppe && (terrain.biome[t] as Biome) === Biome.Beach) c.lerp(biomeColor(Biome.Meadow, tileHash(t), new THREE.Color()), 0.45);
       c.offsetHSL(0, 0, (0.5 - (terrain.moisture[t] as number)) * 0.05);
       this.tileCol.push(c);
     }
@@ -127,7 +132,7 @@ export class TerrainField {
   }
 
   /** Height above the planet radius at a unit direction. */
-  height(x: number, y: number, z: number, hint?: number, col: THREE.Color | null = null): FieldSample {
+  height(x: number, y: number, z: number, hint?: number, col: THREE.Color | null = null, withPads = true): FieldSample {
     const t = this.tileAt(x, y, z, hint);
     let h = this.blend(x, y, z, t, col);
     const land = this.land;
@@ -144,6 +149,31 @@ export class TerrainField {
         // Ridged rock in the mountains.
         const rn = 1 - Math.abs(this.ridge.fbm(x * f * 0.9, y * f * 0.9, z * f * 0.9, 4));
         h += rn * rn * m * m * this.peak * 0.22;
+      }
+      const hill = smooth(0.6, 2.2, h);
+      // Gullies worn by rain: narrow ridged-noise valleys on hills and mountain flanks.
+      const g = 1 - Math.abs(this.ridge.get(x * f * 1.9 + 7.1, y * f * 1.9, z * f * 1.9));
+      h -= Math.pow(g, 10) * hill * (0.28 + 0.5 * m);
+      // Soft terraces on some hillsides.
+      const tmask = smooth(0.15, 0.45, this.noise.get(x * f * 0.35 + 3.3, y * f * 0.35, z * f * 0.35)) * hill * (1 - m);
+      if (tmask > 0.01) {
+        const step = 0.42;
+        const k = h / step;
+        const fl = Math.floor(k);
+        const r = k - fl;
+        const shaped = (fl + smooth(0.55, 1, r)) * step;
+        h += (shaped - h) * tmask * 0.8;
+      }
+      // Rock outcrops: sharp bumps where a mid-frequency noise peaks.
+      const o = this.noise.get(x * f * 2.6 + 11, y * f * 2.6, z * f * 2.6);
+      h += smooth(0.42, 0.7, o) * (0.18 + 0.4 * m) * coast;
+      // Cliffs: in high mountains the ground breaks into stepped strata with steep faces.
+      if (m > 0.35) {
+        const cs = this.peak * 0.075;
+        const ck = h / cs;
+        const cf = Math.floor(ck);
+        const cliff = (cf + smooth(0.7, 0.95, ck - cf)) * cs;
+        h += (cliff - h) * smooth(0.35, 0.65, m) * 0.85;
       }
     }
     // Riverbeds along each river segment near this point.
@@ -187,8 +217,10 @@ export class TerrainField {
       const ph = this.padHeight(p);
       h += (ph - h) * smooth(r * 1.8, r, d);
     };
-    pad(t);
-    for (const n of grid.neighborsOf(t)) pad(n);
+    if (withPads) {
+      pad(t);
+      for (const n of grid.neighborsOf(t)) pad(n);
+    }
     return { h, tile: t };
   }
 

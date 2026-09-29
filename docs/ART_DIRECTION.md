@@ -1,7 +1,7 @@
 # Seedfall art direction
 
-Status: **agreed**. A1 (renderer foundation) is merged. A2 (visual target scene) is built and
-waiting for approval of the look; the debug dialog's **Visit hamlet** opens the scene.
+Status: **agreed**. A1 (renderer foundation), A2 (visual target scene) and A3 (terrain
+everywhere) are built; the debug dialog's **Visit hamlet** opens the target scene.
 
 Reference: the original *Serf City* (*The Settlers*, 1993), rebuilt with 2026 techniques.
 Decisions taken: **stylised painterly** look, **everything procedural** (no bought or downloaded
@@ -180,7 +180,7 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 |---|---|---|
 | A1 ✓ | Renderer foundation | WebGPU renderer with WebGL2 fallback; current materials ported to TSL; new post-processing pipeline (ambient occlusion, AgX, grading); cascaded shadows; overview camera |
 | A2 ✓ | **Visual target scene** | A riverside hamlet at final quality: detailed terrain (all three layers), water, trees, three buildings, settlers, goods, day/night. **Approval gate** |
-| A3 | Terrain everywhere | Chunked detail levels for the whole planet; procedural sculpting, cliffs, riverbeds, shores; blended materials; levelled pads under buildings; paths and roads pressed into the ground; near-camera scatter |
+| A3 ✓ | Terrain everywhere | Chunked detail levels for the whole planet; procedural sculpting, cliffs, riverbeds, shores; blended materials; levelled pads under buildings; paths and roads pressed into the ground; near-camera scatter |
 | A4 | Water, sky and weather | Sea, lakes and rivers; physically based sky and painted clouds; haze and light shafts; rain, snow, mud and seasons in the new style |
 | A5 | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
 | A6 | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
@@ -200,5 +200,19 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
   chop, hammer, dig, duel), with a hat and tool per trade. Goods are real miniatures.
 - **Trees:** fluffy broadleaf crowns and drooping conifer tiers with soft normals.
 - **Rivers** fill their carved beds (they were invisible before because of a triangle winding bug).
+
+### What A3 delivered
+
+- **No popping:** terrain chunks morph between detail levels (about 0.3 s per step).
+- **Sculpting:** gullies, soft terraces, rock outcrops and stepped cliffs in high mountains, on
+  top of A2's rolling ground, ridges, riverbeds and lake basins.
+- **Surface:** procedural relief bends the ground's normals (rough rock, tufty grass, rippled
+  sand); snow drifts with patchy edges; sand only along shores.
+- **Water in the ground:** rivers are continuous, smoothed courses whose surface follows the
+  carved bed; lake shores are drawn by the terrain rising out of the water.
+- **Roads:** cart ruts and edge stones on busy roads (from traffic wear), puddles when muddy.
+- **Scatter:** grass, flowers, pebbles and autumn leaves near the camera; bushes, boulders and
+  reeds further out.
+- **Budget:** about 0.33 M terrain triangles at the overview, 0.5 M close in (limit 1 M).
 
 After A7 we return to batch 11. The later biome batches (13–16) follow this document.

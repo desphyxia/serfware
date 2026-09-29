@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import {
   attribute,
+  cameraViewMatrix,
   clamp,
   dot,
   float,
@@ -11,6 +12,7 @@ import {
   mx_noise_float,
   normalize,
   normalWorld,
+  positionLocal,
   positionWorld,
   sin,
   smoothstep,
@@ -65,7 +67,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   // Rock on steep slopes, with warm strata along the height.
   const strata = sin(height.mul(5.5).add(mid.mul(2.5))).mul(0.5).add(0.5);
   const rock = mix(vec3(0.52, 0.49, 0.45), vec3(0.64, 0.58, 0.5), strata).mul(float(0.85).add(fine.mul(0.15)));
-  const rockMix = smoothstep(0.22, 0.42, slope.add(fine.mul(0.06)));
+  const rockMix = smoothstep(0.2, 0.48, slope.add(fine.mul(0.04)));
   c = mix(c, rock, rockMix);
 
   // Beaches: wet dark sand at the waterline, dry pale sand just above.
@@ -83,12 +85,31 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const luma = dot(c, vec3(0.3, 0.59, 0.11));
   c = mix(c, vec3(0.62, 0.48, 0.22).mul(luma.mul(1.9).add(0.1)), autumn.mul(green).mul(0.9));
   c = c.mul(float(1).sub(mud.mul(0.28)));
-  const snowCover = smoothstep(0.08, 0.55, snow).mul(float(1).sub(smoothstep(0.35, 0.6, slope)));
+  // Snow drifts: patchy edges, deeper in hollows, sliding off steep ground.
+  const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08))).mul(float(1).sub(smoothstep(0.35, 0.6, slope)));
   c = mix(c, vec3(0.9, 0.93, 0.97), snowCover.mul(0.95));
   // Fog of war: remembered land a little faded, unexplored land dark and grey.
   const grey = dot(c, vec3(0.3, 0.59, 0.11));
   c = mix(c, mix(vec3(grey), c, 0.7).mul(0.86), smoothstep(0.1, 0.5, fog));
   c = mix(c, mix(vec3(grey), c, 0.3).mul(0.1).add(vec3(0.008, 0.011, 0.02)), smoothstep(0.55, 1, fog));
+  // Geomorphing: each chunk blends from its coarser shape to full detail (see ChunkedTerrain).
+  const morph = uniform(1).onObjectUpdate(({ object }) => (object?.userData.morph as number | undefined) ?? 1);
+  mat.positionNode = mix(attribute("aCoarse", "vec3"), positionLocal, morph);
+  // Fine relief: bend the normal along a procedural height's gradient. Rock is rough, grass
+  // tufty, sand rippled, snow smooth.
+  const bumpAt = (q: THREE.Node<"vec3">) =>
+    mx_noise_float(q.mul(3.1))
+      .mul(mix(float(0.35), float(1), rockMix))
+      .add(mx_noise_float(q.mul(9)).mul(0.35))
+      .add(sin(q.x.mul(14).add(q.z.mul(9)).add(mx_noise_float(q.mul(0.8)).mul(4))).mul(beach).mul(0.4));
+  const eps = 0.04;
+  const h0 = bumpAt(p);
+  const grad = vec3(bumpAt(p.add(vec3(eps, 0, 0))).sub(h0), bumpAt(p.add(vec3(0, eps, 0))).sub(h0), bumpAt(p.add(vec3(0, 0, eps))).sub(h0)).div(eps);
+  const nW = normalize(normalWorld);
+  const tangential = grad.sub(nW.mul(dot(grad, nW)));
+  const strength = mix(float(0.03), float(0.14), rockMix).mul(float(1).sub(snowCover.mul(0.8)));
+  const bumped = normalize(nW.sub(tangential.mul(strength)));
+  mat.normalNode = normalize(cameraViewMatrix.mul(vec4(bumped, 0)).xyz);
   mat.vertexColors = false;
   mat.colorNode = vec4(c, 1);
   const out = mat as PainterlyMaterial & { userData: { uniforms: { uGrid: THREE.UniformNode<"float", number> } } };

@@ -36,13 +36,14 @@ const all = [
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
 // The art shot list (docs/ART_DIRECTION.md § How we check it): rendered after every art batch.
-const ART = ["forest-edge", "figures", "kit-house", "kit-sawmill", "kit-fisher", "hamlet-dawn", "hamlet-noon", "hamlet-dusk", "hamlet-night", "closeup-art", "region-art", "river", "battle", "orbit"];
+const ART = ["autumn-close", "forest-edge", "figures", "kit-house", "kit-sawmill", "kit-fisher", "hamlet-dawn", "hamlet-noon", "hamlet-dusk", "hamlet-night", "closeup-art", "region-art", "river", "battle", "orbit"];
 all.push(
   { name: "hamlet-noon", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 34); g.clearWeather(); g.setHour(12); g.setView(34, 0.5); } },
   { name: "hamlet-dawn", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 30); g.clearWeather(); g.setHour(6.4); g.setView(30, 5.2); } },
   { name: "hamlet-dusk", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 30); g.clearWeather(); g.setHour(19.4); g.setView(30, 2.4); } },
   { name: "hamlet-night", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 30); g.setHour(23.5); g.setView(30, 1.2); } },
   { name: "closeup-art", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 9); g.setHour(10); g.setView(9, 2.2); } },
+  { name: "autumn-close", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4000; i++) g.world.step(); g.skipDays(11); g.focusBuilding("woodcutter", 7); g.clearWeather(); g.setHour(15.5); g.setView(7, 2.0); } },
   { name: "forest-edge", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusBuilding("woodcutter", 9); g.clearWeather(); g.setHour(16.5); g.setView(9, 1.4); } },
   { name: "figures", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusSettler("carrier", 4); g.clearWeather(); g.setHour(11); g.setView(4, 0.9); } },
   { name: "kit-house", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusBuilding("house", 6); g.clearWeather(); g.setHour(10.5); g.setView(6, 0.6); } },

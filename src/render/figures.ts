@@ -64,7 +64,7 @@ const enum P {
 
 const HIP = 0.2;
 const SHOULDER = 0.39;
-const SKIN = "#e8c3a0";
+const SKIN = "#e2a47c";
 const TROUSERS = "#4a3a30";
 const BOOTS = "#2f2620";
 const WOOD = "#7a5638";
@@ -277,6 +277,8 @@ export class FigureBatch {
     mat.normalNode = normalize(nView);
     const tint = attribute("aTint", "float");
     mat.colorNode = vec4(mix(vec3(vertexColor()), attribute("iColor", "vec3"), tint), 1);
+    // The node already includes the vertex colour; don't let the material multiply it again.
+    mat.vertexColors = false;
 
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;

@@ -6,12 +6,21 @@ const browser = await launch();
 let failed = false;
 try {
   const { page, errors } = await openGame(browser, { seed: "smoke-test-1" });
+  const tick0 = await page.evaluate(() => window.__seedfall.game.world.tick);
   await page.waitForTimeout(2500);
 
   const bugLine = await page.locator(".bugline").textContent();
   if (!bugLine?.includes("seed smoke-test-1") || !bugLine.includes("build ") || !bugLine.includes("Day ")) {
     throw new Error(`Bug line incomplete: ${bugLine}`);
   }
+  // It renders. Software rendering on CI takes seconds per frame, which starves the UI of input,
+  // so pause the loop while driving the dialogs; frames are drawn on demand further down.
+  const tick = await page.evaluate(() => {
+    const g = window.__seedfall.game;
+    g.hold = true;
+    return g.world.tick;
+  });
+  if (!(tick > tick0)) throw new Error(`Simulation did not advance (tick ${tick0} → ${tick})`);
 
   await page.keyboard.press("Escape");
   await page.locator("#settings").waitFor({ state: "visible" });
@@ -24,16 +33,11 @@ try {
   await page.locator("#debug").waitFor({ state: "visible" });
   await page.waitForTimeout(600);
 
-  const tick = await page.evaluate(() => window.__seedfall.game.world.tick);
-  if (!(tick > 5)) throw new Error(`Simulation did not advance (tick ${tick})`);
 
+  // Draw with the settings the dialogs left behind.
+  await page.evaluate(() => window.__seedfall.game.renderFrames(2));
   const reportErrors = await page.evaluate(() => window.__seedfall.errors());
   mkdirSync("artifacts", { recursive: true });
-  // Software rendering is slow (seconds per frame on CI): pause the loop so the capture isn't
-  // queued behind frames.
-  await page.evaluate(() => {
-    window.__seedfall.game.hold = true;
-  });
   await page.screenshot({ path: "artifacts/smoke.png", timeout: 120000 });
   if (errors.length || reportErrors) {
     throw new Error(`Errors during smoke test:\n${errors.join("\n")}\ncrash reporter errors: ${reportErrors}`);

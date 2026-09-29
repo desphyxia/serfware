@@ -5,7 +5,8 @@ import { SurfaceFrames } from "./frames";
 import type { Emitter } from "./smoke";
 import { PAINT, PainterlyMaterial } from "./painterly";
 import { SpriteBatch } from "./sprites";
-import { mrt, output, vec4 } from "three/tsl";
+import { abs, attribute, float, fract, mix, mrt, mx_noise_float, output, positionWorld, smoothstep, step, varying, vec3, vec4, vertexColor } from "three/tsl";
+import type { TileData } from "./terrain/tileData";
 import { playerColor } from "./players";
 import { Anim, FigureBatch, Hat, Tool } from "./figures";
 import {
@@ -49,13 +50,36 @@ export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
   private roadMesh: THREE.Mesh | null = null;
-  private readonly roadMat = (() => {
+  private readonly roadMat: PainterlyMaterial;
+  private makeRoadMaterial(tiles: TileData | null): PainterlyMaterial {
     const m = new PainterlyMaterial({ vertexColors: true, brush: 1.2 });
+    if (tiles) {
+      // Busy roads (worn by traffic) get cart ruts and edge stones; puddles stand in the ruts
+      // when the ground is muddy.
+      const tile = attribute("aTile", "float");
+      const wear = varying(tiles.lookup(tiles.a, tile).x);
+      const mud = varying(tiles.lookup(tiles.b, tile).x);
+      const a = abs(attribute("aAcross", "float"));
+      const along = attribute("aAlong", "float");
+      const onRibbon = attribute("aRut", "float");
+      const busy = smoothstep(0.15, 0.7, wear).mul(onRibbon);
+      const wob = mx_noise_float(vec3(along.mul(0.7), 0, 0)).mul(0.05);
+      const ruts = smoothstep(0.1, 0.0, abs(a.sub(0.42).add(wob))).mul(float(0.25).add(busy.mul(0.55))).mul(onRibbon);
+      const stones = smoothstep(0.84, 0.95, a).mul(busy).mul(step(0.1, fract(along.mul(1.7).add(mx_noise_float(vec3(along.mul(3.1), 1, 0)).mul(0.3)))));
+      let c: THREE.Node<"vec3"> = vec3(vertexColor());
+      c = c.mul(float(1).sub(ruts.mul(0.28)));
+      c = mix(c, vec3(0.62, 0.6, 0.55), stones.mul(0.85));
+      const puddle = smoothstep(0.2, 0.6, mud).mul(smoothstep(0.1, 0.35, mx_noise_float(positionWorld.mul(1.6)))).mul(ruts.add(onRibbon.mul(0.35)).min(1));
+      c = mix(c, mix(c.mul(0.35), vec3(0.55, 0.62, 0.7), 0.35), puddle.mul(0.9));
+      m.colorNode = vec4(c, 1);
+      // The node already includes the vertex colour; don't let the material multiply it again.
+      m.vertexColors = false;
+    }
     m.polygonOffset = true;
     m.polygonOffsetFactor = -2;
     m.polygonOffsetUnits = -6;
     return m;
-  })();
+  }
   private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8 });
   /** Stranded buildings: greyed and dim, like something left behind. */
   private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, color: "#7d7a74", brush: 1.2 });
@@ -85,8 +109,10 @@ export class EconView {
   constructor(
     private readonly eco: Economy,
     frames: SurfaceFrames,
+    groundData: TileData | null = null,
   ) {
     this.frames = frames;
+    this.roadMat = this.makeRoadMaterial(groundData);
     const propMat = new PainterlyMaterial({ vertexColors: true, brush: 0.5 });
     const flagMat = new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: "#3a2410", brush: 0 });
     const inst = (g: THREE.BufferGeometry, m: THREE.Material, n: number, shadow = true) => {
@@ -194,15 +220,25 @@ export class EconView {
     const mid = new THREE.Color("#c7ab80");
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
+    const across: number[] = [];
+    const alongs: number[] = [];
+    const rut: number[] = [];
+    const tileOf: number[] = [];
+    let roadLen = 0;
     for (const road of this.eco.roads) {
       if (!road.alive || !this.seen(road.tiles[1] ?? road.tiles[0] as number, road.owner)) continue;
       const pts: THREE.Vector3[] = [];
+      const ptTile: number[] = [];
       for (let i = 0; i < road.tiles.length - 1; i++) {
         const a = road.tiles[i] as number;
         const b = road.tiles[i + 1] as number;
-        for (let k = 0; k < 8; k++) pts.push(this.frames.between(a, b, k / 8, 0, new THREE.Vector3()));
+        for (let k = 0; k < 8; k++) {
+          pts.push(this.frames.between(a, b, k / 8, 0, new THREE.Vector3()));
+          ptTile.push(k < 4 ? a : b);
+        }
       }
       pts.push(this.frames.pos(road.tiles[road.tiles.length - 1] as number));
+      ptTile.push(road.tiles[road.tiles.length - 1] as number);
       const hint = road.tiles[0] as number;
       // Each vertex sits just above the detailed ground under it, so the road follows the terrain.
       const onGround = (v: THREE.Vector3) => {
@@ -210,7 +246,10 @@ export class EconView {
         return d.multiplyScalar(this.frames.groundAt(d, hint) + 0.03);
       };
       // Round caps where the road meets its flags, so roads joining at a flag close up.
-      for (const end of [pts[0] as THREE.Vector3, pts[pts.length - 1] as THREE.Vector3]) {
+      for (const [end, endTile] of [
+        [pts[0] as THREE.Vector3, road.tiles[0] as number],
+        [pts[pts.length - 1] as THREE.Vector3, road.tiles[road.tiles.length - 1] as number],
+      ] as const) {
         const up = end.clone().normalize();
         const tA = new THREE.Vector3(0, 1, 0).cross(up);
         if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
@@ -220,12 +259,20 @@ export class EconView {
         const c = onGround(end);
         pos.push(c.x, c.y, c.z);
         col.push(mid.r, mid.g, mid.b);
+        across.push(0);
+        alongs.push(0);
+        rut.push(0);
+        tileOf.push(endTile);
         const seg = 12;
         for (let k = 0; k < seg; k++) {
           const a = (k / seg) * Math.PI * 2;
           const v = onGround(end.clone().addScaledVector(tA, Math.cos(a) * 0.36).addScaledVector(tB, Math.sin(a) * 0.36));
           pos.push(v.x, v.y, v.z);
           col.push(edge.r, edge.g, edge.b);
+          across.push(1);
+          alongs.push(0);
+          rut.push(0);
+          tileOf.push(endTile);
           idx.push(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % seg));
         }
       }
@@ -241,16 +288,27 @@ export class EconView {
         const c = onGround(pt);
         pos.push(l.x, l.y, l.z, c.x, c.y, c.z, r.x, r.y, r.z);
         col.push(edge.r, edge.g, edge.b, mid.r, mid.g, mid.b, edge.r, edge.g, edge.b);
+        across.push(-1, 0, 1);
+        const al = roadLen + i * 0.44;
+        alongs.push(al, al, al);
+        rut.push(1, 1, 1);
+        const tl = ptTile[i] as number;
+        tileOf.push(tl, tl, tl);
         if (i > 0) {
           const o = base + (i - 1) * 3;
           const n = base + i * 3;
           idx.push(o, n, o + 1, o + 1, n, n + 1, o + 1, n + 1, o + 2, o + 2, n + 1, n + 2);
         }
       });
+      roadLen += pts.length * 0.44 + 5.3;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute("aAcross", new THREE.Float32BufferAttribute(across, 1));
+    g.setAttribute("aAlong", new THREE.Float32BufferAttribute(alongs, 1));
+    g.setAttribute("aRut", new THREE.Float32BufferAttribute(rut, 1));
+    g.setAttribute("aTile", new THREE.Float32BufferAttribute(tileOf, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
     this.roadMesh = new THREE.Mesh(g, this.roadMat);

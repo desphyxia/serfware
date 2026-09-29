@@ -6,6 +6,8 @@ import type { TerrainField } from "./field";
 const CHUNK_TILES = 48;
 /** Skirts hang this far below chunk borders to hide cracks between detail levels. */
 const SKIRT = 1.2;
+/** Seconds a chunk takes to morph between detail levels (no popping). */
+const MORPH_TIME = 0.3;
 
 interface Chunk {
   id: number;
@@ -15,6 +17,10 @@ interface Chunk {
   level: number;
   mesh: THREE.Mesh | null;
   dirty: boolean;
+  /** 0 = showing the next-coarser shape, 1 = the full detail of `level`. */
+  morph: number;
+  /** Level being faded down to before the mesh is swapped, or -1. */
+  coarsenTo: number;
 }
 
 export interface ChunkStats {
@@ -36,6 +42,7 @@ export class ChunkedTerrain {
   readonly tileChunk: Int32Array;
   private maxLevel: number;
   private triangles = 0;
+  private lastUpdate = 0;
 
   constructor(
     private readonly planet: Planet,
@@ -66,7 +73,7 @@ export class ChunkedTerrain {
       const center = new THREE.Vector3();
       for (const t of tiles) center.add(new THREE.Vector3(...grid.centerOf(t)));
       center.normalize();
-      this.chunks.push({ id, tiles, center, level: -1, mesh: null, dirty: true });
+      this.chunks.push({ id, tiles, center, level: -1, mesh: null, dirty: true, morph: 1, coarsenTo: -1 });
     }
     this.group.name = "terrain";
   }
@@ -88,16 +95,48 @@ export class ChunkedTerrain {
    */
   update(cam: THREE.Vector3, budgetMs = 6): number {
     const t0 = performance.now();
+    const dt = this.lastUpdate ? Math.min(0.1, (t0 - this.lastUpdate) / 1000) : 0;
+    this.lastUpdate = t0;
+    const instant = budgetMs === Infinity;
+    const step = instant ? 1 : dt / MORPH_TIME;
     const todo: { c: Chunk; lvl: number; d: number }[] = [];
     for (const c of this.chunks) {
       const lvl = this.wantLevel(c, cam);
-      if (lvl !== c.level || c.dirty) todo.push({ c, lvl, d: cam.distanceToSquared(c.center.clone().multiplyScalar(this.planet.params.radius)) });
+      // Morph newly refined chunks up to full detail.
+      if (c.coarsenTo < 0 && c.morph < 1) c.morph = Math.min(1, c.morph + step);
+      if (c.mesh) c.mesh.userData.morph = c.morph;
+      if (c.dirty || c.level < 0 || instant) {
+        if (lvl !== c.level || c.dirty) todo.push({ c, lvl, d: cam.distanceToSquared(c.center.clone().multiplyScalar(this.planet.params.radius)) });
+        continue;
+      }
+      if (lvl < c.level) {
+        // Coarsening: fade the current mesh down to its coarser shape first, then swap.
+        if (c.coarsenTo < 0) c.coarsenTo = lvl;
+        c.morph = Math.max(0, c.morph - step);
+        if (c.mesh) c.mesh.userData.morph = c.morph;
+        if (c.morph <= 0) todo.push({ c, lvl: c.level - 1, d: 0 });
+        continue;
+      }
+      c.coarsenTo = -1;
+      // Refining one level at a time, so each step can morph in from the shape before it.
+      if (lvl > c.level && c.morph >= 1) todo.push({ c, lvl: c.level + 1, d: cam.distanceToSquared(c.center.clone().multiplyScalar(this.planet.params.radius)) });
     }
     todo.sort((a, b) => a.d - b.d);
     let n = 0;
     for (const { c, lvl } of todo) {
       if (n > 0 && performance.now() - t0 > budgetMs) break;
+      const refining = !instant && !c.dirty && c.level >= 0 && lvl > c.level;
+      const coarsening = c.coarsenTo >= 0;
       this.build(c, lvl);
+      // A refined chunk starts at its coarse shape and morphs in; a coarsened one arrives at
+      // exactly the shape it faded to, and keeps fading if it must go coarser still.
+      c.morph = refining ? 0 : 1;
+      if (coarsening) {
+        const target = c.coarsenTo;
+        c.coarsenTo = lvl > target ? target : -1;
+        c.morph = 1;
+      }
+      if (c.mesh) c.mesh.userData.morph = c.morph;
       n++;
     }
     return n;
@@ -173,12 +212,16 @@ export class ChunkedTerrain {
       return v;
     };
     const mids = new Map<number, number>();
+    /** Parents of vertices added by the last subdivision step (their coarse shape is the parents' midpoint). */
+    const parents = new Map<number, [number, number]>();
+    let lastStep = level === 0;
     const mid = (a: number, b: number) => {
       const key = a < b ? a * 2097152 + b : b * 2097152 + a;
       let m = mids.get(key);
       if (m === undefined) {
         m = add((dx[a] as number) + (dx[b] as number), (dy[a] as number) + (dy[b] as number), (dz[a] as number) + (dz[b] as number), (edge[a] as number) >= (edge[b] as number) ? (owner[a] as number) : (owner[b] as number), ((edge[a] as number) + (edge[b] as number)) / 2);
         mids.set(key, m);
+        if (lastStep) parents.set(m, [a, b]);
       }
       return m;
     };
@@ -201,6 +244,7 @@ export class ChunkedTerrain {
       }
     }
     for (let s = 0; s < level; s++) {
+      lastStep = s === level - 1;
       const next: number[] = [];
       for (let i = 0; i < tris.length; i += 3) {
         const a = tris[i] as number;
@@ -233,6 +277,7 @@ export class ChunkedTerrain {
     const pos = new Float32Array(total * 3);
     const nor = new Float32Array(total * 3);
     const col = new Float32Array(total * 3);
+    const coarse = new Float32Array(total * 3);
     const tileAttr = new Float32Array(total);
     const edgeAttr = new Float32Array(total);
     const color = new THREE.Color();
@@ -312,6 +357,11 @@ export class ChunkedTerrain {
       nor[i * 3 + 1] = fn.y;
       nor[i * 3 + 2] = fn.z;
     }
+    // Coarse shape: the last step's vertices sit on their parents' midpoint.
+    coarse.set(pos.subarray(0, nv * 3));
+    for (const [v, [pa, pb]] of parents) {
+      for (let k = 0; k < 3; k++) coarse[v * 3 + k] = ((pos[pa * 3 + k] as number) + (pos[pb * 3 + k] as number)) / 2;
+    }
     // Skirt vertices hang below their top vertex.
     for (let j = 0; j < skirtTop.length; j++) {
       const top = skirtTop[j] as number;
@@ -320,6 +370,7 @@ export class ChunkedTerrain {
       pos[i * 3] = (pos[top * 3] as number) * k;
       pos[i * 3 + 1] = (pos[top * 3 + 1] as number) * k;
       pos[i * 3 + 2] = (pos[top * 3 + 2] as number) * k;
+      for (let m = 0; m < 3; m++) coarse[i * 3 + m] = (coarse[top * 3 + m] as number) * k;
       nor.copyWithin(i * 3, top * 3, top * 3 + 3);
       col.copyWithin(i * 3, top * 3, top * 3 + 3);
       tileAttr[i] = tileAttr[top] as number;
@@ -335,6 +386,7 @@ export class ChunkedTerrain {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     g.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+    g.setAttribute("aCoarse", new THREE.BufferAttribute(coarse, 3));
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     g.setAttribute("aTile", new THREE.BufferAttribute(tileAttr, 1));
     g.setAttribute("aEdge", new THREE.BufferAttribute(edgeAttr, 1));
