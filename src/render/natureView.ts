@@ -1,10 +1,10 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import { MEMORIAL } from "../sim/econ/economy";
 import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { broadleafGeometry, coniferGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
-import { patchWind } from "./wind";
+import { PainterlyMaterial } from "./painterly";
 
 /**
  * Trees, rocks and stumps from the simulation's tile features, drawn as instanced meshes and
@@ -35,9 +35,8 @@ export class NatureView {
     private readonly mask: FogMask,
     private readonly season: (t: number) => { autumn: number; bare: number; snow: number } = () => ({ autumn: 0, bare: 0, snow: 0 }),
   ) {
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
-    const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
-    patchWind(treeMat, 1);
+    const mat = new PainterlyMaterial({ vertexColors: true, flatShading: true });
+    const treeMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, wind: 1 });
     const make = (g: THREE.BufferGeometry, n: number, material = mat) => {
       const m = new THREE.InstancedMesh(g, material, n);
       m.castShadow = true;
@@ -53,8 +52,7 @@ export class NatureView {
     this.stumps = make(stumpGeometry(), capacity);
     this.soil = make(fieldSoilGeometry(), capacity);
     this.soil.castShadow = false;
-    const rowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
-    patchWind(rowMat, 0.35);
+    const rowMat = new PainterlyMaterial({ vertexColors: true, wind: 0.35 });
     this.rows = make(fieldRowsGeometry(), capacity, rowMat);
     this.signs = make(signpostGeometry(), 2000);
     this.group.name = "nature";

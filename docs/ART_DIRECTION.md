@@ -167,7 +167,10 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 - **A visual target scene first:** a riverside hamlet with every element at final quality. It needs your approval before the look is rolled out to everything else.
 - **Screenshot honesty:** the sandbox has no GPU, so screenshots come from a software renderer.
   - I'll enable the highest settings for stills (slow, but they match what you see).
-  - I'll check whether WebGPU runs on the software renderer, and fall back to WebGL2 stills if it doesn't.
+  - WebGPU does not survive in the sandbox's headless browser (the software GPU loses its device
+    on the first frame), so stills and tests use the WebGL2 backend. It runs the same node
+    materials and the same post-processing, so the look is the same. Players get WebGPU; if a
+    device is ever lost, the game reloads itself on WebGL2.
   - Any difference from real hardware will be stated with each screenshot.
 
 ## 7. Proposed art track (inserted before batch 11)

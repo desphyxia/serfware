@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import type { Planet } from "../sim/planet/planet";
 
 const UP = new THREE.Vector3(0, 1, 0);

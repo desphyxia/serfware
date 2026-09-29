@@ -6,7 +6,8 @@ import { log } from "./core/log";
 import { describeLeak, MemoryMonitor, type MemSample } from "./core/memory";
 import type { SettingsStore } from "./core/settings";
 import { PlanetCamera } from "./render/planetCamera";
-import { GameRenderer } from "./render/renderer";
+import { GameRenderer, GRADE } from "./render/renderer";
+import { PAINT } from "./render/painterly";
 import { SkyDome } from "./render/sky";
 import { WorldView } from "./render/worldView";
 import { formatDay, ticksPerDay } from "./sim/clock";
@@ -434,6 +435,9 @@ export class Game {
     this.world.tick = Math.max(0, this.world.tick + Math.round((hour - current) * perHour));
   }
 
+  /** Test and screenshot hook: stop the animation loop (frames only via `renderFrames`). */
+  hold = false;
+
   /** Test and screenshot hook: run frames synchronously (software renderers are very slow). */
   renderFrames(n: number): void {
     let t = performance.now();
@@ -481,11 +485,14 @@ export class Game {
     this.camera.updateProjectionMatrix();
   }
 
-  start(): void {
+  async start(): Promise<void> {
+    await this.gfx.init();
+    log.info(`Renderer: ${this.gfx.backend}`);
     this.resize();
     window.setTimeout(() => this.sampleMemory(), 1000);
     const frame = (now: number) => {
       requestAnimationFrame(frame);
+      if (this.hold) return;
       try {
         this.frame(now);
       } catch (err) {
@@ -820,6 +827,30 @@ export class Game {
     this.debug.update();
   }
 
+  /** Colour grade and painterly light for the time of day, plus close-up depth of field. */
+  private applyGrade(elevation: number): void {
+    const day = this.daylight;
+    const night = 1 - day;
+    const dusk = Math.exp(-Math.pow(elevation * 4, 2)) * THREE.MathUtils.smoothstep(elevation, -0.25, 0.05) + Math.exp(-Math.pow(elevation * 4, 2)) * 0.4;
+    const mix3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    let hi = mix3([1.05, 1.02, 0.95], [1.14, 1.0, 0.82], Math.min(1, dusk));
+    hi = mix3(hi, [0.9, 0.96, 1.1], night);
+    let lo = mix3([0.94, 0.96, 1.07], [0.92, 0.88, 1.16], Math.min(1, dusk));
+    lo = mix3(lo, [0.84, 0.93, 1.22], night);
+    GRADE.highlightTint.value.setRGB(...hi);
+    GRADE.shadowTint.value.setRGB(...lo);
+    GRADE.exposure.value = 1.0 + night * 0.3;
+    GRADE.saturation.value = 1.08 + Math.min(1, dusk) * 0.1 - night * 0.3;
+    let rim = mix3([1.0, 0.86, 0.66], [1.0, 0.68, 0.42], Math.min(1, dusk));
+    rim = mix3(rim, [0.7, 0.8, 1.0], night);
+    PAINT.rimColor.value.setRGB(...rim);
+    PAINT.coolFill.value.copy(this.sky.zenith).lerp(new THREE.Color(0.55, 0.62, 0.9), 0.5);
+    PAINT.coolFillStrength.value = 0.22 + night * 0.15;
+    const dofOn = this.settings.get().graphics.dof;
+    GRADE.dofAmount.value = dofOn ? 1 - THREE.MathUtils.smoothstep(this.cam.distance, 10, 24) : 0;
+    GRADE.dofFocus.value = this.cam.distance;
+  }
+
   private updateEnvironment(now: number, dt: number): void {
     const p = this.world.planet.params;
     const f = this.world.day().fraction;
@@ -836,6 +867,7 @@ export class Game {
     const local = ground.clone().normalize();
     const elevation = local.dot(this.sunDir);
     this.daylight = THREE.MathUtils.smoothstep(elevation, -0.2, 0.3);
+    this.applyGrade(elevation);
     const air = 1 - THREE.MathUtils.smoothstep(camPos.length(), R * 1.25, R * 2.1);
     const closeness = this.cam.closeness();
     const time = (now - this.clockStart) / 1000;
@@ -1007,7 +1039,7 @@ export class Game {
     log.info("Leak test started: allocating one geometry per second");
     this.leakTimer = window.setInterval(() => {
       const g = new THREE.BoxGeometry(1, 1, 1);
-      this.gfx.renderer.render(new THREE.Mesh(g), this.camera);
+      this.gfx.renderOnce(new THREE.Mesh(g));
       this.leakTest.push(g);
     }, 1000);
   }

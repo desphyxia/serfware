@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 export async function launch() {
   return chromium.launch({
-    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-unsafe-webgpu"],
   });
 }
 
@@ -14,7 +14,9 @@ export async function launch() {
 export function gameUrl(seed) {
   const file = resolve("dist-single/index.html");
   if (!existsSync(file)) throw new Error("Run `npm run build:single` first.");
-  return pathToFileURL(file).href + (seed ? `#${seed}` : "");
+  // Headless Chromium here cannot keep a WebGPU device alive, so tests use the WebGL2 backend
+  // (same materials and post-processing).
+  return pathToFileURL(file).href + "?backend=webgl" + (seed ? `#${seed}` : "");
 }
 
 export async function openGame(browser, { seed, width = 1280, height = 800 } = {}) {

@@ -1,4 +1,5 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { SpriteBatch } from "./sprites";
 
 const DROPS = 1400;
 
@@ -9,7 +10,7 @@ const DROPS = 1400;
 export class WeatherFx {
   readonly group = new THREE.Group();
   private readonly rain: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-  private readonly snow: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
+  private readonly snow = new SpriteBatch(DROPS, { renderOrder: 8, soft: false });
   /** Drop offsets in a local frame: x, z across, y height (0..1). */
   private readonly local = new Float32Array(DROPS * 3);
   private seed = 11;
@@ -23,15 +24,11 @@ export class WeatherFx {
     const rg = new THREE.BufferGeometry();
     rg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(DROPS * 6), 3).setUsage(THREE.DynamicDrawUsage));
     this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: "#c8d6e8", transparent: true, opacity: 0.35, depthWrite: false }));
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(DROPS * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    this.snow = new THREE.Points(sg, new THREE.PointsMaterial({ color: "#ffffff", size: 0.16, transparent: true, opacity: 0.85, depthWrite: false }));
-    for (const o of [this.rain, this.snow]) {
-      o.frustumCulled = false;
-      o.renderOrder = 8;
-      o.visible = false;
-    }
-    this.group.add(this.rain, this.snow);
+    this.rain.frustumCulled = false;
+    this.rain.renderOrder = 8;
+    this.rain.visible = false;
+    this.snow.mesh.visible = false;
+    this.group.add(this.rain, this.snow.mesh);
   }
 
   private rand(): number {
@@ -47,7 +44,7 @@ export class WeatherFx {
   update(dt: number, ground: THREE.Vector3, amount: number, snowing: boolean, span: number, wind: THREE.Vector3): void {
     const on = amount > 0.04;
     this.rain.visible = on && !snowing;
-    this.snow.visible = on && snowing;
+    this.snow.mesh.visible = on && snowing;
     if (!on) return;
     const up = ground.clone().normalize();
     const a = new THREE.Vector3(0, 1, 0).cross(up);
@@ -58,8 +55,8 @@ export class WeatherFx {
     const count = Math.floor(DROPS * Math.min(1, amount * 1.3));
     const fall = snowing ? 0.12 : 0.9;
     const L = this.local;
-    const pos = (snowing ? this.snow : this.rain).geometry.getAttribute("position") as THREE.BufferAttribute;
-    const arr = pos.array as Float32Array;
+    const pos = this.rain.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const arr = snowing ? this.snow.pos : (pos.array as Float32Array);
     const p = new THREE.Vector3();
     const streak = up.clone().multiplyScalar(-0.5).addScaledVector(wind, 0.4);
     for (let i = 0; i < DROPS; i++) {
@@ -76,14 +73,17 @@ export class WeatherFx {
       if (snowing) arr.set([p.x, p.y, p.z], i * 3);
       else arr.set([p.x, p.y, p.z, p.x + streak.x, p.y + streak.y, p.z + streak.z], i * 6);
     }
-    pos.needsUpdate = true;
+    if (snowing) {
+      this.snow.size.fill(0.16);
+      this.snow.alpha.fill(0.85);
+      this.snow.flush(count);
+    } else pos.needsUpdate = true;
     this.rain.material.opacity = 0.18 + amount * 0.3;
   }
 
   dispose(): void {
     this.rain.geometry.dispose();
-    this.snow.geometry.dispose();
     this.rain.material.dispose();
-    this.snow.material.dispose();
+    this.snow.dispose();
   }
 }

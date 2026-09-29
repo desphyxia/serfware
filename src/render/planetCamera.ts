@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 
 export interface CameraInputOptions {
   invertZoom: () => boolean;
@@ -51,9 +51,28 @@ export class PlanetCamera {
     return THREE.MathUtils.smoothstep(this.maxDistance * 0.55 - this.distance, 0, this.maxDistance * 0.55 - this.minDistance);
   }
 
+  /**
+   * Angle of view from straight down. The Serf City overview looks down at 55° (0.61 rad from
+   * vertical) across the whole settlement range; close in it tilts toward 35° for a miniature
+   * feel; far out it straightens up to look at the globe.
+   */
   pitch(): number {
-    const t = Math.pow(this.closeness(), 0.75);
-    return THREE.MathUtils.clamp(t * 1.12 + this.pitchOffset, 0, 1.35);
+    const R = this.radius;
+    const d = this.distance;
+    const overview = 0.61 * (1 - THREE.MathUtils.smoothstep(d, 0.9 * R, 1.8 * R));
+    const close = 0.35 * (1 - THREE.MathUtils.smoothstep(d, this.minDistance, 14));
+    return THREE.MathUtils.clamp(overview + close + this.pitchOffset, 0, 1.35);
+  }
+
+  /** Field of view: a narrow, map-like 28° over the settlement, wider from orbit. */
+  fov(): number {
+    return 28 + 14 * THREE.MathUtils.smoothstep(this.distance, 0.9 * this.radius, 1.8 * this.radius);
+  }
+
+  /** Back to north-up and the default tilt. */
+  resetView(): void {
+    this.tHeading = Math.round(this.tHeading / (Math.PI * 2)) * Math.PI * 2;
+    this.tPitchOffset = 0;
   }
 
   lookAt(dir: THREE.Vector3, distance?: number): void {
@@ -164,8 +183,9 @@ export class PlanetCamera {
     if (kx || ky) this.pan(kx * speed, ky * speed, 900);
     if (k.has("q")) this.tHeading += 1.6 * dt;
     if (k.has("e")) this.tHeading -= 1.6 * dt;
-    if (k.has("r")) this.tPitchOffset = Math.min(0.5, this.tPitchOffset + dt);
-    if (k.has("f")) this.tPitchOffset = Math.max(-0.6, this.tPitchOffset - dt);
+    if (k.has("r")) this.resetView();
+    if (k.has("pageup")) this.tPitchOffset = Math.min(0.5, this.tPitchOffset + dt);
+    if (k.has("pagedown")) this.tPitchOffset = Math.max(-0.6, this.tPitchOffset - dt);
     if (k.has("+") || k.has("=")) this.tDistance = Math.max(this.minDistance, this.tDistance * (1 - dt * 1.5));
     if (k.has("-")) this.tDistance = Math.min(this.maxDistance, this.tDistance * (1 + dt * 1.5));
 
@@ -191,6 +211,7 @@ export class PlanetCamera {
     if (cam.position.length() < minR) cam.position.copy(camDir.multiplyScalar(minR));
     cam.up.copy(this.up).multiplyScalar(Math.sin(p)).addScaledVector(this.forward, Math.cos(p)).normalize();
     cam.lookAt(this.ground);
+    cam.fov = this.fov();
     cam.near = Math.max(0.05, this.distance * 0.02);
     cam.far = Math.max(this.radius * 60, 9000);
     cam.updateProjectionMatrix();

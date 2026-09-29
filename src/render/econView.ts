@@ -1,8 +1,11 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import { GOODS } from "../sim/econ/defs";
 import type { Economy, Settler } from "../sim/econ/economy";
 import { SurfaceFrames } from "./frames";
-import { patchWindows, type Emitter } from "./smoke";
+import type { Emitter } from "./smoke";
+import { PAINT, PainterlyMaterial } from "./painterly";
+import { SpriteBatch } from "./sprites";
+import { mrt, output, vec4 } from "three/tsl";
 import { playerColor } from "./players";
 import {
   LANTERN_FLAME,
@@ -47,16 +50,16 @@ export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
   private roadMesh: THREE.Mesh | null = null;
-  private readonly roadMat = new THREE.MeshStandardMaterial({
-    vertexColors: true,
-    roughness: 1,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -6,
-  });
-  private readonly buildingMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
+  private readonly roadMat = (() => {
+    const m = new PainterlyMaterial({ vertexColors: true, brush: 1.2 });
+    m.polygonOffset = true;
+    m.polygonOffsetFactor = -2;
+    m.polygonOffsetUnits = -6;
+    return m;
+  })();
+  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8 });
   /** Stranded buildings: greyed and dim, like something left behind. */
-  private readonly strandedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true, color: "#7d7a74" });
+  private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, color: "#7d7a74", brush: 1.2 });
   private readonly buildings = new Map<number, { mesh: THREE.Mesh; key: string }>();
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
@@ -66,7 +69,7 @@ export class EconView {
   private readonly crates: THREE.InstancedMesh;
   private structure = "";
   private readonly flames: THREE.InstancedMesh;
-  private readonly halos: THREE.InstancedMesh;
+  private readonly halos = new SpriteBatch(1024, { additive: true, renderOrder: 9, glow: 1 });
   /** The player whose view this is: other players' things are hidden in the fog. */
   viewer = 0;
   /** Fog of war on or off (off in the debug view). */
@@ -75,7 +78,8 @@ export class EconView {
   /** Settler id drawn at each body instance, for picking. */
   readonly instanceSettler: number[] = [];
   private readonly goodColors: THREE.Color[];
-  readonly night = { value: 0 };
+  /** Night factor 0..1 (shared with the painterly window glow). */
+  readonly night = PAINT.night;
   private readonly emitterCache = new Map<string, Emitter>();
   private rotorGeo: THREE.BufferGeometry | null = null;
 
@@ -84,10 +88,9 @@ export class EconView {
     frames: SurfaceFrames,
   ) {
     this.frames = frames;
-    patchWindows(this.buildingMat, this.night);
-    const propMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
-    const flagMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide, emissive: "#3a2410" });
-    const plain = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.8 });
+    const propMat = new PainterlyMaterial({ vertexColors: true, brush: 0.5 });
+    const flagMat = new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: "#3a2410", brush: 0 });
+    const plain = new PainterlyMaterial({ brush: 0.4 });
     const inst = (g: THREE.BufferGeometry, m: THREE.Material, n: number, shadow = true) => {
       const mesh = new THREE.InstancedMesh(g, m, n);
       mesh.count = 0;
@@ -98,45 +101,16 @@ export class EconView {
     };
     this.flagPoles = inst(flagGeometry(), propMat, 2000);
     this.pennants = inst(pennantGeometry(), flagMat, 2000, false);
-    this.bodies = inst(settlerBodyGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), MAX_SETTLERS);
+    this.bodies = inst(settlerBodyGeometry(), new PainterlyMaterial({ vertexColors: true, brush: 0.4 }), MAX_SETTLERS);
     this.heads = inst(settlerHeadGeometry(), propMat, MAX_SETTLERS);
     this.carried = inst(crateGeometry(), plain, MAX_SETTLERS);
     this.crates = inst(crateGeometry(), plain, MAX_GOODS);
-    this.flames = inst(new THREE.IcosahedronGeometry(0.1, 1), new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false }), 1024, false);
-    this.halos = inst(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        vertexShader: /* glsl */ `
-          varying vec2 vUv; varying vec3 vCol;
-          void main() {
-            vUv = uv;
-            #ifdef USE_INSTANCING_COLOR
-              vCol = instanceColor;
-            #else
-              vCol = vec3(1.0);
-            #endif
-            // Billboard: keep the instance position, face the camera.
-            vec4 c = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-            float sc = length(instanceMatrix[0].xyz);
-            c.xy += position.xy * sc;
-            gl_Position = projectionMatrix * c;
-          }`,
-        fragmentShader: /* glsl */ `
-          varying vec2 vUv; varying vec3 vCol;
-          void main() {
-            float d = length(vUv - 0.5) * 2.0;
-            float a = pow(max(0.0, 1.0 - d), 2.2);
-            gl_FragColor = vec4(vCol * a, a);
-          }`,
-      }),
-      1024,
-      false,
-    );
-    this.halos.renderOrder = 9;
-    for (const mesh of [this.flames, this.halos]) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1024 * 3), 3);
+    const flameMat = new THREE.MeshBasicNodeMaterial({ color: "#ffffff" });
+    // Flames glow: they feed the emissive target for bloom.
+    flameMat.mrtNode = mrt({ emissive: vec4(output.rgb.mul(1.2), 1) });
+    this.flames = inst(new THREE.IcosahedronGeometry(0.1, 1), flameMat, 1024, false);
+    this.flames.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1024 * 3), 3);
+    this.group.add(this.halos.mesh);
     this.goodColors = GOODS.map((g) => new THREE.Color(GOOD_COLORS[g.id] ?? (g.tool ? "#9aa1b3" : "#ffffff")));
     this.group.name = "economy";
   }
@@ -186,16 +160,18 @@ export class EconView {
       m.compose(p, q, s.setScalar(big * flicker));
       this.flames.setMatrixAt(n, m);
       this.flames.setColorAt(n, c);
-      m.compose(p, q, s.setScalar(big * (1.3 + night * 1.6) * flicker));
-      this.halos.setMatrixAt(n, m);
-      this.halos.setColorAt(n, c.multiplyScalar(0.25 + night * 0.45));
+      const h = this.halos;
+      h.pos.set([p.x, p.y, p.z], n * 3);
+      c.multiplyScalar(0.25 + night * 0.45);
+      h.color.set([c.r, c.g, c.b], n * 3);
+      h.size[n] = big * (0.55 + night * 0.6) * flicker;
+      h.alpha[n] = 0.55 + night * 0.3;
       n++;
     }
-    for (const mesh of [this.flames, this.halos]) {
-      mesh.count = n;
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    }
+    this.flames.count = n;
+    this.flames.instanceMatrix.needsUpdate = true;
+    if (this.flames.instanceColor) this.flames.instanceColor.needsUpdate = true;
+    this.halos.flush(n);
   }
 
   /** Windmill sails turn in the wind, faster while grinding. */

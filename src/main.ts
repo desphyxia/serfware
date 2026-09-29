@@ -26,7 +26,7 @@ function initialSeed(): string {
   return randomSeedWord(Math.floor(Math.random() * 2 ** 32));
 }
 
-try {
+async function boot(): Promise<void> {
   const nav = navigator as Navigator & { deviceMemory?: number };
   const settings = SettingsStore.load(
     suggestPreset({
@@ -37,14 +37,17 @@ try {
   );
   const root = document.getElementById("app") ?? document.body;
   const game = new Game(root, settings, initialSeed());
-  game.start();
-  window.__seedfall.game = game;
-  window.__seedfall.demo = () => demoSettlement(game.world);
-  window.__seedfall.battle = () => demoBattle(game.world);
-  window.__seedfall.ready = true;
-} catch (err) {
+  await game.start();
+  const sf = window.__seedfall as NonNullable<typeof window.__seedfall>;
+  sf.game = game;
+  sf.demo = () => demoSettlement(game.world);
+  sf.battle = () => demoBattle(game.world);
+  sf.ready = true;
+}
+
+boot().catch((err: unknown) => {
   const e = err as Error;
   // The game UI never came up, so mount a standalone report dialog before capturing.
   document.body.append(new ReportPanel().root);
   crash.capture({ kind: "error", message: `Start-up failed: ${e.message}`, stack: e.stack });
-}
+});

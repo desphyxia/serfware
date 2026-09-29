@@ -1,4 +1,5 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import type { PainterlyMaterial } from "./painterly";
 import type { GraphicsSettings } from "../core/settings";
 import type { World } from "../sim/world";
 import { AtmosphereShell, CloudLayer } from "./atmosphere";
@@ -22,8 +23,8 @@ import { makeWaterMaterial } from "./water";
 /** Everything drawn for one planet. Created per world and disposed when the world changes. */
 export class WorldView {
   readonly group = new THREE.Group();
-  readonly land: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
-  readonly water: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  readonly land: THREE.Mesh<THREE.BufferGeometry, PainterlyMaterial>;
+  readonly water: THREE.Mesh<THREE.BufferGeometry, ReturnType<typeof makeWaterMaterial>>;
   readonly atmosphere: AtmosphereShell;
   readonly clouds: CloudLayer;
   readonly wells: StarWellMarkers;
@@ -220,19 +221,10 @@ export class WorldView {
     this.updateFog();
     this.updateClimate(p);
     this.overlays.update(p.time, 1 - p.daylight, this.mask.explored, this.mask.version, playerColor);
-    const w = this.water.material.uniforms;
-    w.uTime!.value = p.time;
-    w.uSunDir!.value.copy(p.sunDir);
-    w.uSky!.value.copy(p.sky);
-    w.uDay!.value = p.daylight;
-    if (p.fog) {
-      w.uFogColor!.value.copy(p.fog.color);
-      w.uFogNear!.value = p.fog.near;
-      w.uFogFar!.value = p.fog.far;
-    } else {
-      w.uFogNear!.value = 1e7;
-      w.uFogFar!.value = 2e7;
-    }
+    const w = this.water.material.userData.u;
+    w.sunDir.value.copy(p.sunDir);
+    w.sky.value.copy(p.sky);
+    w.day.value = p.daylight;
     this.atmosphere.update(p.sunDir, p.orbit);
     this.clouds.update(p.time, p.sunDir, THREE.MathUtils.clamp(1.25 - p.closeness * 1.9, 0, 1));
     this.wells.update(p.time, 1 - p.daylight, p.closeness);

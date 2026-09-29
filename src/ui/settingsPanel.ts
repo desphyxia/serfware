@@ -54,10 +54,13 @@ export class SettingsPanel extends Panel {
     g.append(this.select<GraphicsSettings["shadowMapSize"]>("Shadow detail", "g-shs", [[1024, "1024"], [2048, "2048"], [4096, "4096"]], (s) => s.graphics.shadowMapSize, (v) => ({ shadowMapSize: v })));
     g.append(this.select<GraphicsSettings["msaa"]>("Anti-aliasing", "g-aa", [[0, "Off"], [2, "MSAA 2×"], [4, "MSAA 4×"]], (s) => s.graphics.msaa, (v) => ({ msaa: v })));
     g.append(this.checkbox("Bloom", "g-bloom", (s) => s.graphics.bloom, (v) => store.setGraphics({ bloom: v })));
+    g.append(this.checkbox("Ambient occlusion", "g-ao", (s) => s.graphics.ao, (v) => store.setGraphics({ ao: v })));
+    g.append(this.checkbox("Depth of field (close-up)", "g-dof", (s) => s.graphics.dof, (v) => store.setGraphics({ dof: v })));
     g.append(this.range("Vegetation", "g-veg", 0.1, 1, 0.05, (s) => s.graphics.vegetation, (v) => ({ vegetation: v }), (v) => `${Math.round(v * 100)} %`));
     g.append(this.range("Particles", "g-par", 0.1, 1, 0.05, (s) => s.graphics.particles, (v) => ({ particles: v }), (v) => `${Math.round(v * 100)} %`));
     g.append(this.select<GraphicsSettings["terrainDetail"]>("Terrain detail", "g-td", [["low", "Low"], ["medium", "Medium"], ["high", "High"]], (s) => s.graphics.terrainDetail, (v) => ({ terrainDetail: v })));
     g.append(this.select<GraphicsSettings["atmosphere"]>("Atmosphere", "g-atm", [["simple", "Simple"], ["scattering", "Scattering"]], (s) => s.graphics.atmosphere, (v) => ({ atmosphere: v })));
+    g.append(this.select<GraphicsSettings["backend"]>("Graphics API (reload)", "g-api", [["auto", "WebGPU if available"], ["webgl", "WebGL 2"]], (s) => s.graphics.backend, (v) => ({ backend: v })));
     g.append(this.select<GraphicsSettings["maxFps"]>("Frame limit", "g-fps", [[30, "30"], [60, "60"], [120, "120"], [0, "Unlimited"]], (s) => s.graphics.maxFps, (v) => ({ maxFps: v })));
     addTab("Graphics", g);
 

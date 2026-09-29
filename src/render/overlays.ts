@@ -1,4 +1,5 @@
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
+import { attribute, dot, float, mrt, positionWorld, pow, sin, smoothstep, time, uniform, vec3, vec4 } from "three/tsl";
 import type { LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
 import { buildingGeometry, flagGeometry } from "./models";
@@ -36,40 +37,25 @@ export class Overlays {
   }
 
   private visionKey = "";
-  private readonly borderMat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    uniforms: { uTime: { value: 0 }, uNight: { value: 0 } },
-    vertexShader: /* glsl */ `
-      attribute float aV;
-      varying float vV; varying vec3 vCol; varying vec3 vW;
-      void main() {
-        vV = aV; vCol = color;
-        vec4 w = modelMatrix * vec4(position, 1.0);
-        vW = w.xyz;
-        gl_Position = projectionMatrix * viewMatrix * w;
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform float uTime; uniform float uNight;
-      varying float vV; varying vec3 vCol; varying vec3 vW;
-      void main() {
-        float shimmer = 0.75 + 0.25 * sin(uTime * 1.3 + dot(vW, vec3(0.9, 0.7, 1.1)) * 1.7);
-        float a = pow(1.0 - vV, 2.4) * shimmer * (0.45 + uNight * 0.55);
-        a += smoothstep(0.1, 0.0, vV) * 0.35;
-        gl_FragColor = vec4(vCol * a, a);
-      }`,
-    vertexColors: true,
-  });
+  private readonly borderNight = uniform(0);
+  private readonly borderMat = (() => {
+    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const v = attribute("aV", "float");
+    const col = attribute("color", "vec3");
+    const shimmer = sin(time.mul(1.3).add(dot(positionWorld, vec3(0.9, 0.7, 1.1)).mul(1.7))).mul(0.25).add(0.75);
+    const a = pow(float(1).sub(v), 2.4).mul(shimmer).mul(this.borderNight.mul(0.55).add(0.45)).add(smoothstep(0.1, 0, v).mul(0.35));
+    m.colorNode = col.mul(a);
+    m.opacityNode = a;
+    m.mrtNode = mrt({ emissive: vec4(col.mul(a).mul(0.5), 1) });
+    return m;
+  })();
 
   /**
    * Rebuild borders when territory or the viewer's explored area changes. Borders glow in the
    * owner's colour as a low curtain of light.
    */
-  update(time = 0, night = 0, explored?: Uint8Array, visionVersion = 0, colors?: (owner: number) => THREE.Color): void {
-    this.borderMat.uniforms.uTime!.value = time;
-    this.borderMat.uniforms.uNight!.value = night;
+  update(_time = 0, night = 0, explored?: Uint8Array, visionVersion = 0, colors?: (owner: number) => THREE.Color): void {
+    this.borderNight.value = night;
     const key = `${this.land.territoryVersion}:${visionVersion}`;
     if (key !== this.visionKey) {
       this.visionKey = key;
