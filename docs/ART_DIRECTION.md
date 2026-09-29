@@ -53,14 +53,41 @@ WebGL2 fallback.
 - Ambient occlusion comes from two sources: ambient occlusion baked into the procedural geometry (crevices, eaves, under roofs), and screen-space ambient occlusion (GTAO) for contact between objects.
 
 ### Terrain
-- **Materials:** procedural materials (grass, meadow flowers, soil, sand, rock, snow, mud) blended by slope, moisture, biome and wear, projected from three directions (triplanar). No stretching on cliffs.
-- **Shape:**
-  - The hex grid disappears from view. Terrain is a smooth, subdivided mesh.
-  - Tile borders are drawn only in build mode.
-  - Steep slopes grow rock cliffs, and coasts get beaches with pebbles.
-- **Detail within a few tiles of the camera:** blades of grass, clumps of flowers, pebbles and fallen leaves by season.
-- **Roads:**
-  - Packed-earth paths with worn edges, stones and puddles when muddy. Busy roads get cart ruts and edge stones.
+
+Gameplay stays on the hex tiles; only the rendering gets finer. The terrain has three layers of
+detail, and it covers most of the screen, so it gets its own batch (A3).
+
+**1. Shape**
+- **Detailed height per tile:** each tile gets its own detailed height surface, not one height sample. The hex grid disappears from view, and tile borders are drawn only in build mode.
+- **Level of detail:** the planet is split into chunks that refine near the camera and simplify far away.
+  - Near the camera: several hundred vertices per tile.
+  - Overview distance: tens of vertices per tile.
+  - From orbit: a few vertices per tile.
+  - Chunks blend into each other without visible seams or popping.
+- **Procedural sculpting**, seeded and deterministic, on top of the simulation's tile heights:
+  - Ridges and gullies worn by rain.
+  - Rock outcrops and boulder fields.
+  - Soft terraces on hillsides.
+  - Riverbeds carved along the simulation's rivers, with banks.
+  - Lake shores, beaches with a wet edge, and snow drifts.
+- **Cliffs:** mountains get real cliff faces with rock strata and ledges instead of steep, smooth slopes.
+- **One height function:** the renderer samples the same detailed height everywhere, so buildings, settlers, roads, trees and goods stand on the ground, never floating or sunk. A small levelled pad is pressed under each building and flag, with a stone footing where the slope needs one, so construction looks natural.
+
+**2. Surface**
+- **Materials:** grass, meadow, soil, sand, rock, snow and mud are blended by slope, moisture, biome, season and wear. They are projected from three directions (triplanar), so nothing stretches on cliffs.
+- **Fine detail:** procedural relief and colour in each material: grass tufts, soil clods, pebbles, layered rock, sand ripples, cracked dry mud.
+- **Large-scale variation:** colour and value change over hundreds of metres, so a meadow never looks uniform from the overview.
+- **Paths and roads:**
+  - Pressed into the ground, with worn edges.
+  - Muddy puddles in rain.
+  - Busy roads get cart ruts and edge stones.
+  - Settlers' shortcuts wear visible footpaths through grass.
+
+**3. Scatter**
+- **Near the camera:** dense grass blades, flowers by season, pebbles, twigs, mushrooms and fallen leaves.
+- **Mid distance:** bushes, ferns, boulders, reeds along water.
+- **Distance:** only the materials' colour variation remains.
+- All scatter thins out smoothly with distance, follows the quality presets, and moves in the wind.
 
 ### Vegetation
 - **Trees:**
@@ -130,7 +157,8 @@ WebGL2 fallback.
 
 - **Budgets at medium in the overview camera:**
   - Under 600 draw calls.
-  - Under 1.5 M triangles.
+  - Under 2.5 M triangles, of which terrain takes at most 1 M.
+  - Terrain detail refines within 2 frames of the camera settling.
   - 12 ms GPU on Steam Deck class hardware.
 
 ## 6. How we check it
@@ -147,10 +175,11 @@ WebGL2 fallback.
 | # | Batch | Result |
 |---|---|---|
 | A1 | Renderer foundation | WebGPU renderer with WebGL2 fallback; current materials ported to TSL; new post-processing pipeline (ambient occlusion, AgX, grading); cascaded shadows; overview camera |
-| A2 | **Visual target scene** | A riverside hamlet at final quality: terrain, water, trees, three buildings, settlers, goods, day/night. **Approval gate** |
-| A3 | Terrain, water and sky everywhere | Material blending, cliffs, beaches, roads, rivers, lakes, clouds, weather and seasons in the new style |
-| A4 | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
-| A5 | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
-| A6 | Vegetation, effects and polish | Tree species per biome, grass, flowers, particles, shot-list pass, performance tuning on the presets |
+| A2 | **Visual target scene** | A riverside hamlet at final quality: detailed terrain (all three layers), water, trees, three buildings, settlers, goods, day/night. **Approval gate** |
+| A3 | Terrain everywhere | Chunked detail levels for the whole planet; procedural sculpting, cliffs, riverbeds, shores; blended materials; levelled pads under buildings; paths and roads pressed into the ground; near-camera scatter |
+| A4 | Water, sky and weather | Sea, lakes and rivers; physically based sky and painted clouds; haze and light shafts; rain, snow, mud and seasons in the new style |
+| A5 | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
+| A6 | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
+| A7 | Vegetation, effects and polish | Tree species per biome, undergrowth, particles, shot-list pass, performance tuning on the presets |
 
-After A6 we return to batch 11. The later biome batches (13–16) follow this document.
+After A7 we return to batch 11. The later biome batches (13–16) follow this document.
