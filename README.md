@@ -59,6 +59,16 @@ within a season. Take a Hearthship and that settlement falls. You can also win b
 the 12 Star Wells for a day. Battle stakes (Settings → World) are Wounded by default, or Mortal.
 Weaponsmiths make blades, bowyers bows, and stables mounts; gold in storage pays for promotions.
 
+## Living world
+
+Rain gathers into rivers that run to the sea; basins fill into lakes. Weather fronts drift with
+the wind (trade winds near the equator, westerlies further out), bringing rain, and snow below
+freezing. Rain leaves mud that slows walking; snow lies and melts. Seasons follow the planet's
+axial tilt and are opposite in each hemisphere; fields only grow in the growing season. Each
+harvest tires the soil, which recovers when left alone; water nearby and a hedgerow of trees
+help crops. The top bar shows the season, temperature and weather where you look, with
+tomorrow's forecast and the soil in its tooltip. The debug dialog can summon weather and skip days.
+
 ## Keys
 
 | Key | Action |

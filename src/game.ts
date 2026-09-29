@@ -162,6 +162,8 @@ export class Game {
         "×64": () => (this.speed = 64),
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
+        "Weather here": () => this.summonWeather(),
+        "Skip 6 days": () => this.skipDays(6),
         "Fog of war": () => {
           this.fogOn = !this.fogOn;
           this.view.setViewer(this.session.player, this.fogOn);
@@ -289,6 +291,34 @@ export class Game {
     this.focusCoast();
   }
 
+  private forecastCache = { key: "", text: "" };
+
+  /** Season, temperature and weather where the view is, with tomorrow's forecast as a tooltip. */
+  private weatherChip(): { text: string; title: string } {
+    const w = this.world;
+    const f = this.cam.focus;
+    const t = w.planet.grid.nearestTile([f.x, f.y, f.z], this.hoverTile >= 0 ? this.hoverTile : 0);
+    const c = w.climate;
+    const temp = c.temp[t] as number;
+    const rain = c.rain[t] as number;
+    const y = w.planet.grid.center[t * 3 + 1] as number;
+    const season = c.season(w.tick, y);
+    const sky = rain > 0.5 ? (temp < 0 ? "Heavy snow" : "Heavy rain") : rain > 0.15 ? (temp < 0 ? "Snow" : "Rain") : rain > 0.05 ? "Drizzle" : "Clear";
+    const key = `${t}:${Math.floor(w.tick / 600)}`;
+    if (key !== this.forecastCache.key) {
+      const fc = c.forecast(w.tick, t, 24);
+      this.forecastCache = {
+        key,
+        text: `Next 24 hours: ${fc.rain > 0.15 ? (fc.snow ? "snow likely" : "rain likely") : fc.rain > 0.05 ? "a shower or two" : "dry"}, ${Math.round(fc.low)} to ${Math.round(fc.high)} °C.`,
+      };
+    }
+    const soil = w.land.soil[t] as number;
+    return {
+      text: `${season[0]!.toUpperCase()}${season.slice(1)} · ${Math.round(temp)} °C · ${sky}`,
+      title: `${this.forecastCache.text}\nSoil here: ${soil > 0.7 ? "rich" : soil > 0.4 ? "fair" : "tired"}${w.land.isRiver(t) ? ", by a river" : ""}.${c.growing(t) ? "" : " Too cold for crops to grow."}`,
+    };
+  }
+
   private victoryText(): string | null {
     const eco = this.world.economy;
     if (eco.defeated[this.session.player] && eco.winner < 0) return "Your Hearthship has fallen. Your people carry on elsewhere.";
@@ -316,6 +346,58 @@ export class Game {
 
   selectBuilding(id: number): void {
     this.info.select({ kind: "building", id });
+  }
+
+  /** Look at the biggest river near the player's Hearthship (screenshots). */
+  focusRiver(distance = 18): boolean {
+    const w = this.world;
+    const keep = w.economy.buildings[w.economy.keeps[this.session.player] ?? -1];
+    if (!keep) return false;
+    let best = -1;
+    let bestScore = -Infinity;
+    for (const t of w.land.ring(keep.tile, 30)) {
+      if (!w.land.isRiver(t)) continue;
+      const score = (w.land.hydro.flow[t] as number) - w.land.ring(keep.tile, 30).indexOf(t) * 0.05;
+      if (score > bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    if (best < 0) return false;
+    this.focusTile(best, distance);
+    return true;
+  }
+
+  /** Look at the snowiest land (screenshots). */
+  focusSnow(distance = 30): boolean {
+    const land = this.world.land;
+    let best = -1;
+    for (let t = 0; t < land.snowCover.length; t++) if (land.isLand(t) && (best < 0 || (land.snowCover[t] as number) > (land.snowCover[best] as number))) best = t;
+    if (best < 0 || (land.snowCover[best] as number) < 0.2) return false;
+    // Prefer somewhere on the edge of the snow, where it meets green land.
+    const edge = land.ring(best, 8).find((t) => land.isLand(t) && (land.snowCover[t] as number) < 0.1);
+    this.focusTile(edge ?? best, distance);
+    return true;
+  }
+
+  /** Debug: bring a weather front over the view. */
+  summonWeather(strength = 1): void {
+    const f = this.cam.focus;
+    const front = this.world.climate.fronts[0];
+    if (!front) return;
+    Object.assign(front, { x: f.x, y: f.y, z: f.z, radius: 0.35, strength, age: 20, life: 400 });
+    this.world.climate.step(this.world.tick);
+  }
+
+  /** Debug: jump the calendar forward, letting the weather (and snow) play out on the way. */
+  skipDays(days: number): void {
+    const w = this.world;
+    const perDay = Math.round(w.planet.params.dayLengthHours * 300);
+    const steps = Math.round((days * perDay) / 20);
+    for (let i = 0; i < steps; i++) {
+      w.tick += 20;
+      w.climate.step(w.tick);
+    }
   }
 
   setFog(on: boolean): void {
@@ -722,7 +804,7 @@ export class Game {
     this.uiTimer -= dt;
     if (this.uiTimer <= 0) {
       this.uiTimer = 400;
-      this.stock.update(eco, this.session.player);
+      this.stock.update(eco, this.session.player, this.weatherChip());
       this.info.refresh();
       this.economyPanel.refresh();
     }
@@ -795,7 +877,7 @@ export class Game {
       this.fog.far = 2e6;
     }
     const gs = this.settings.get().graphics;
-    this.view.update({ time, dt, vegetation: gs.vegetation, particles: gs.particles, focus: this.cam.focus, pixelRatio: this.gfx.renderer.getPixelRatio(), sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness });
+    this.view.update({ time, dt, vegetation: gs.vegetation, particles: gs.particles, focus: this.cam.focus, pixelRatio: this.gfx.renderer.getPixelRatio(), sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness, ground: this.cam.groundPoint(), distance: this.cam.distance });
   }
 
   private updateAudio(): void {
@@ -828,7 +910,8 @@ export class Game {
         closeness: this.cam.closeness(),
         water: this.waterNear,
         altitude: THREE.MathUtils.smoothstep(this.camera.position.length(), R * 1.1, R * 2.5),
-        wind: 0.35,
+        wind: 0.35 + (this.world.climate.rain[focusTile] as number) * 0.4,
+        rain: (this.world.climate.temp[focusTile] as number) > 0.5 ? (this.world.climate.rain[focusTile] as number) : 0,
       },
       work,
     );

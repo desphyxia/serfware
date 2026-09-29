@@ -20,6 +20,7 @@ import {
   type BuildingDef,
 } from "./defs";
 import { MinHeap } from "./heap";
+import type { Climate } from "../climate/climate";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
 import { Deposit, DEPOSIT_IDS, Feature, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
@@ -199,6 +200,8 @@ export class Economy {
   readonly glow: number[] = [];
   readonly glowParts: GlowParts[] = [];
   private lifeRng: Rng | null = null;
+  /** Seasons and weather (set by the world). Fields only grow in the growing season. */
+  climate: Climate | null = null;
   private combatRng: Rng | null = null;
   /** "wounded": the loser of a duel limps home; "mortal": they fall. */
   stakes: "wounded" | "mortal" = "wounded";
@@ -355,6 +358,28 @@ export class Economy {
     };
     this.people.push(p);
     return p;
+  }
+
+  /**
+   * How long a field takes to grow a stage: rich soil, water nearby and a hedgerow of trees to
+   * break the wind all help.
+   */
+  fieldGrowthTicks(t: number): number {
+    const land = this.land;
+    let hedge = 0;
+    for (const n of land.planet.grid.neighborsOf(t)) if (land.feature[n] === Feature.Tree) hedge = 0.15;
+    const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge;
+    return Math.round(FIELD_GROWTH_TICKS / f);
+  }
+
+  /** Soil rests: land that isn't farmed slowly regains its nitrogen. */
+  private restSoil(): void {
+    const land = this.land;
+    for (let t = 0; t < land.soil.length; t++) {
+      if (!land.isLand(t) || land.feature[t] === Feature.Field) continue;
+      const cap = Math.min(1, 0.35 + 0.5 * (land.planet.terrain.moisture[t] as number) + (land.isRiver(t) ? 0.15 : 0));
+      if ((land.soil[t] as number) < cap) land.soil[t] = Math.min(cap, (land.soil[t] as number) + 0.03);
+    }
   }
 
   /** Ticks in a game day. */
@@ -2159,11 +2184,13 @@ export class Economy {
           if (land.feature[t] === Feature.Field && (land.amount[t] as number) >= FIELD_RIPE) {
             land.feature[t] = Feature.None;
             land.amount[t] = 0;
+            // Each harvest takes from the soil.
+            land.soil[t] = Math.max(0.05, (land.soil[t] as number) - 0.09);
             got = produced;
           } else if (land.feature[t] === Feature.None && land.use[t] === Use.Free) {
             land.feature[t] = Feature.Field;
             land.amount[t] = 0;
-            land.nextGrowth[t] = this.tick + FIELD_GROWTH_TICKS;
+            land.nextGrowth[t] = this.tick + this.fieldGrowthTicks(t);
             this.fieldTiles.push(t);
           }
           land.featureVersion++;
@@ -2325,8 +2352,13 @@ export class Economy {
         continue;
       }
       if ((land.amount[t] as number) < FIELD_RIPE && (land.nextGrowth[t] as number) <= this.tick) {
+        // Outside the growing season fields wait; frost doesn't kill them, it just holds them.
+        if (this.climate && !this.climate.growing(t)) {
+          land.nextGrowth[t] = this.tick + 200;
+          continue;
+        }
         land.amount[t]!++;
-        land.nextGrowth[t] = this.tick + FIELD_GROWTH_TICKS;
+        land.nextGrowth[t] = this.tick + this.fieldGrowthTicks(t);
         changed = true;
       }
     }
@@ -2368,6 +2400,7 @@ export class Economy {
       if (!daily && hourIndex % 3 === p % 3) this.newcomers(p);
       if (daily) {
         for (const k of this.keeps) (this.buildings[k] as Building).levy = 0;
+        if (p === 0) this.restSoil();
         this.dailyLife(p);
         this.trainWardens(p);
       }

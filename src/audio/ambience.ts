@@ -15,6 +15,8 @@ export interface AmbienceState {
   /** Altitude factor: 1 high above the ground (more wind). */
   altitude: number;
   wind: number;
+  /** 0..1 rain falling at the view (0 when it snows: snow is quiet). */
+  rain?: number;
 }
 
 export interface WorkSound {
@@ -33,6 +35,7 @@ export class Ambience {
   private ambienceBus!: GainNode;
   private effectsBus!: GainNode;
   private windGain!: GainNode;
+  private rainGain!: GainNode;
   private windFilter!: BiquadFilterNode;
   private seaGain!: GainNode;
   private noise!: AudioBuffer;
@@ -110,6 +113,9 @@ export class Ambience {
     this.windGain = wind.g;
     const sea = loop("lowpass", 520, 0.4);
     this.seaGain = sea.g;
+    // Rain: bright hiss on leaves and roofs.
+    const rain = loop("highpass", 1800, 0.5);
+    this.rainGain = rain.g;
   }
 
   applySettings(s: AudioSettings): void {
@@ -130,6 +136,7 @@ export class Ambience {
     this.windFilter.frequency.setTargetAtTime(300 + gust * 500 + state.altitude * 300, t, 1.2);
     const swell = 0.55 + 0.45 * Math.sin(t * 0.9) * Math.sin(t * 0.37 + 2);
     this.seaGain.gain.setTargetAtTime(state.water * state.closeness * 0.5 * swell, t, 0.5);
+    this.rainGain.gain.setTargetAtTime((state.rain ?? 0) * (0.15 + 0.35 * state.closeness), t, 1.5);
 
     const near = state.closeness * (1 - state.altitude);
     if (t > this.nextBird) {

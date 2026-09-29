@@ -23,6 +23,9 @@ export class NatureView {
   private signVersion = -1;
   private version = -1;
   private maskVersion = -1;
+  /** Changes a few times a day so trees follow the seasons and the snow. */
+  seasonKey = 0;
+  private builtSeason = -1;
   private density = -1;
 
   constructor(
@@ -30,6 +33,7 @@ export class NatureView {
     private readonly frames: SurfaceFrames,
     capacity: number,
     private readonly mask: FogMask,
+    private readonly season: (t: number) => { autumn: number; bare: number; snow: number } = () => ({ autumn: 0, bare: 0, snow: 0 }),
   ) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
     const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
@@ -61,7 +65,8 @@ export class NatureView {
       this.signVersion = this.land.signVersion;
       this.updateSigns();
     }
-    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion) return;
+    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion && this.seasonKey === this.builtSeason) return;
+    this.builtSeason = this.seasonKey;
     this.version = this.land.featureVersion;
     this.maskVersion = this.mask.version;
     this.density = density;
@@ -106,7 +111,14 @@ export class NatureView {
           if (idx >= mesh.instanceMatrix.count) continue;
           mesh.setMatrixAt(idx, m);
           if (memorial) color.setRGB(2.4, 1.35, 1.9);
-          else color.setRGB(0.85 + 0.3 * h2, 0.85 + 0.3 * h2 + 0.05 * h1, 0.85 + 0.25 * h2);
+          else {
+            color.setRGB(0.85 + 0.3 * h2, 0.85 + 0.3 * h2 + 0.05 * h1, 0.85 + 0.25 * h2);
+            const sea = this.season(t);
+            // Broadleaves turn gold and red in autumn and go bare-brown in winter; snow whitens all.
+            if (!conifer && sea.autumn > 0) color.lerp(new THREE.Color(1.9 + 0.5 * h1, 0.95 + 0.4 * h2, 0.35), sea.autumn * (0.6 + 0.4 * h1));
+            if (!conifer && sea.bare > 0) color.lerp(new THREE.Color(0.95, 0.75, 0.6), sea.bare);
+            if (sea.snow > 0.15) color.lerp(new THREE.Color(1.6, 1.65, 1.75), Math.min(0.7, sea.snow) * (conifer ? 0.7 : 0.5));
+          }
           mesh.setColorAt(idx, color);
         }
       } else if (f === Feature.Rock) {

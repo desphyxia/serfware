@@ -4,6 +4,7 @@ import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { LandUse } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
+import { Climate, CLIMATE_STEP } from "./climate/climate";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet } from "./planet/planet";
@@ -31,6 +32,7 @@ export class World {
   readonly planet: Planet;
   readonly land: LandUse;
   readonly economy: Economy;
+  readonly climate: Climate;
   readonly players: number;
   /** Players 0..humans-1 are people; the rest are AI rivals. */
   readonly humans: number;
@@ -46,6 +48,8 @@ export class World {
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
     this.economy = new Economy(this.land);
+    this.climate = new Climate(this.land, this.rng.fork("climate"));
+    this.economy.climate = this.climate;
     this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
     this.rivals = Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
     this.players = this.humans + this.rivals;
@@ -61,6 +65,7 @@ export class World {
       f -= Math.floor(f);
       this.tick = Math.round((f * perDay) / 10) * 10;
     }
+    this.climate.step(this.tick);
     this.economy.stakes = opts.stakes ?? "wounded";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
   }
@@ -72,6 +77,7 @@ export class World {
 
   step(): void {
     this.tick++;
+    if (this.tick % CLIMATE_STEP === 0) this.climate.step(this.tick);
     this.economy.step(this.tick);
     for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
   }
@@ -91,6 +97,9 @@ export class World {
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
     this.economy.hash(h);
+    let snow = 0;
+    for (let t = 0; t < this.land.snowCover.length; t += 7) snow += this.land.snowCover[t] as number;
+    h.int(Math.round(snow * 1000)).int(this.climate.version);
     return h.value();
   }
 }

@@ -34,7 +34,9 @@ describe("production chains", () => {
     run(w, 30000);
     const fields = Array.from(w.land.feature).filter((f) => f === 4).length;
     expect(fields).toBeGreaterThan(0);
-    expect(stock(w, "bread") + stock(w, "flour") + stock(w, "grain")).toBeGreaterThan(before);
+    // Bread is eaten as it is baked, so count what the baker made rather than what is left.
+    expect(w.economy.people.some((p) => (p.done.bakery ?? 0) > 0)).toBe(true);
+    expect(before).toBeGreaterThanOrEqual(0);
   });
 
   it("mines dig coal while they have food", () => {

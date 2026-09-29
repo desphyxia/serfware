@@ -55,6 +55,12 @@ Each batch has a GitHub issue (#1–#28) with its detailed scope.
 
 Stretch after release: ranked play on curated seeds, persistent frontier servers.
 
+## Follow-ups not yet filed as issues
+
+- Batch 10b: dams and irrigation channels, water mills, floods from heavy rain on rivers,
+  hedgerow and crop-rotation choices for farmers, frozen lakes, mud tint on roads,
+  forecasts gated behind the Almanac (batch 20).
+
 ## Picking up work in a new session
 
 1. Read this file and the open issues; the lowest-numbered open batch issue is next.

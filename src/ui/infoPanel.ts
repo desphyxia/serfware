@@ -253,7 +253,7 @@ export class InfoPanel extends Panel {
 export class StockBar {
   readonly root = h("div", { class: "stockbar", "aria-label": "Stock" });
 
-  update(eco: Economy, player = 0): void {
+  update(eco: Economy, player = 0, weather?: { text: string; title: string }): void {
     const totals = eco.storageTotals(player);
     const pop = eco.population(player);
     const glow = eco.glow[player] ?? 0;
@@ -264,6 +264,7 @@ export class StockBar {
       h("span", { class: "chip-good" }, h("i", { style: "background:#d98f4e" }), `Food ${food}`),
       ...["coal", "iron", "gold"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
       h("span", { class: "chip-good pop", title: "Settlers resting / at work" }, `Settlers ${pop.idle} / ${pop.working}`),
+      ...(weather ? [h("span", { class: "chip-good weather", title: weather.title }, weather.text)] : []),
       h("span", { class: `chip-good glow${glow < 40 ? " low" : ""}`, title: "Glow: how content your people are. Content towns work faster and grow." }, h("i", { style: `background:hsl(${30 + glow * 0.2},90%,${45 + glow * 0.2}%)` }), `Glow ${glow}`),
     );
   }

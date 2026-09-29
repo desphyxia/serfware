@@ -68,12 +68,15 @@ export class CloudLayer {
           uOpacity: { value: 1 },
           uSeed: { value: (seed % 1000) / 10 },
           uCover: { value: 0.52 },
+          uFronts: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+          uFrontR: { value: new Float32Array(16) },
         },
         vertexShader: /* glsl */ `
           varying vec3 vP;
           void main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: /* glsl */ `
           uniform float uTime; uniform vec3 uSunDir; uniform float uOpacity; uniform float uSeed; uniform float uCover;
+          uniform vec4 uFronts[16]; uniform float uFrontR[16];
           varying vec3 vP;
           ${NOISE_GLSL}
           void main() {
@@ -84,15 +87,42 @@ export class CloudLayer {
             vec3 warp = vec3(fbm(q + 3.1), fbm(q - 1.7), fbm(q + 7.3));
             float d = fbm(q + warp * 1.6 + vec3(0.0, uTime * 0.01, 0.0));
             float band = 1.0 - abs(vP.y) * 0.35;
-            float a = smoothstep(uCover, uCover + 0.18, d * band);
+            // Weather fronts from the simulation: thick grey cloud where it rains.
+            float storm = 0.0;
+            for (int i = 0; i < 16; i++) {
+              float r = uFrontR[i];
+              if (r <= 0.0) continue;
+              float ang2 = max(0.0, 2.0 - 2.0 * dot(vP, uFronts[i].xyz));
+              storm += uFronts[i].w * exp(-ang2 / (r * r * 1.3));
+            }
+            storm = clamp(storm, 0.0, 1.0);
+            float a = smoothstep(uCover - storm * 0.45, uCover + 0.18 - storm * 0.3, d * band);
             float lit = clamp(dot(vP, normalize(uSunDir)) * 1.4 + 0.25, 0.0, 1.0);
             vec3 col = mix(vec3(0.18, 0.2, 0.3), mix(vec3(1.0, 0.72, 0.55), vec3(1.0), lit), lit);
+            col *= 1.0 - storm * 0.45;
             gl_FragColor = vec4(col, a * 0.85 * uOpacity);
           }`,
       }),
     );
     this.mesh.renderOrder = 2;
     this.mesh.name = "clouds";
+  }
+
+  /** Weather fronts to thicken: unit direction and strength, angular radius. */
+  setFronts(fronts: readonly { x: number; y: number; z: number; radius: number; strength: number; age: number; life: number }[]): void {
+    const u = this.mesh.material.uniforms;
+    const v = u.uFronts!.value as THREE.Vector4[];
+    const r = u.uFrontR!.value as Float32Array;
+    for (let i = 0; i < 16; i++) {
+      const f = fronts[i];
+      if (!f) {
+        r[i] = 0;
+        continue;
+      }
+      const grow = Math.min(1, f.age / 12, (f.life - f.age) / 12);
+      v[i]!.set(f.x, f.y, f.z, f.strength * Math.max(0, grow));
+      r[i] = f.radius;
+    }
   }
 
   update(time: number, sunDir: THREE.Vector3, opacity: number): void {
