@@ -1269,7 +1269,7 @@ export class Economy {
     const ra = this.resolve(player);
     const rd = this.resolve(target.owner);
     const ground = this.keeps.includes(target.id) ? 1.2 : 1.1;
-    const defs = this.keeps.includes(target.id) && !target.garrison.length ? this.militia(target) : this.defendersOf(target).map((s) => this.fighter(s));
+    const defs = [...(this.keeps.includes(target.id) ? this.militia(target) : []), ...this.defendersOf(target).map((s) => this.fighter(s))];
     const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra, 1));
     const dd = defs.map((f) => strength(f, rd, ground)).reverse();
     const bowsA = att.filter(({ s }) => hasBow(this.fighter(s))).length;
@@ -1359,6 +1359,19 @@ export class Economy {
       d.pi = 1;
       a.state = "duel";
       b.duel = { attacker: a.id, defender: d.id, until: this.tick + COMBAT.duelTicks };
+    }
+  }
+
+  /** Militia go back to their lives once no attack is under way. */
+  private standDown(): void {
+    for (const k of this.keeps) {
+      const keep = this.buildings[k] as Building;
+      if (!keep.garrison.length || keep.siege.length || keep.duel) continue;
+      if (this.settlers.some((s) => s.alive && s.role === "attacker" && s.building === keep.id)) continue;
+      for (const id of [...keep.garrison]) {
+        const s = this.settlers[id] as Settler;
+        if (s.alive && s.state === "guard") this.sendHome(s);
+      }
     }
   }
 
@@ -2510,7 +2523,10 @@ export class Economy {
     this.stepNature();
     this.stepLife();
     this.stepSieges();
-    if (tick % 50 === 0) this.stepStranded();
+    if (tick % 50 === 0) {
+      this.stepStranded();
+      this.standDown();
+    }
     if (tick % 100 === 0) this.stepVictory();
     if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();

@@ -21,16 +21,29 @@ function toward(w: World, player: number, target: number): number[] {
 }
 
 /** Push player `p`'s border toward the other keep with beacons until an attack is possible. */
-function approach(w: World, p: number, q: number): void {
+function approach(w: World, p: number, q: number): boolean {
   const eco = w.economy;
   const enemyKeep = eco.buildings[eco.keeps[q]!]!;
-  for (let round = 0; round < 4; round++) {
-    if (!eco.attackBlocked(p, enemyKeep)) return;
-    const t = placeOn(w, "beacon", toward(w, p, enemyKeep.tile).slice(0, 80), p, true, 40);
-    expect(t).toBeGreaterThanOrEqual(0);
+  for (let round = 0; round < 5; round++) {
+    if (!eco.attackBlocked(p, enemyKeep)) return true;
+    const t = placeOn(w, "beacon", toward(w, p, enemyKeep.tile).slice(0, 150), p, true, 60);
+    if (t < 0) return false;
     const b = eco.buildings.find((x) => x.alive && x.tile === t)!;
     run(w, 20000, () => b.lit && b.garrison.length >= 5);
   }
+  return !eco.attackBlocked(p, enemyKeep);
+}
+
+/** The first of a fixed list of seeds where the two Hearthships can reach each other overland. */
+function battleWorld(opts: ConstructorParameters<typeof World>[1], setup: (w: World) => void = () => {}): World {
+  for (const seed of ["combat-siege", "combat-siege-2", "combat-siege-3", "combat-siege-4", "combat-siege-5"]) {
+    const w = new World(seed, { size: "small", players: 2, peaceDays: 0, ...opts });
+    w.command({ t: "garrison", zone: "frontier", value: 1 });
+    w.command({ t: "garrison", zone: "inland", value: 1 });
+    setup(w);
+    if (approach(w, 0, 1)) return w;
+  }
+  throw new Error("No test seed with an overland approach");
 }
 
 describe("combat arithmetic", () => {
@@ -59,17 +72,17 @@ describe("attacks", () => {
   });
 
   it("wardens march, duel at the door and take the Hearthship", () => {
-    const w = new World("combat-siege", { size: "small", players: 2, peaceDays: 0 });
-    const eco = w.economy;
-    w.command({ t: "garrison", zone: "frontier", value: 1 });
-    w.command({ t: "garrison", zone: "inland", value: 1 });
     // Arm player 0 well: blades and gold for resolve.
-    const keep0 = eco.buildings[eco.keeps[0]!]!;
-    keep0.stock[goodId("blade")] = 12;
-    keep0.stock[goodId("gold")] = 10;
-    approach(w, 0, 1);
+    const w = battleWorld({}, (w) => {
+      const keep0 = w.economy.buildings[w.economy.keeps[0]!]!;
+      keep0.stock[goodId("blade")] = 12;
+      keep0.stock[goodId("gold")] = 10;
+    });
+    const eco = w.economy;
     const enemy = eco.buildings[eco.keeps[1]!]!;
     expect(eco.attackBlocked(0, enemy)).toBeNull();
+    // Veterans: a few days of watch behind them.
+    for (const p of eco.people) if (p.owner === 0) p.rank = 3;
     run(w, 2000);
     let rounds = 0;
     let sentAny = false;
@@ -97,10 +110,7 @@ describe("attacks", () => {
 
   it("stays deterministic through a fight", () => {
     const make = () => {
-      const w = new World("combat-det", { size: "small", players: 2, peaceDays: 0, stakes: "mortal" });
-      w.command({ t: "garrison", zone: "inland", value: 1 });
-      w.command({ t: "garrison", zone: "frontier", value: 1 });
-      approach(w, 0, 1);
+      const w = battleWorld({ stakes: "mortal" });
       const enemy = w.economy.buildings[w.economy.keeps[1]!]!;
       w.command({ t: "attack", target: enemy.id, count: 10 });
       run(w, 6000);
