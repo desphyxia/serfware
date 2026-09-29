@@ -48,6 +48,8 @@ Press M for the game menu. Saves are the seed plus every command; loading replay
 | 1 / 2 | Flag / road tools |
 | 3–6 | Buildings |
 | X | Demolish |
+| P | Economy panel (stock, people and Glow, distribution, tools) |
+| Click a settler | Their card: age, skills, journal; Follow keeps the camera on them |
 | G | Hex grid overlay |
 | WASD, Q/E, R/F | Move, turn, tilt the camera |
 

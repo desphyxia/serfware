@@ -1,5 +1,7 @@
 import type { StateHasher } from "../hash";
-import { mix32, type Rng } from "../rng";
+import { ticksPerDay } from "../clock";
+import { mix32, Rng } from "../rng";
+import { fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
 import {
   BUILDINGS,
   buildingType,
@@ -128,8 +130,21 @@ export interface Settler {
   /** Geologists: flag tile to survey around, and survey visits left. */
   home: number;
   visits: number;
+  /** The person this settler is. */
+  person: number;
   alive: boolean;
 }
+
+/** Days a child needs to grow up, and when adults retire, in game days. */
+const CHILD_DAYS = 3;
+const ELDER_DAYS = 40;
+const LIFE_DAYS = 55;
+/** A house holds up to four grown-ups and room for two children. */
+const HOUSE_ADULTS = 4;
+const HOUSE_CAPACITY = 6;
+const KEEP_SHELTER = 12;
+/** Tree variety used for memorial trees; woodcutters leave them standing. */
+export const MEMORIAL = 7;
 
 /** Player commands. `player` defaults to 0; in shared-keep co-op everyone acts as player 0. */
 export type Command = (
@@ -161,12 +176,20 @@ export class Economy {
   /** Keep (Hearthship) building id per player. */
   readonly keeps: number[] = [];
   readonly prefs: Prefs[] = [];
+  readonly people: Person[] = [];
+  readonly glow: number[] = [];
+  readonly glowParts: GlowParts[] = [];
+  private lifeRng: Rng | null = null;
+  private readonly dayTicks: number;
+  private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
   tick = 0;
   /** Messages for the player (the UI shows and clears them). */
   readonly notices: string[] = [];
 
-  constructor(readonly land: LandUse) {}
+  constructor(readonly land: LandUse) {
+    this.dayTicks = ticksPerDay(land.planet.params.dayLengthHours);
+  }
 
   // ------------------------------------------------------------------ setup
 
@@ -251,11 +274,47 @@ export class Economy {
     const flag = this.createFlag(flagTile, player);
     const keep = this.createBuilding(buildingType("keep"), best, flag.id, player);
     keep.built = true;
+    this.lifeRng ??= rng.fork("life");
+    const r = rng.fork(`people-${player}`);
+    let family = randomFamily(r);
+    for (let i = 0; i < START.settlers; i++) {
+      if (i % 3 === 0) family = randomFamily(r);
+      const age = r.int(16, 34);
+      this.addPerson(player, randomFirst(r), family, -age * this.dayTicks, r);
+    }
     keep.residents = START.settlers;
     keep.stock = goodsArray(START.stock);
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
     this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY })) as Prefs;
+    this.glow[player] = 60;
+    this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1 };
+    this.hungry[player] = false;
+  }
+
+  private addPerson(owner: number, first: string, family: string, born: number, r: Rng): Person {
+    const p: Person = {
+      id: this.people.length,
+      owner,
+      first,
+      family,
+      born,
+      stage: born > this.tick - CHILD_DAYS * this.dayTicks ? "child" : "adult",
+      skills: {},
+      done: {},
+      house: -1,
+      settler: -1,
+      lifespan: born + (LIFE_DAYS + r.int(0, 15)) * this.dayTicks,
+      journal: [],
+      alive: true,
+    };
+    this.people.push(p);
+    return p;
+  }
+
+  /** Age in whole game days. */
+  ageDays(p: Person): number {
+    return Math.floor((this.tick - p.born) / this.dayTicks);
   }
 
   // ------------------------------------------------------------------ commands
@@ -288,13 +347,13 @@ export class Economy {
   private cmdGeologist(flagTile: number, p: number): CommandResult {
     const flag = this.flagAt(flagTile);
     if (!flag || flag.owner !== p) return { ok: false, reason: "Send geologists to one of your flags." };
-    const home = this.homeFor(flag.id);
-    if (!home) return { ok: false, reason: "That flag isn't connected to your Hearthship." };
-    const path = this.roadPath(home.flag, flag.id);
+    const pick = this.pickPerson(flag.id, "geologist");
+    if (!pick) return { ok: false, reason: "No one is free, or that flag isn't connected to your Hearthship." };
+    const path = this.roadPath(pick.origin.flag, flag.id);
     if (!path) return { ok: false, reason: "That flag isn't connected to your Hearthship." };
     const hammer = this.takeTool(p, goodId("hammer"));
     if (hammer < 0) return { ok: false, reason: "No hammer for a geologist. Build a toolsmith." };
-    const s = this.spawnSettler("geologist", home, path);
+    const s = this.spawnSettler("geologist", pick.origin, path, pick.person);
     s.tool = hammer;
     s.home = flagTile;
     s.visits = 8;
@@ -803,17 +862,27 @@ export class Economy {
 
   // ------------------------------------------------------------------ settlers
 
-  /** Is the flag connected to storage (so settlers can come)? Returns the nearest storage. */
-  private homeFor(flagId: number): Building | null {
-    let best: Building | null = null;
-    let bestD = Infinity;
+  /**
+   * Choose who takes a job at `flagId`: a free adult of the flag's owner, preferring skill in the
+   * trade, then who lives closest. They set out from their house, or from the Hearthship.
+   */
+  private pickPerson(flagId: number, trade: string): { origin: Building; person: Person } | null {
     const owner = (this.flags[flagId] as Flag).owner;
-    for (const s of this.buildings) {
-      if (!s.alive || !s.def.storage || !s.built || s.owner !== owner || s.residents <= 0) continue;
-      const d = this.route(s.flag, flagId).dist;
-      if (d < bestD) {
-        bestD = d;
-        best = s;
+    const keep = this.buildings[this.keeps[owner] ?? -1];
+    let best: { origin: Building; person: Person } | null = null;
+    let bestScore = -Infinity;
+    for (const p of this.people) {
+      if (!p.alive || p.owner !== owner || p.stage !== "adult" || p.settler >= 0) continue;
+      const house = p.house >= 0 ? this.buildings[p.house] : undefined;
+      const origin = house && house.alive && house.built ? house : keep;
+      if (!origin) continue;
+      let d = this.route(origin.flag, flagId).dist;
+      if (d === Infinity && origin !== keep && keep) d = this.route(keep.flag, flagId).dist;
+      if (d === Infinity) continue;
+      const score = (p.skills[trade] ?? 0) * 40 - d * 0.1 - p.id * 1e-6;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { origin: this.route(origin.flag, flagId).dist === Infinity ? (keep as Building) : origin, person: p };
       }
     }
     return best;
@@ -835,8 +904,7 @@ export class Economy {
     return tiles;
   }
 
-  private spawnSettler(role: Role, home: Building, path: number[]): Settler {
-    home.residents--;
+  private spawnSettler(role: Role, home: Building, path: number[], person: Person): Settler {
     const s: Settler = {
       id: this.settlers.length,
       owner: home.owner,
@@ -855,9 +923,11 @@ export class Economy {
       tool: -1,
       home: -1,
       visits: 0,
+      person: person.id,
       alive: true,
     };
     this.settlers.push(s);
+    person.settler = s.id;
     return s;
   }
 
@@ -878,7 +948,9 @@ export class Economy {
     }
     s.road = -1;
     s.building = -1;
-    const home = this.buildings[this.keeps[s.owner] as number] as Building;
+    const person = this.people[s.person];
+    const house = person && person.house >= 0 ? this.buildings[person.house] : undefined;
+    const home = house && house.alive && house.built ? house : (this.buildings[this.keeps[s.owner] as number] as Building);
     const path = this.land.findPath(here, home.tile, (t) => this.land.walkable(t) || t === home.tile, 20000);
     s.state = "home";
     s.path = path ?? [here, home.tile];
@@ -890,14 +962,15 @@ export class Economy {
     // Carriers for roads without one.
     for (const r of this.roads) {
       if (!r.alive || r.carrier >= 0) continue;
-      const home = this.homeFor(r.a) ?? this.homeFor(r.b);
-      if (!home) continue;
+      const pick = this.pickPerson(r.a, "carrier") ?? this.pickPerson(r.b, "carrier");
+      if (!pick) continue;
+      const home = pick.origin;
       const mid = Math.floor(r.tiles.length / 2);
       const toA = this.roadPath(home.flag, r.a);
       const toB = toA ? null : this.roadPath(home.flag, r.b);
       if (!toA && !toB) continue;
       const approach = toA ? [...toA, ...r.tiles.slice(1, mid + 1)] : [...(toB as number[]), ...[...r.tiles].reverse().slice(1, r.tiles.length - mid)];
-      const s = this.spawnSettler("carrier", home, approach);
+      const s = this.spawnSettler("carrier", home, approach, pick.person);
       s.road = r.id;
       s.roadIdx = mid;
       r.carrier = s.id;
@@ -905,27 +978,29 @@ export class Economy {
     for (const b of this.buildings) {
       if (!b.alive) continue;
       if (!b.built && b.builder < 0) {
-        const home = this.homeFor(b.flag);
-        if (!home) continue;
-        const p = this.roadPath(home.flag, b.flag);
+        const pick = this.pickPerson(b.flag, "builder");
+        if (!pick) continue;
+        const p = this.roadPath(pick.origin.flag, b.flag);
         if (!p) continue;
         const tool = this.takeTool(b.owner, goodId("hammer"));
         if (tool < 0) continue;
-        const s = this.spawnSettler("builder", home, [...p, b.tile]);
+        const s = this.spawnSettler("builder", pick.origin, [...p, b.tile], pick.person);
         s.building = b.id;
         s.tool = tool;
         b.builder = s.id;
       } else if (b.built && b.def.job && b.worker < 0) {
-        const home = this.homeFor(b.flag);
-        if (!home) continue;
-        const p = this.roadPath(home.flag, b.flag);
+        const pick = this.pickPerson(b.flag, b.def.id);
+        if (!pick) continue;
+        const p = this.roadPath(pick.origin.flag, b.flag);
         if (!p) continue;
         let tool = -1;
         if (b.def.tool) {
           tool = this.takeTool(b.owner, goodId(b.def.tool));
           if (tool < 0) continue;
         }
-        const s = this.spawnSettler("worker", home, [...p, b.tile]);
+        const s = this.spawnSettler("worker", pick.origin, [...p, b.tile], pick.person);
+        const person = this.people[pick.person.id] as Person;
+        if (!person.done[b.def.id]) note(person, `Took up work at the ${b.def.name.toLowerCase()}.`);
         s.building = b.id;
         s.tool = tool;
         b.worker = s.id;
@@ -1139,9 +1214,10 @@ export class Economy {
     const onSite = b.delivered.reduce((a, v) => a + v, 0) - b.consumed;
     if (onSite > 0) {
       s.timer++;
-      if (s.timer >= BUILD_TICKS_PER_MATERIAL) {
+      if (s.timer >= BUILD_TICKS_PER_MATERIAL * this.speedFactor(s, "builder")) {
         s.timer = 0;
         b.consumed++;
+        this.train(s, "builder");
         if (b.consumed >= b.costTotal) {
           b.built = true;
           b.builder = -1;
@@ -1166,6 +1242,30 @@ export class Economy {
       return t;
     }
     return -1;
+  }
+
+  /** Work-time factor for a settler at a trade: skill and the settlement's Glow. */
+  private speedFactor(s: Settler, trade: string): number {
+    const p = this.people[s.person];
+    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60);
+  }
+
+  /** Practice makes perfect: raise skill, record milestones in the person's journal. */
+  private train(s: Settler, trade: string): void {
+    const p = this.people[s.person];
+    if (!p) return;
+    const elders = this.people.some((o) => o.alive && o.owner === p.owner && o.stage === "elder");
+    const before = p.skills[trade] ?? 0;
+    const gain = 0.025 * (1 - before) * (elders ? 1.4 : 1);
+    const after = Math.min(1, before + gain);
+    p.skills[trade] = after;
+    const n = (p.done[trade] ?? 0) + 1;
+    p.done[trade] = n;
+    const noun = tradeName(trade);
+    if (title(after) !== title(before)) {
+      const t = title(after).toLowerCase();
+      note(p, `Became ${/^[aeiou]/.test(t) ? "an" : "a"} ${t} ${noun}.`);
+    } else if (n === 10 || n === 50 || n === 100 || n === 250) note(p, `${n} jobs done as ${noun}.`);
   }
 
   /** Consume one unit of each input (groups take from the fullest member). Returns false if short. */
@@ -1251,7 +1351,7 @@ export class Economy {
       land.isLand(t) && land.use[t] === Use.Free && land.feature[t] === Feature.None && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
     switch (def.job) {
       case "fell":
-        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE);
+        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && land.variety[t] !== MEMORIAL);
       case "quarry":
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
       case "plant":
@@ -1312,7 +1412,7 @@ export class Economy {
           if (out >= 0 && this.consumeInputs(b)) {
             s.state = "craft";
             s.target = out;
-            s.timer = def.workTicks ?? 60;
+            s.timer = Math.round((def.workTicks ?? 60) * this.speedFactor(s, def.id));
           } else s.timer = 15;
           return;
         }
@@ -1334,7 +1434,7 @@ export class Economy {
           }
           s.state = "mining";
           s.target = t;
-          s.timer = def.workTicks ?? 90;
+          s.timer = Math.round((def.workTicks ?? 90) * this.speedFactor(s, def.id));
           return;
         }
         const target = this.findJobTarget(b, s);
@@ -1355,7 +1455,7 @@ export class Economy {
       case "out":
         if (this.walk(s)) {
           s.state = "work";
-          s.timer = def.workTicks ?? 60;
+          s.timer = Math.round((def.workTicks ?? 60) * this.speedFactor(s, def.id));
         }
         return;
       case "work": {
@@ -1363,7 +1463,8 @@ export class Economy {
         const t = s.target;
         let got = -1;
         const produced = def.produces ? goodId(def.produces) : -1;
-        if (def.job === "fell" && land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE) {
+        this.train(s, def.id);
+        if (def.job === "fell" && land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && land.variety[t] !== MEMORIAL) {
           land.feature[t] = Feature.Stump;
           land.amount[t] = 12;
           land.featureVersion++;
@@ -1414,6 +1515,7 @@ export class Economy {
         return;
       case "craft":
         if (--s.timer > 0) return;
+        this.train(s, def.id);
         this.produce(b, s.target);
         s.target = -1;
         s.state = "rest";
@@ -1423,6 +1525,7 @@ export class Economy {
         if (--s.timer > 0) return;
         const t = s.target;
         if ((land.depositAmount[t] as number) > 0) {
+          this.train(s, def.id);
           land.depositAmount[t]!--;
           if (land.depositAmount[t] === 0) land.deposit[t] = Deposit.None;
           b.food--;
@@ -1507,9 +1610,10 @@ export class Economy {
       if (this.walk(s)) {
         s.alive = false;
         const keep = this.buildings[this.keeps[s.owner] as number] as Building;
-        keep.residents++;
         if (s.tool >= 0) keep.stock[s.tool]!++;
         s.tool = -1;
+        const person = this.people[s.person];
+        if (person) person.settler = -1;
       }
       return;
     }
@@ -1576,6 +1680,133 @@ export class Economy {
     if (changed) land.featureVersion++;
   }
 
+  // ------------------------------------------------------------------ life
+
+  /** Hourly: Glow. Daily: meals, growing up, retiring, births and farewells. */
+  private stepLife(): void {
+    const hour = Math.max(1, Math.round(this.dayTicks / 24));
+    const daily = this.tick % this.dayTicks === 0;
+    if (this.tick % hour !== 0 && !daily) return;
+    for (let p = 0; p < this.keeps.length; p++) {
+      if (daily) this.dailyLife(p);
+      this.updateGlow(p);
+    }
+  }
+
+  private members(owner: number, stage?: string): Person[] {
+    return this.people.filter((p) => p.alive && p.owner === owner && (!stage || p.stage === stage));
+  }
+
+  private houses(owner: number): Building[] {
+    return this.buildings.filter((b) => b.alive && b.built && b.owner === owner && b.def.id === "house");
+  }
+
+  private updateGlow(owner: number): void {
+    const all = this.members(owner);
+    if (!all.length) return;
+    const adults = all.filter((p) => p.stage !== "child");
+    const food = goodsFor("food").reduce((s, g) => s + (this.storageTotals(owner)[g] as number), 0);
+    const perDay = Math.max(1, Math.ceil(all.length * 0.45));
+    const houses = this.houses(owner);
+    const housed = all.filter((p) => p.house >= 0).length;
+    const keep = this.buildings[this.keeps[owner] ?? -1];
+    let trees = 0;
+    if (keep) for (const t of this.land.ring(keep.tile, 7)) if (this.land.feature[t] === Feature.Tree) trees += this.land.variety[t] === MEMORIAL ? 3 : 1;
+    const working = adults.filter((p) => p.settler >= 0).length / Math.max(1, adults.length);
+    const parts: GlowParts = {
+      nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4)),
+      shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
+      belonging: 0.3 + 0.7 * (housed / all.length),
+      beauty: Math.min(1, 0.2 + trees / 30),
+      rest: Math.max(0.3, Math.min(1, 1.35 - working)),
+    };
+    this.glowParts[owner] = parts;
+    this.glow[owner] = glowValue(parts);
+    if (keep) keep.residents = all.filter((p) => p.stage === "adult" && p.settler < 0 && p.house < 0).length;
+  }
+
+  private dailyLife(owner: number): void {
+    const r = this.lifeRng as Rng;
+    const all = this.members(owner);
+    // Meals.
+    let need = Math.ceil(all.length * 0.45);
+    for (const s of this.buildings) {
+      if (!s.alive || !s.def.storage || s.owner !== owner) continue;
+      for (const g of goodsFor("food")) {
+        while (need > 0 && (s.stock[g] as number) > 0) {
+          s.stock[g]!--;
+          need--;
+        }
+      }
+    }
+    const wasHungry = this.hungry[owner];
+    this.hungry[owner] = need > 0;
+    if (this.hungry[owner] && !wasHungry) this.notices.push("Your people are going hungry. Bread, fish or meat are needed.");
+    // Growing up, retiring, farewells.
+    for (const p of all) {
+      const age = this.ageDays(p);
+      if (p.stage === "child" && age >= CHILD_DAYS) {
+        p.stage = "adult";
+        note(p, "Grew up and is ready to work.");
+      } else if (p.stage === "adult" && age >= ELDER_DAYS && p.settler < 0) {
+        p.stage = "elder";
+        note(p, "Retired, and now teaches the young ones.");
+      } else if (this.tick >= p.lifespan && p.settler < 0) {
+        this.farewell(p);
+      }
+    }
+    // Move the homeless into houses with room, families together.
+    for (const h of this.houses(owner)) {
+      let occupants = this.people.filter((p) => p.alive && p.house === h.id);
+      const family = occupants[0]?.family;
+      const candidates = this.people
+        .filter((p) => p.alive && p.owner === owner && p.house < 0)
+        .sort((a, b) => Number(b.family === family) - Number(a.family === family) || a.id - b.id);
+      for (const p of candidates) {
+        if (occupants.length >= HOUSE_CAPACITY) break;
+        if (p.stage !== "child" && occupants.filter((o) => o.stage !== "child").length >= HOUSE_ADULTS) continue;
+        p.house = h.id;
+        occupants = [...occupants, p];
+        note(p, `Moved into a house with the ${occupants[0]?.family} family.`);
+      }
+      // Births: a household with room and at least two adults, in a content settlement.
+      const adults = occupants.filter((p) => p.stage !== "child");
+      const glow = this.glow[owner] ?? 0;
+      if (occupants.length < HOUSE_CAPACITY && adults.length >= 2 && glow >= 45 && !this.hungry[owner] && r.chance(0.12 + glow / 400)) {
+        const fam = adults[0]?.family ?? randomFamily(r);
+        const child = this.addPerson(owner, randomFirst(r), fam, this.tick, r);
+        child.stage = "child";
+        child.house = h.id;
+        note(child, `Born to the ${fam} family.`);
+        this.notices.push(`${fullName(child)} was born.`);
+      }
+    }
+  }
+
+  private farewell(p: Person): void {
+    p.alive = false;
+    const house = p.house;
+    p.house = -1;
+    this.notices.push(`Remembering ${fullName(p)}, ${this.ageDays(p)} days old.`);
+    // A memorial tree near where they lived.
+    const home = this.buildings[house >= 0 ? house : this.keeps[p.owner] ?? -1];
+    if (!home) return;
+    const land = this.land;
+    for (const t of land.ring(home.tile, 3)) {
+      if (!land.isLand(t) || land.use[t] !== Use.Free || land.feature[t] !== Feature.None) continue;
+      land.feature[t] = Feature.Tree;
+      land.amount[t] = TREE_MATURE;
+      land.variety[t] = MEMORIAL;
+      land.featureVersion++;
+      break;
+    }
+  }
+
+  /** People of a player, for the UI. */
+  peopleOf(owner: number): Person[] {
+    return this.members(owner);
+  }
+
   // ------------------------------------------------------------------ main step
 
   step(tick: number): void {
@@ -1587,6 +1818,7 @@ export class Economy {
     }
     for (const s of this.settlers) if (s.alive) this.stepSettler(s);
     this.stepNature();
+    this.stepLife();
     if (tick % 600 === 0) this.compact();
   }
 
@@ -1605,8 +1837,7 @@ export class Economy {
   }
 
   population(owner = 0): { idle: number; working: number } {
-    let idle = 0;
-    for (const b of this.buildings) if (b.alive && b.owner === owner) idle += b.residents;
+    const idle = this.people.filter((p) => p.alive && p.owner === owner && p.stage === "adult" && p.settler < 0).length;
     const working = this.settlers.filter((s) => s.alive && s.owner === owner && s.state !== "home").length;
     return { idle, working };
   }

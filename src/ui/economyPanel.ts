@@ -1,7 +1,16 @@
 import { BUILDINGS, GOODS, TOOLS } from "../sim/econ/defs";
 import type { Command, Economy } from "../sim/econ/economy";
 import { GOOD_COLORS } from "../render/econView";
+import { fullName, title, tradeName, type GlowParts } from "../sim/econ/people";
 import { h, Panel } from "./dom";
+
+const GLOW_LABELS: Record<keyof GlowParts, [string, string]> = {
+  nourishment: ["Nourishment", "Food in storage for the days ahead."],
+  shelter: ["Shelter", "Beds in houses and the Hearthship for everyone."],
+  belonging: ["Belonging", "People living in homes of their own."],
+  beauty: ["Beauty", "Trees and memorial groves near the Hearthship."],
+  rest: ["Rest", "Not everyone working at once."],
+};
 
 const GROUPS: { title: string; ids: string[] }[] = [
   { title: "Materials", ids: ["log", "stone", "plank"] },
@@ -34,10 +43,11 @@ export class EconomyPanel extends Panel {
     private readonly eco: () => Economy,
     private readonly player: () => number,
     private readonly command: (cmd: Command) => void,
+    private readonly onPerson: (id: number) => void = () => {},
   ) {
     super("economy", "Economy", { width: 380, className: "economy" });
     const tabs = h("div", { class: "tabs", role: "tablist" });
-    for (const name of ["Stock", "Distribution", "Tools"]) {
+    for (const name of ["Stock", "People", "Distribution", "Tools"]) {
       const page = h("div", { class: "form" });
       this.pages[name] = page;
       tabs.append(
@@ -56,6 +66,13 @@ export class EconomyPanel extends Panel {
       );
     }
     this.body.append(tabs, ...Object.values(this.pages));
+  }
+
+  /** Open on a given tab. */
+  openTab(name: string): void {
+    this.active = name;
+    this.show();
+    this.render(true);
   }
 
   protected override onShow(): void {
@@ -94,6 +111,39 @@ export class EconomyPanel extends Panel {
           ...TOOLS.map((t) => h("div", { class: "stock-cell" }, h("i", { style: "background:#9aa1b3" }), h("span", {}, GOODS[t]?.name ?? "?"), h("b", {}, String(totals[t] ?? 0)))),
         ),
         h("p", { class: "hint" }, `${pop.idle} settlers resting, ${pop.working} at work.`),
+      );
+      return;
+    }
+    if (this.active === "People") {
+      const all = eco.peopleOf(pl);
+      const count = (stage: string) => all.filter((p) => p.stage === stage).length;
+      const housed = all.filter((p) => p.house >= 0).length;
+      const parts = eco.glowParts[pl];
+      const glow = eco.glow[pl] ?? 0;
+      const masters = all
+        .flatMap((p) => Object.entries(p.skills).map(([trade, v]) => ({ p, trade, v })))
+        .filter((x) => x.v >= 0.45)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 8);
+      (this.pages.People as HTMLElement).replaceChildren(
+        h("div", { class: "glow-head" }, h("b", {}, String(glow)), h("span", {}, glow >= 70 ? "Your people are glowing." : glow >= 45 ? "Your people are content." : "Your people are unhappy. Work slows and no children are born.")),
+        ...(parts
+          ? (Object.keys(GLOW_LABELS) as (keyof GlowParts)[]).map((k) =>
+              h("div", { class: "skill", title: GLOW_LABELS[k][1] }, h("span", {}, GLOW_LABELS[k][0]), h("div", { class: "bar" }, h("i", { style: `width:${Math.round(Math.max(0, Math.min(1, parts[k])) * 100)}%` }))),
+            )
+          : []),
+        h("h3", { class: "sub" }, "Population"),
+        h("p", { class: "hint" }, `${all.length} people: ${count("adult")} adults, ${count("child")} children, ${count("elder")} elders. ${housed} live in houses.`),
+        h("h3", { class: "sub" }, "Skilled hands"),
+        masters.length
+          ? h(
+              "ul",
+              { class: "journal people" },
+              ...masters.map((m) =>
+                h("li", {}, h("a", { href: "#", onclick: (e: Event) => (e.preventDefault(), this.onPerson(m.p.id)) }, fullName(m.p)), ` · ${title(m.v)} ${tradeName(m.trade)}`),
+              ),
+            )
+          : h("p", { class: "hint" }, "Nobody has mastered a trade yet. Skill grows with every job done, faster with elders around to teach."),
       );
       return;
     }

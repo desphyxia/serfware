@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { MEMORIAL } from "../sim/econ/economy";
 import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
 import { broadleafGeometry, coniferGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
@@ -82,8 +83,9 @@ export class NatureView {
       const tB = up.clone().cross(tA);
       if (f === Feature.Tree) {
         const stage = (land.amount[t] as number) / TREE_MATURE;
-        const conifer = (land.variety[t] as number) < 2 ? (land.planet.terrain.temperature[t] as number) < 14 : (land.variety[t] as number) === 3;
-        const k = stage < 1 ? 1 : perTile;
+        const memorial = land.variety[t] === MEMORIAL;
+        const conifer = !memorial && ((land.variety[t] as number) < 2 ? (land.planet.terrain.temperature[t] as number) < 14 : (land.variety[t] as number) === 3);
+        const k = stage < 1 || memorial ? 1 : perTile;
         for (let i = 0; i < k; i++) {
           const h1 = SurfaceFrames.hash(t, i * 3 + 1);
           const h2 = SurfaceFrames.hash(t, i * 3 + 2);
@@ -99,7 +101,8 @@ export class NatureView {
           const idx = conifer ? counts.c++ : counts.b++;
           if (idx >= mesh.instanceMatrix.count) continue;
           mesh.setMatrixAt(idx, m);
-          color.setRGB(0.85 + 0.3 * h2, 0.85 + 0.3 * h2 + 0.05 * h1, 0.85 + 0.25 * h2);
+          if (memorial) color.setRGB(2.4, 1.35, 1.9);
+          else color.setRGB(0.85 + 0.3 * h2, 0.85 + 0.3 * h2 + 0.05 * h1, 0.85 + 0.25 * h2);
           mesh.setColorAt(idx, color);
         }
       } else if (f === Feature.Rock) {

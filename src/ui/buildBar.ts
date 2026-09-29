@@ -22,7 +22,7 @@ const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "materials", label: "Materials", key: "3" },
   { id: "food", label: "Food", key: "4" },
   { id: "metal", label: "Mining", key: "5" },
-  { id: "storage", label: "Storage", key: "6" },
+  { id: "storage", label: "Homes", key: "6" },
 ];
 
 function costText(def: BuildingDef): string {
