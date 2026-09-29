@@ -16,6 +16,7 @@ export class GrassPatch {
   private readonly tufts: THREE.InstancedMesh;
   private readonly flowers: THREE.InstancedMesh;
   private readonly pebbles: THREE.InstancedMesh;
+  private readonly leaves: THREE.InstancedMesh;
   private centerTile = -1;
   private key = "";
 
@@ -23,6 +24,7 @@ export class GrassPatch {
     private readonly land: LandUse,
     private readonly frames: SurfaceFrames,
     private readonly mask: FogMask,
+    private readonly autumnAt: (t: number) => number = () => 0,
   ) {
     const blades = new THREE.BufferGeometry();
     const pos: number[] = [];
@@ -79,7 +81,20 @@ export class GrassPatch {
     this.pebbles.count = 0;
     this.pebbles.frustumCulled = false;
     this.pebbles.receiveShadow = true;
-    this.group.add(this.tufts, this.flowers, this.pebbles);
+    // Fallen leaves: small flat, slightly cupped quads.
+    const leaf = new THREE.BufferGeometry();
+    leaf.setAttribute("position", new THREE.Float32BufferAttribute([-0.04, 0.012, 0, 0, 0.004, -0.028, 0.04, 0.012, 0, -0.04, 0.012, 0, 0.04, 0.012, 0, 0, 0.004, 0.028], 3));
+    leaf.computeVertexNormals();
+    this.leaves = new THREE.InstancedMesh(leaf, new PainterlyMaterial({ side: THREE.DoubleSide, brush: 0.5 }), MAX / 4);
+    this.leaves.count = 0;
+    // Colour buffers exist from the start, so the material compiles with per-instance colour
+    // even if the first layout has no leaves.
+    for (const mesh of [this.tufts, this.flowers, this.pebbles, this.leaves]) {
+      mesh.instanceColor ??= new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.count * 3).fill(1), 3);
+    }
+    this.leaves.frustumCulled = false;
+    this.leaves.receiveShadow = true;
+    this.group.add(this.tufts, this.flowers, this.pebbles, this.leaves);
   }
 
   update(focus: THREE.Vector3, closeness: number, density: number): void {
@@ -88,7 +103,7 @@ export class GrassPatch {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${Math.round(this.autumnAt(t) * 4)}`;
     if (this.centerTile >= 0 && key === this.key) {
       // Only rebuild once the focus has moved a few tiles.
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
@@ -196,17 +211,49 @@ export class GrassPatch {
         st++;
       }
     }
+    // Autumn: leaves under and around trees.
+    let lv = 0;
+    const leafColors = ["#c8742e", "#d99a3a", "#a94a2a", "#b8862f", "#8a5a2a"].map((x) => new THREE.Color(x));
+    for (const t of tiles) {
+      const autumn = this.autumnAt(t);
+      if (autumn < 0.15 || !land.isLand(t) || hiddenAt(this.mask, t)) continue;
+      const nearTree = land.feature[t] === Feature.Tree || land.planet.grid.neighborsOf(t).some((x) => land.feature[x] === Feature.Tree);
+      if (!nearTree) continue;
+      const per = Math.round((land.feature[t] === Feature.Tree ? 26 : 8) * autumn * density);
+      const up = this.frames.dir(t);
+      const tA = new THREE.Vector3(0, 1, 0).cross(up);
+      if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
+      tA.normalize();
+      const tB = up.clone().cross(tA);
+      const base = this.frames.pos(t);
+      for (let i = 0; i < per && lv < this.leaves.instanceMatrix.count; i++) {
+        const h1 = SurfaceFrames.hash(t, i * 5 + 501);
+        const h2 = SurfaceFrames.hash(t, i * 5 + 502);
+        const h3 = SurfaceFrames.hash(t, i * 5 + 503);
+        const r = Math.sqrt(h1) * 1.7;
+        const a = h2 * Math.PI * 2;
+        ground(p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r), t);
+        p.addScaledVector(up, 0.025);
+        this.frames.orient(p, null, q);
+        q.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((h3 - 0.5) * 0.5, h3 * 6.28, (h1 - 0.5) * 0.5)));
+        m.compose(p, q, s.set(1, 1, 1).multiplyScalar(0.8 + h3 * 0.6));
+        this.leaves.setMatrixAt(lv, m);
+        this.leaves.setColorAt(lv, leafColors[Math.floor(h2 * 97) % leafColors.length] as THREE.Color);
+        lv++;
+      }
+    }
     this.tufts.count = n;
     this.flowers.count = f;
     this.pebbles.count = st;
-    for (const mesh of [this.tufts, this.flowers, this.pebbles]) {
+    this.leaves.count = lv;
+    for (const mesh of [this.tufts, this.flowers, this.pebbles, this.leaves]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
   }
 
   dispose(): void {
-    for (const mesh of [this.tufts, this.flowers, this.pebbles]) {
+    for (const mesh of [this.tufts, this.flowers, this.pebbles, this.leaves]) {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
       mesh.dispose();

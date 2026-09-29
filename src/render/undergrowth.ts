@@ -112,6 +112,7 @@ export class Undergrowth {
       mesh.frustumCulled = false;
       mesh.castShadow = shadow;
       mesh.receiveShadow = true;
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3);
       this.group.add(mesh);
       return mesh;
     };
@@ -188,10 +189,10 @@ export class Undergrowth {
       const count = (x: number, salt: number) => Math.floor(x * density + SurfaceFrames.hash(t, salt));
       for (let i = 0, n = count(bushes, 901); i < n && nb < MAX; i++) {
         const h = place(1000 + i * 7, 1.6);
-        const sc = 0.8 + h * 1.1;
+        const sc = 0.7 + h * 0.9;
         m.compose(p, q, s.set(sc, sc * (0.8 + h * 0.4), sc));
         this.bushes.setMatrixAt(nb, m);
-        c.setHSL(0.26 + (h - 0.5) * 0.06 + (b === Biome.Marsh ? 0.03 : 0), 0.38, 0.28 + h * 0.1);
+        c.setHSL(0.27 + (h - 0.5) * 0.06 + (b === Biome.Marsh ? 0.03 : 0), 0.5, 0.13 + h * 0.07);
         this.bushes.setColorAt(nb++, c);
       }
       for (let i = 0, n = count(boulders, 902); i < n && nd < MAX / 2; i++) {

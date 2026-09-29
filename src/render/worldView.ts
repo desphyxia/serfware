@@ -100,7 +100,7 @@ export class WorldView {
     this.rivers = new RiverView(world.land, this.frames);
     this.econ = new EconView(world.economy, this.frames, this.tileData);
     this.overlays = new Overlays(world.land, this.frames);
-    this.grass = new GrassPatch(world.land, this.frames, this.mask);
+    this.grass = new GrassPatch(world.land, this.frames, this.mask, (t) => this.seasonAt(t).autumn);
     this.undergrowth = new Undergrowth(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.group.add(

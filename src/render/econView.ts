@@ -72,6 +72,8 @@ export class EconView {
       const puddle = smoothstep(0.2, 0.6, mud).mul(smoothstep(0.1, 0.35, mx_noise_float(positionWorld.mul(1.6)))).mul(ruts.add(onRibbon.mul(0.35)).min(1));
       c = mix(c, mix(c.mul(0.35), vec3(0.55, 0.62, 0.7), 0.35), puddle.mul(0.9));
       m.colorNode = vec4(c, 1);
+      // The node already includes the vertex colour; don't let the material multiply it again.
+      m.vertexColors = false;
     }
     m.polygonOffset = true;
     m.polygonOffsetFactor = -2;
