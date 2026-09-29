@@ -632,3 +632,88 @@ input.switch {
   padding-left: 18px;
   color: var(--ink);
 }
+
+/* ---------- Build categories and economy ---------- */
+.buildbar-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 24px);
+}
+.buildbar-wrap .buildbar {
+  position: static;
+  transform: none;
+}
+.bb.open {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.08);
+}
+.bb-pop {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px;
+  width: min(640px, calc(100vw - 24px));
+  padding: 6px;
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  font-size: calc(12px * var(--ui-scale));
+}
+.pop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+}
+.pop-item:hover {
+  border-color: var(--line-strong);
+  background: rgba(240, 178, 90, 0.08);
+}
+.pop-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+.pop-cost {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+}
+.stock-cell {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.95em;
+}
+.stock-cell i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+.stock-cell b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.panel.economy {
+  left: 12px;
+  right: auto;
+  top: calc(64px * var(--ui-scale));
+}

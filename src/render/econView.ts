@@ -4,6 +4,8 @@ import type { Economy, Settler } from "../sim/econ/economy";
 import { SurfaceFrames } from "./frames";
 import { patchWindows, type Emitter } from "./smoke";
 import {
+  WINDMILL_HUB,
+  windmillRotor,
   buildingGeometry,
   constructionSite,
   crateGeometry,
@@ -17,9 +19,20 @@ export const GOOD_COLORS: Record<string, string> = {
   log: "#9a6a42",
   stone: "#a9a59d",
   plank: "#e0b27a",
+  grain: "#e2c46e",
+  flour: "#f1e6cc",
+  bread: "#d98f4e",
+  fish: "#7fc4c8",
+  livestock: "#f0c8b8",
+  meat: "#b8574a",
+  coal: "#2e2e34",
+  ironore: "#a0583f",
+  iron: "#8f96a3",
+  goldore: "#c9a24a",
+  gold: "#f0c85a",
 };
 
-const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a") };
+const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0") };
 const HIDDEN_STATES = new Set(["rest", "craft"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS = 6000;
@@ -49,6 +62,7 @@ export class EconView {
   private readonly goodColors: THREE.Color[];
   readonly night = { value: 0 };
   private readonly emitterCache = new Map<string, Emitter>();
+  private rotorGeo: THREE.BufferGeometry | null = null;
 
   constructor(
     private readonly eco: Economy,
@@ -73,11 +87,12 @@ export class EconView {
     this.heads = inst(settlerHeadGeometry(), propMat, MAX_SETTLERS);
     this.carried = inst(crateGeometry(), plain, MAX_SETTLERS);
     this.crates = inst(crateGeometry(), plain, MAX_GOODS);
-    this.goodColors = GOODS.map((g) => new THREE.Color(GOOD_COLORS[g.id] ?? "#ffffff"));
+    this.goodColors = GOODS.map((g) => new THREE.Color(GOOD_COLORS[g.id] ?? (g.tool ? "#9aa1b3" : "#ffffff")));
     this.group.name = "economy";
   }
 
   update(time: number, dt: number): void {
+    this.spin(dt);
     if (this.eco.structureVersion !== this.structure) {
       this.structure = this.eco.structureVersion;
       this.rebuildRoads();
@@ -87,6 +102,17 @@ export class EconView {
     this.updatePennants(time);
     this.updateGoods();
     this.updateSettlers(time, dt);
+  }
+
+  /** Windmill sails turn in the wind, faster while grinding. */
+  private spin(dt: number): void {
+    for (const [id, v] of this.buildings) {
+      const rotor = v.mesh.getObjectByName("rotor");
+      if (!rotor) continue;
+      const b = this.eco.buildings[id];
+      const busy = b && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft";
+      rotor.rotation.z -= dt * (busy ? 1.6 : 0.35);
+    }
   }
 
   private rebuildRoads(): void {
@@ -193,6 +219,14 @@ export class EconView {
       this.frames.orient(p, flagPos, mesh.quaternion);
       mesh.userData.building = b.id;
       mesh.userData.site = !b.built;
+      if (b.built && b.def.id === "mill") {
+        this.rotorGeo ??= windmillRotor();
+        const rotor = new THREE.Mesh(this.rotorGeo, this.buildingMat);
+        rotor.position.copy(WINDMILL_HUB);
+        rotor.name = "rotor";
+        rotor.castShadow = true;
+        mesh.add(rotor);
+      }
       this.group.add(mesh);
       this.buildings.set(b.id, { mesh, key });
     }
@@ -311,6 +345,13 @@ export class EconView {
       keep: [-0.25, 3.15, -0.95],
       woodcutter: [0.39, 1.42, -0.2],
       forester: [0.33, 1.5, -0.2],
+      farm: [-0.45, 1.72, 0.1],
+      bakery: [0.95, 0.95, -0.3],
+      butcher: [0.33, 1.4, -0.2],
+      fisher: [0.3, 1.3, -0.18],
+      toolsmith: [0.39, 1.5, -0.2],
+      smelter: [0.65, 2.7, -0.1],
+      goldsmith: [0.65, 2.7, -0.1],
     };
     for (const b of this.eco.buildings) {
       if (!b.alive || !b.built) continue;

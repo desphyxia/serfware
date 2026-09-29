@@ -1,7 +1,7 @@
 import * as THREE from "three";
-import { Feature, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
+import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
-import { broadleafGeometry, coniferGeometry, rockGeometry, stumpGeometry } from "./models";
+import { broadleafGeometry, coniferGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
 import { patchWind } from "./wind";
 
 /**
@@ -15,6 +15,10 @@ export class NatureView {
   private readonly broadleaves: THREE.InstancedMesh;
   private readonly rocks: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
+  private readonly soil: THREE.InstancedMesh;
+  private readonly rows: THREE.InstancedMesh;
+  private readonly signs: THREE.InstancedMesh;
+  private signVersion = -1;
   private version = -1;
   private density = -1;
 
@@ -39,10 +43,20 @@ export class NatureView {
     this.broadleaves = make(broadleafGeometry(), capacity * 3, treeMat);
     this.rocks = make(rockGeometry(), capacity);
     this.stumps = make(stumpGeometry(), capacity);
+    this.soil = make(fieldSoilGeometry(), capacity);
+    this.soil.castShadow = false;
+    const rowMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    patchWind(rowMat, 0.35);
+    this.rows = make(fieldRowsGeometry(), capacity, rowMat);
+    this.signs = make(signpostGeometry(), 2000);
     this.group.name = "nature";
   }
 
   update(density: number): void {
+    if (this.land.signVersion !== this.signVersion) {
+      this.signVersion = this.land.signVersion;
+      this.updateSigns();
+    }
     if (this.land.featureVersion === this.version && density === this.density) return;
     this.version = this.land.featureVersion;
     this.density = density;
@@ -53,7 +67,9 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { c: 0, b: 0, r: 0, s: 0 };
+    const counts = { c: 0, b: 0, r: 0, s: 0, f: 0 };
+    const green = new THREE.Color("#6f9a45");
+    const gold = new THREE.Color("#e2c060");
     const perTile = 1 + Math.round(density * 2);
     for (let t = 0; t < n; t++) {
       const f = land.feature[t];
@@ -93,6 +109,21 @@ export class NatureView {
         s.set(sc, sc, sc);
         m.compose(base, q, s);
         if (counts.r < this.rocks.instanceMatrix.count) this.rocks.setMatrixAt(counts.r++, m);
+      } else if (f === Feature.Field) {
+        this.frames.orient(base, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 7) * Math.PI));
+        s.set(1, 1, 1);
+        m.compose(base, q, s);
+        if (counts.f < this.soil.instanceMatrix.count) {
+          this.soil.setMatrixAt(counts.f, m);
+          const g = (land.amount[t] as number) / FIELD_RIPE;
+          s.set(1, 0.08 + g * 0.92, 1);
+          m.compose(base, q, s);
+          this.rows.setMatrixAt(counts.f, m);
+          color.copy(green).lerp(gold, Math.max(0, g * 1.4 - 0.4));
+          this.rows.setColorAt(counts.f, color);
+          counts.f++;
+        }
       } else if (f === Feature.Stump) {
         this.frames.orient(base, null, q);
         s.set(1, 1, 1);
@@ -105,11 +136,38 @@ export class NatureView {
       [this.broadleaves, counts.b],
       [this.rocks, counts.r],
       [this.stumps, counts.s],
+      [this.soil, counts.f],
+      [this.rows, counts.f],
     ] as const) {
       mesh.count = Math.min(c, mesh.instanceMatrix.count);
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+  }
+
+  private updateSigns(): void {
+    const land = this.land;
+    const colors = ["#ffffff", "#a8a8a8", "#26262a", "#b0603f", "#f0c85a", "#d8d4cc"].map((c) => new THREE.Color(c));
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    let n = 0;
+    for (let t = 0; t < land.sign.length && n < this.signs.instanceMatrix.count; t++) {
+      const v = land.sign[t] as number;
+      if (!v) continue;
+      const p = this.frames.pos(t);
+      const tA = new THREE.Vector3(0, 1, 0).cross(p.clone().normalize()).normalize();
+      p.addScaledVector(tA, 0.9);
+      this.frames.orient(p, null, q);
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 3) * 6.28));
+      m.compose(p, q, one);
+      this.signs.setMatrixAt(n, m);
+      this.signs.setColorAt(n, colors[v] ?? (colors[0] as THREE.Color));
+      n++;
+    }
+    this.signs.count = n;
+    this.signs.instanceMatrix.needsUpdate = true;
+    if (this.signs.instanceColor) this.signs.instanceColor.needsUpdate = true;
   }
 
   dispose(): void {

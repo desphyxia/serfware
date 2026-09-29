@@ -22,6 +22,7 @@ import { starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
+import { EconomyPanel } from "./ui/economyPanel";
 import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
@@ -66,6 +67,7 @@ export class Game {
   private readonly buildBar: BuildBar;
   private readonly toasts = new Toasts();
   private readonly info: InfoPanel;
+  private readonly economyPanel: EconomyPanel;
   private readonly stock = new StockBar();
   readonly tools: Tools;
   readonly audio: Ambience;
@@ -164,7 +166,15 @@ export class Game {
         this.command({ t: "demolish", tile });
         this.info.select(null);
       },
+      geologist: (flagTile) => {
+        if (this.command({ t: "geologist", flagTile })) this.toasts.show("A geologist is on the way.", "good");
+      },
     });
+    this.economyPanel = new EconomyPanel(
+      () => this.world.economy,
+      () => this.session.player,
+      (cmd) => void this.command(cmd),
+    );
     this.tools = new Tools({
       world: () => this.world,
       player: () => this.session.player,
@@ -174,7 +184,10 @@ export class Game {
       select: (sel: Selection) => this.info.select(sel),
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
     });
-    this.buildBar = new BuildBar((id) => this.tools.set(id));
+    this.buildBar = new BuildBar(
+      (id) => this.tools.set(id),
+      () => this.economyPanel.toggle(),
+    );
     this.menu = new GameMenu({
       saveNow: (name) => this.saveNow(name),
       listSaves: () => this.listSaves(),
@@ -195,6 +208,7 @@ export class Game {
       this.buildBar.root,
       this.toasts.root,
       this.info.root,
+      this.economyPanel.root,
       this.menu.root,
       this.debug.root,
       this.settingsPanel.root,
@@ -512,6 +526,7 @@ export class Game {
         this.report.show();
       } else if (e.key === "Escape") {
         if (this.report.visible) this.report.hide();
+        else if (this.buildBar.closePopover()) return;
         else if (this.tools.cancel()) return;
         else if (this.info.visible) this.info.hide();
         else this.settingsPanel.toggle();
@@ -522,10 +537,7 @@ export class Game {
         this.menu.toggle();
       } else if (e.key.toLowerCase() === "g") {
         this.view.setGrid(!this.view.grid);
-      } else {
-        const tool = this.buildBar.toolForKey(e.key);
-        if (tool) this.tools.set(tool);
-      }
+      } else this.buildBar.key(e.key);
     });
     canvas.addEventListener("webglcontextlost", (e) => {
       e.preventDefault();
@@ -616,6 +628,7 @@ export class Game {
       this.uiTimer = 400;
       this.stock.update(eco, this.session.player);
       this.info.refresh();
+      this.economyPanel.refresh();
     }
     this.gfx.render();
 

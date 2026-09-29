@@ -1,6 +1,8 @@
 import type { Planet } from "../planet/planet";
 import { Biome } from "../planet/terrain";
+import { SimNoise } from "../noise";
 import type { Rng } from "../rng";
+import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
 
 /** What stands on a tile. */
@@ -18,7 +20,25 @@ export enum Feature {
   Tree = 1,
   Rock = 2,
   Stump = 3,
+  /** A grain field; amount is its growth stage. */
+  Field = 4,
 }
+
+/** Underground deposits found by geologists and dug by mines. */
+export enum Deposit {
+  None = 0,
+  Coal = 1,
+  Iron = 2,
+  Gold = 3,
+  Granite = 4,
+}
+
+export const DEPOSIT_IDS = ["none", "coal", "iron", "gold", "granite"] as const;
+
+export const FIELD_RIPE = 4;
+export const FIELD_GROWTH_TICKS = 450;
+/** How long a geologist's signpost stands. */
+export const SIGN_TICKS = 6000;
 
 export const TREE_MATURE = 4;
 /** Ticks between growth stages of a planted tree (about two in-game hours each). */
@@ -41,6 +61,14 @@ export class LandUse {
   readonly variety: Uint8Array;
   /** Owner of each tile's land: 0 = nobody, otherwise player index + 1. */
   readonly territory: Uint8Array;
+  readonly deposit: Uint8Array;
+  readonly depositAmount: Uint8Array;
+  /** Fish stock in water tiles. */
+  readonly fish: Uint8Array;
+  /** Geologist signposts: 0 none, 1 nothing found, 2.. Deposit + 1. */
+  readonly sign: Uint8Array;
+  readonly signExpire: Int32Array;
+  signVersion = 0;
   /** Footpath wear from settlers walking off-road (desire paths). */
   readonly wear: Uint16Array;
   wearVersion = 0;
@@ -61,6 +89,11 @@ export class LandUse {
     this.variety = new Uint8Array(n);
     this.territory = new Uint8Array(n);
     this.wear = new Uint16Array(n);
+    this.deposit = new Uint8Array(n);
+    this.depositAmount = new Uint8Array(n);
+    this.fish = new Uint8Array(n);
+    this.sign = new Uint8Array(n);
+    this.signExpire = new Int32Array(n);
     this.spacing = Math.sqrt((4 * Math.PI) / n);
   }
 
@@ -95,6 +128,60 @@ export class LandUse {
       }
     }
     this.featureVersion++;
+    this.populateGeology(rng);
+  }
+
+  /** Deposits under hills and mountains, fish in coastal waters. */
+  private populateGeology(rng: Rng): void {
+    const { grid, terrain } = this.planet;
+    const peak = terrain.params.mountainHeight;
+    const nCoal = new SimNoise(rng.nextU32());
+    const nIron = new SimNoise(rng.nextU32());
+    const nGold = new SimNoise(rng.nextU32());
+    for (let t = 0; t < grid.count; t++) {
+      const e = terrain.elevation[t] as number;
+      if (e <= 0) {
+        if (e > -peak * 0.5) this.fish[t] = 6 + (t % 5);
+        continue;
+      }
+      const m = e / peak;
+      if (m < 0.18) continue;
+      const x = grid.center[t * 3] as number;
+      const y = grid.center[t * 3 + 1] as number;
+      const z = grid.center[t * 3 + 2] as number;
+      const coal = nCoal.fbm(x * 9, y * 9, z * 9, 3) + (m < 0.45 ? 0.15 : 0);
+      const iron = nIron.fbm(x * 9 + 3, y * 9, z * 9, 3) + (m > 0.35 ? 0.1 : -0.2);
+      const gold = nGold.fbm(x * 11, y * 11 - 5, z * 11, 3) + (m > 0.55 ? 0.05 : -0.5);
+      const best = Math.max(coal, iron, gold);
+      let d = Deposit.Granite;
+      if (best > 0.12) d = best === coal ? Deposit.Coal : best === iron ? Deposit.Iron : Deposit.Gold;
+      else if (m < 0.3) continue;
+      this.deposit[t] = d;
+      this.depositAmount[t] = Math.min(255, Math.round(8 + m * 20 + Math.max(0, best) * 30));
+    }
+  }
+
+  isMountain(t: number): boolean {
+    const e = this.planet.terrain.elevation[t] as number;
+    const b = this.planet.terrain.biome[t] as Biome;
+    return e > this.planet.terrain.params.mountainHeight * 0.3 || b === Biome.Rock || b === Biome.Snow;
+  }
+
+  /** Water within two steps. */
+  isCoast(t: number): boolean {
+    if (!this.isLand(t)) return false;
+    for (const n of this.ring(t, 2)) if (!this.isLand(n)) return true;
+    return false;
+  }
+
+  /** Building-specific placement: terrain rules on top of canBuild. */
+  canBuildDef(t: number, flagTile: number, def: BuildingDef, owner = 0): boolean {
+    if (def.terrain === "mountain") {
+      if (!this.isMountain(t)) return false;
+      return this.canBuild(t, flagTile, !!def.large, owner, 3.2);
+    }
+    if (def.terrain === "coast" && !this.isCoast(t)) return false;
+    return this.canBuild(t, flagTile, !!def.large, owner);
   }
 
   isLand(t: number): boolean {
@@ -123,6 +210,7 @@ export class LandUse {
       (this.use[t] === Use.Free || this.use[t] === Use.Blocked) &&
       this.feature[t] !== Feature.Tree &&
       this.feature[t] !== Feature.Rock &&
+      this.feature[t] !== Feature.Field &&
       this.slope(t) < 2.2
     );
   }
@@ -136,12 +224,12 @@ export class LandUse {
   }
 
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
-  canBuild(t: number, flagTile: number, large = false, owner = 0): boolean {
+  canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3): boolean {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
-    if (this.use[t] !== Use.Free || this.feature[t] === Feature.Tree || this.feature[t] === Feature.Rock) return false;
+    if (this.use[t] !== Use.Free || this.feature[t] === Feature.Tree || this.feature[t] === Feature.Rock || this.feature[t] === Feature.Field) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
-    if (this.slope(t) > 1.3) return false;
+    if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
     if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 : this.canPlaceFlag(flagTile, owner))) return false;
     for (const n of grid.neighborsOf(t)) {
