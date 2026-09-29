@@ -1,4 +1,6 @@
 import { dayInfo, type DayInfo } from "./clock";
+import { Economy, type Command, type CommandResult } from "./econ/economy";
+import { LandUse } from "./econ/landuse";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet } from "./planet/planet";
@@ -16,6 +18,8 @@ export interface WorldOptions {
 export class World {
   readonly seed: string;
   readonly planet: Planet;
+  readonly land: LandUse;
+  readonly economy: Economy;
   tick = 0;
   private readonly rng: Rng;
 
@@ -23,10 +27,20 @@ export class World {
     this.seed = seed;
     this.rng = new Rng(seed);
     this.planet = Planet.generate(this.rng.fork("planet"), opts.size);
+    this.land = new LandUse(this.planet);
+    this.land.populate(this.rng.fork("nature"));
+    this.economy = new Economy(this.land);
+    this.economy.setupStart(this.rng.fork("start"));
+  }
+
+  /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
+  command(cmd: Command): CommandResult {
+    return this.economy.apply(cmd);
   }
 
   step(): void {
     this.tick++;
+    this.economy.step(this.tick);
   }
 
   /** Time at the prime meridian. */
@@ -43,6 +57,7 @@ export class World {
     const h = new StateHasher().str(this.seed).int(this.tick);
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
+    this.economy.hash(h);
     return h.value();
   }
 }

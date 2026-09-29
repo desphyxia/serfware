@@ -4,12 +4,13 @@ import { captureConsole, log } from "./core/log";
 import { SettingsStore, suggestPreset } from "./core/settings";
 import { BUILD } from "./build";
 import { Game } from "./game";
+import { starterChain } from "./sim/econ/planner";
 import { ReportPanel } from "./ui/reportPanel";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 
 declare global {
   interface Window {
-    __seedfall?: { ready: boolean; game?: Game; errors: () => number };
+    __seedfall?: { ready: boolean; game?: Game; errors: () => number; lastError?: () => unknown; demo?: () => number };
   }
 }
 
@@ -17,7 +18,7 @@ declare global {
 crash.install(window);
 captureConsole();
 log.info(`Seedfall build ${BUILD.id} (${BUILD.date})`);
-window.__seedfall = { ready: false, errors: () => crash.errors.length };
+window.__seedfall = { ready: false, errors: () => crash.errors.length, lastError: () => crash.errors[crash.errors.length - 1] };
 
 function initialSeed(): string {
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
@@ -38,6 +39,7 @@ try {
   const game = new Game(root, settings, initialSeed());
   game.start();
   window.__seedfall.game = game;
+  window.__seedfall.demo = () => starterChain(game.world);
   window.__seedfall.ready = true;
 } catch (err) {
   const e = err as Error;

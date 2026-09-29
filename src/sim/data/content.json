@@ -1,0 +1,67 @@
+{
+  "goods": [
+    { "id": "log", "name": "Log" },
+    { "id": "stone", "name": "Stone" },
+    { "id": "plank", "name": "Plank" }
+  ],
+  "buildings": [
+    {
+      "id": "keep",
+      "name": "Hearthship",
+      "description": "Your landing craft, unpacked into a keep. Stores goods and houses idle settlers.",
+      "large": true,
+      "storage": true,
+      "cost": {},
+      "buildable": false
+    },
+    {
+      "id": "woodcutter",
+      "name": "Woodcutter",
+      "description": "Fells mature trees nearby and brings back logs.",
+      "cost": { "plank": 2 },
+      "job": "fell",
+      "radius": 6,
+      "workTicks": 60,
+      "restTicks": 40,
+      "produces": "log"
+    },
+    {
+      "id": "forester",
+      "name": "Forester",
+      "description": "Plants saplings on open ground nearby. Trees take a few days to grow.",
+      "cost": { "plank": 2 },
+      "job": "plant",
+      "radius": 5,
+      "workTicks": 40,
+      "restTicks": 70
+    },
+    {
+      "id": "quarry",
+      "name": "Quarry",
+      "description": "Breaks stone from rocks nearby.",
+      "cost": { "plank": 2 },
+      "job": "quarry",
+      "radius": 6,
+      "workTicks": 80,
+      "restTicks": 40,
+      "produces": "stone"
+    },
+    {
+      "id": "sawmill",
+      "name": "Sawmill",
+      "description": "Saws logs into planks.",
+      "cost": { "plank": 2, "stone": 2 },
+      "job": "craft",
+      "inputs": { "log": 1 },
+      "inputStock": 4,
+      "workTicks": 70,
+      "restTicks": 10,
+      "produces": "plank"
+    }
+  ],
+  "start": {
+    "settlers": 32,
+    "stock": { "log": 8, "stone": 16, "plank": 24 },
+    "territoryRadius": 9
+  }
+}

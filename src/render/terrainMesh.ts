@@ -77,7 +77,7 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number)
         // Small visual-only roughness so subdivided land isn't perfectly smooth.
         const land = Math.min(va.h, vb.h) > 0.2;
         const n1 = noise.fbm(dir.x * 45, dir.y * 45, dir.z * 45, 3);
-        const bump = land ? n1 * (0.25 + 0.5 * Math.min(1, (va.h + vb.h) * 0.12)) : 0;
+        const bump = land ? n1 * (0.12 + 0.3 * Math.min(1, (va.h + vb.h) * 0.08)) : 0;
         const color = va.color.clone().lerp(vb.color, 0.5);
         if (land) color.offsetHSL(n1 * 0.015, n1 * 0.04, n1 * 0.045);
         m = verts.length;
