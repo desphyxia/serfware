@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Feature, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
 import { broadleafGeometry, coniferGeometry, rockGeometry, stumpGeometry } from "./models";
+import { patchWind } from "./wind";
 
 /**
  * Trees, rocks and stumps from the simulation's tile features, drawn as instanced meshes and
@@ -23,8 +24,10 @@ export class NatureView {
     capacity: number,
   ) {
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
-    const make = (g: THREE.BufferGeometry, n: number) => {
-      const m = new THREE.InstancedMesh(g, mat, n);
+    const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
+    patchWind(treeMat, 1);
+    const make = (g: THREE.BufferGeometry, n: number, material = mat) => {
+      const m = new THREE.InstancedMesh(g, material, n);
       m.castShadow = true;
       m.receiveShadow = true;
       m.count = 0;
@@ -32,8 +35,8 @@ export class NatureView {
       this.group.add(m);
       return m;
     };
-    this.conifers = make(coniferGeometry(), capacity * 3);
-    this.broadleaves = make(broadleafGeometry(), capacity * 3);
+    this.conifers = make(coniferGeometry(), capacity * 3, treeMat);
+    this.broadleaves = make(broadleafGeometry(), capacity * 3, treeMat);
     this.rocks = make(rockGeometry(), capacity);
     this.stumps = make(stumpGeometry(), capacity);
     this.group.name = "nature";
@@ -115,6 +118,6 @@ export class NatureView {
       m.geometry.dispose();
       m.dispose();
     }
-    ((this.group.children[0] as THREE.Mesh).material as THREE.Material).dispose();
+    for (const c of this.group.children) ((c as THREE.Mesh).material as THREE.Material).dispose();
   }
 }

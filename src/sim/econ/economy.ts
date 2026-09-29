@@ -764,6 +764,10 @@ export class Economy {
     if (s.prog >= 1000) {
       s.prog -= 1000;
       s.pi++;
+      if (!onRoad && this.land.use[b] !== Use.Building) {
+        this.land.wear[b] = Math.min(2000, (this.land.wear[b] as number) + 24);
+        this.land.wearVersion++;
+      }
       if (s.pi >= s.path.length - 1) {
         s.prog = 0;
         return true;
@@ -1151,6 +1155,10 @@ export class Economy {
     const start = ((this.tick / 10) * slice) % n;
     for (let k = 0; k < slice; k++) {
       const t = (start + k) % n;
+      if ((land.wear[t] as number) > 0) {
+        land.wear[t] = Math.max(0, (land.wear[t] as number) - 6);
+        land.wearVersion++;
+      }
       if (land.feature[t] === Feature.Stump) {
         if ((land.amount[t] as number) <= 1) {
           land.feature[t] = Feature.None;
@@ -1201,6 +1209,9 @@ export class Economy {
     h.int(this.flags.length).int(this.roads.length).int(this.buildings.length);
     for (const s of this.settlers) if (s.alive) h.int(s.id).int(s.path[s.pi] ?? -1).int(s.prog).int(s.carrying);
     for (const f of this.flags) if (f.alive) h.int(f.goods.length);
+    let wear = 0;
+    for (let t = 0; t < this.land.wear.length; t += 13) wear += this.land.wear[t] as number;
+    h.int(wear);
     for (const b of this.buildings) if (b.alive) h.int(b.consumed).int(b.output).int(b.residents);
   }
 }

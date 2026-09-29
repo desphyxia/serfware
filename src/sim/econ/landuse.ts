@@ -40,6 +40,9 @@ export class LandUse {
   /** Tree variety (0..3) for visuals. */
   readonly variety: Uint8Array;
   readonly territory: Uint8Array;
+  /** Footpath wear from settlers walking off-road (desire paths). */
+  readonly wear: Uint16Array;
+  wearVersion = 0;
   /** Bumped whenever features change; renderers rebuild when it moves. */
   featureVersion = 0;
   useVersion = 0;
@@ -56,6 +59,7 @@ export class LandUse {
     this.nextGrowth = new Int32Array(n);
     this.variety = new Uint8Array(n);
     this.territory = new Uint8Array(n);
+    this.wear = new Uint16Array(n);
     this.spacing = Math.sqrt((4 * Math.PI) / n);
   }
 

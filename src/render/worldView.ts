@@ -3,6 +3,10 @@ import type { GraphicsSettings } from "../core/settings";
 import type { World } from "../sim/world";
 import { AtmosphereShell, CloudLayer } from "./atmosphere";
 import { EconView } from "./econView";
+import { Fauna } from "./fauna";
+import { GrassPatch } from "./grass";
+import { Particles } from "./smoke";
+import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
 import { NatureView } from "./natureView";
 import { Overlays } from "./overlays";
@@ -24,6 +28,11 @@ export class WorldView {
   readonly nature: NatureView;
   readonly econ: EconView;
   readonly overlays: Overlays;
+  readonly grass: GrassPatch;
+  readonly fauna: Fauna;
+  readonly particles = new Particles();
+  private wearVersion = -1;
+  private wearTimer = 0;
   private gridOn = false;
 
   constructor(
@@ -53,12 +62,17 @@ export class WorldView {
     this.nature = new NatureView(world.land, this.frames, planet.grid.count);
     this.econ = new EconView(world.economy, this.frames);
     this.overlays = new Overlays(world.land, this.frames);
+    this.grass = new GrassPatch(world.land, this.frames);
+    this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.group.add(
       this.land,
       this.water,
       this.nature.group,
       this.econ.group,
       this.overlays.group,
+      this.grass.group,
+      this.fauna.group,
+      this.particles.points,
       this.wells.group,
       this.clouds.mesh,
       this.atmosphere.mesh,
@@ -78,6 +92,9 @@ export class WorldView {
     time: number;
     dt: number;
     vegetation: number;
+    particles: number;
+    focus: THREE.Vector3;
+    pixelRatio: number;
     sunDir: THREE.Vector3;
     sky: THREE.Color;
     daylight: number;
@@ -85,8 +102,21 @@ export class WorldView {
     fog: THREE.Fog | null;
     closeness: number;
   }): void {
+    WIND.uTime.value = p.time;
     this.nature.update(p.vegetation);
+    this.econ.night.value = 1 - p.daylight;
     this.econ.update(p.time, p.dt);
+    this.grass.update(p.focus, p.closeness, p.vegetation);
+    this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
+    const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
+    const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
+    this.particles.update(p.dt, p.closeness > 0.2 ? this.econ.emitters() : [], wind, light, p.pixelRatio, p.particles);
+    this.wearTimer -= p.dt;
+    if (this.wearTimer <= 0 && this.world.land.wearVersion !== this.wearVersion) {
+      this.wearTimer = 1;
+      this.wearVersion = this.world.land.wearVersion;
+      this.updateWear();
+    }
     this.overlays.update();
     const w = this.water.material.uniforms;
     w.uTime!.value = p.time;
@@ -109,6 +139,16 @@ export class WorldView {
     grid.value += (target - grid.value) * 0.2;
   }
 
+  private updateWear(): void {
+    const g = this.land.geometry;
+    const owner = g.userData.owner as Int32Array;
+    const attr = g.getAttribute("aWear") as THREE.BufferAttribute;
+    const wear = this.world.land.wear;
+    const arr = attr.array as Float32Array;
+    for (let i = 0; i < owner.length; i++) arr[i] = Math.min(1, (wear[owner[i] as number] as number) / 900);
+    attr.needsUpdate = true;
+  }
+
   /** Tile under a ray: intersect the sea-level sphere, then refine against tile heights. */
   pick(ray: THREE.Ray, hint = 0): number {
     const planet = this.world.planet;
@@ -128,6 +168,9 @@ export class WorldView {
 
   dispose(): void {
     this.nature.dispose();
+    this.grass.dispose();
+    this.fauna.dispose();
+    this.particles.dispose();
     this.econ.dispose();
     this.overlays.dispose();
     this.group.traverse((o) => {

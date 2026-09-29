@@ -11,6 +11,7 @@ import { biomeColor, tileHash } from "./palette";
  */
 
 interface Vert {
+  tile: number; // owning tile, for per-tile shading data
   dir: THREE.Vector3; // unit direction
   h: number; // elevation relative to sea level
   color: THREE.Color;
@@ -39,7 +40,7 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number)
     const m = terrain.moisture[t] as number;
     c.offsetHSL(0, 0, (0.5 - m) * 0.05);
     tileColor.push(c);
-    verts.push({ dir: new THREE.Vector3(grid.center[t * 3], grid.center[t * 3 + 1], grid.center[t * 3 + 2]), h: terrain.elevation[t] as number, color: c, edge: 1 });
+    verts.push({ tile: t, dir: new THREE.Vector3(grid.center[t * 3], grid.center[t * 3 + 1], grid.center[t * 3 + 2]), h: terrain.elevation[t] as number, color: c, edge: 1 });
   }
   for (let k = 0; k < C; k++) {
     const t0 = grid.cornerTiles[k * 3] as number;
@@ -52,7 +53,7 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number)
       .add(tileColor[t2] as THREE.Color)
       .multiplyScalar(1 / 3)
       .clone();
-    verts.push({ dir: new THREE.Vector3(grid.corners[k * 3], grid.corners[k * 3 + 1], grid.corners[k * 3 + 2]), h, color: col, edge: 0 });
+    verts.push({ tile: t0, dir: new THREE.Vector3(grid.corners[k * 3], grid.corners[k * 3 + 1], grid.corners[k * 3 + 2]), h, color: col, edge: 0 });
   }
 
   // Fan triangles: (centre, corner k, corner k+1).
@@ -81,7 +82,7 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number)
         const color = va.color.clone().lerp(vb.color, 0.5);
         if (land) color.offsetHSL(n1 * 0.015, n1 * 0.04, n1 * 0.045);
         m = verts.length;
-        verts.push({ dir, h: (va.h + vb.h) / 2 + bump, color, edge: (va.edge + vb.edge) / 2 });
+        verts.push({ tile: va.edge >= vb.edge ? va.tile : vb.tile, dir, h: (va.h + vb.h) / 2 + bump, color, edge: (va.edge + vb.edge) / 2 });
         mids.set(key, m);
       }
       return m;
@@ -127,6 +128,7 @@ function makeGeometry(verts: Vert[], tris: number[], radius: (v: Vert) => number
   const col = withColor ? new Float32Array(used.length * 3) : null;
   const edge = new Float32Array(used.length);
   const depth = new Float32Array(used.length);
+  const owner = new Int32Array(used.length);
   used.forEach((vi, j) => {
     const v = verts[vi] as Vert;
     const r = radius(v);
@@ -139,6 +141,7 @@ function makeGeometry(verts: Vert[], tris: number[], radius: (v: Vert) => number
       col[j * 3 + 2] = v.color.b;
     }
     edge[j] = v.edge;
+    owner[j] = v.tile;
     depth[j] = -v.h;
   });
   const index = new Uint32Array(tris.length);
@@ -148,6 +151,8 @@ function makeGeometry(verts: Vert[], tris: number[], radius: (v: Vert) => number
   if (col) g.setAttribute("color", new THREE.BufferAttribute(col, 3));
   g.setAttribute("aEdge", new THREE.BufferAttribute(edge, 1));
   g.setAttribute("aDepth", new THREE.BufferAttribute(depth, 1));
+  g.setAttribute("aWear", new THREE.BufferAttribute(new Float32Array(used.length), 1).setUsage(THREE.DynamicDrawUsage));
+  g.userData.owner = owner;
   g.setIndex(new THREE.BufferAttribute(index, 1));
   g.computeVertexNormals();
   g.computeBoundingSphere();
@@ -162,15 +167,16 @@ export function makeTerrainMaterial(): THREE.MeshStandardMaterial {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uGrid = uniforms.uGrid;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nattribute float aEdge;\nvarying float vEdge;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvEdge = aEdge;");
+      .replace("#include <common>", "#include <common>\nattribute float aEdge;\nattribute float aWear;\nvarying float vEdge;\nvarying float vWear;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvEdge = aEdge;\nvWear = aWear;");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uGrid;\nvarying float vEdge;")
+      .replace("#include <common>", "#include <common>\nuniform float uGrid;\nvarying float vEdge;\nvarying float vWear;")
       .replace(
         "#include <color_fragment>",
         `#include <color_fragment>
         float w = fwidth(vEdge) * 1.4;
         float line = 1.0 - smoothstep(0.0, w + 0.02, vEdge);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.33, 0.2), smoothstep(0.04, 1.0, vWear) * 0.7);
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55 + vec3(0.06, 0.05, 0.02), line * uGrid * 0.85);`,
       );
   };

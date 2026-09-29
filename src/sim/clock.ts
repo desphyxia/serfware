@@ -42,5 +42,5 @@ export function dayInfo(tick: number, dayLengthHours: number, lonFraction = 0): 
 export function formatDay(info: DayInfo): string {
   const hh = String(info.hour).padStart(2, "0");
   const mm = String(info.minute).padStart(2, "0");
-  return `Day ${info.day} ${hh}:${mm}`;
+  return `Day ${Math.max(1, info.day)} ${hh}:${mm}`;
 }
