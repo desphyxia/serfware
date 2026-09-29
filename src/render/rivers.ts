@@ -57,53 +57,92 @@ export class RiverView {
     const across: number[] = [];
     const width: number[] = [];
     const idx: number[] = [];
+    const field = frames.field;
+    const R = field.R;
+    const unit = field.spacing * R;
+    const { hydro } = land;
+    const n = land.soil.length;
+    // Rivers as continuous courses: from each source (a river tile nothing flows into) down to
+    // the sea, a lake, or the river it joins.
+    const fed = new Uint8Array(n);
+    for (let t = 0; t < n; t++) if (land.isRiver(t) && (hydro.flowTo[t] as number) >= 0) fed[hydro.flowTo[t] as number] = 1;
+    const used = new Uint8Array(n);
+    const courses: number[][] = [];
+    for (let t = 0; t < n; t++) {
+      if (!land.isRiver(t) || fed[t]) continue;
+      const course = [t];
+      let c = t;
+      used[c] = 1;
+      for (;;) {
+        const to = hydro.flowTo[c] as number;
+        if (to < 0) break;
+        course.push(to);
+        if (!land.isRiver(to) || used[to]) break;
+        used[to] = 1;
+        c = to;
+      }
+      if (course.length > 1) courses.push(course);
+    }
+    // Loops or unreached pieces (should be rare): take what is left one segment at a time.
+    for (let t = 0; t < n; t++) if (land.isRiver(t) && !used[t] && (hydro.flowTo[t] as number) >= 0) courses.push([t, hydro.flowTo[t] as number]);
+
+    const dirOf = (t: number) => frames.dir(t);
+    const pt = new THREE.Vector3();
     const up = new THREE.Vector3();
-    const dir = new THREE.Vector3();
     const side = new THREE.Vector3();
-    const p = new THREE.Vector3();
-    const q = new THREE.Vector3();
-    for (let t = 0; t < land.soil.length; t++) {
-      if (!land.isRiver(t)) continue;
-      const to = land.hydro.flowTo[t] as number;
-      if (to < 0) continue;
-      // Fill the carved bed to about 60% of its depth; the surface spans the bed at that level.
-      const field = frames.field;
-      const unit = field.spacing * field.R;
-      const pa = field.riverProfile(t);
-      const pb = land.isRiver(to) ? field.riverProfile(to) : pa;
-      const w0 = pa.width * 1.5 * unit;
-      const w1 = land.isLand(to) ? pb.width * 1.5 * unit : w0 * 1.6;
-      const lift0 = pa.depth * 0.6;
-      const lift1 = land.isLand(to) ? pb.depth * 0.6 : 0.07;
-      const seg = 5;
+    const fwd = new THREE.Vector3();
+    let alongBase = 0;
+    for (const course of courses) {
+      // Control points at tile centres, smoothed once (Chaikin), then sampled finely.
+      let ctrl = course.map((t) => ({ d: dirOf(t), t }));
+      const smoothed: typeof ctrl = [ctrl[0]!];
+      for (let i = 0; i < ctrl.length - 1; i++) {
+        const a = ctrl[i]!;
+        const b = ctrl[i + 1]!;
+        if (i > 0) smoothed.push({ d: a.d.clone().lerp(b.d, 0.25).normalize(), t: a.t });
+        if (i < ctrl.length - 2) smoothed.push({ d: a.d.clone().lerp(b.d, 0.75).normalize(), t: b.t });
+      }
+      smoothed.push(ctrl[ctrl.length - 1]!);
+      ctrl = smoothed;
+      const samples: { d: THREE.Vector3; t: number }[] = [];
+      for (let i = 0; i < ctrl.length - 1; i++) {
+        const a = ctrl[i]!;
+        const b = ctrl[i + 1]!;
+        const steps = 4;
+        for (let k = 0; k < steps; k++) samples.push({ d: a.d.clone().lerp(b.d, k / steps).normalize(), t: k < steps / 2 ? a.t : b.t });
+      }
+      samples.push(ctrl[ctrl.length - 1]!);
       const base = pos.length / 3;
-      for (let k = 0; k <= seg; k++) {
-        const f = k / seg;
-        const lift = lift0 + (lift1 - lift0) * f;
-        frames.between(t, to, f, lift, p);
-        frames.between(t, to, Math.min(1, f + 0.05), lift, q);
-        up.copy(p).normalize();
-        dir.copy(q).sub(p);
-        if (k === seg) {
-          frames.between(t, to, f - 0.05, lift, q);
-          dir.copy(p).sub(q);
-        }
-        side.crossVectors(dir, up).normalize();
-        const w = w0 + (w1 - w0) * f;
-        for (const s of [-1, 1]) {
-          const v = p.clone().addScaledVector(side, s * w);
+      samples.forEach((smp, i) => {
+        const tile = smp.t;
+        const wet = !land.isLand(tile) || hydro.lake[tile] === 1;
+        const prof = field.riverProfile(land.isRiver(tile) ? tile : course[Math.max(0, course.length - 2)]!);
+        // The surface follows the carved bed (ignoring building pads) plus the water depth; at the
+        // mouth it settles to sea or lake level.
+        const bed = field.height(smp.d.x, smp.d.y, smp.d.z, tile, null, false).h;
+        const level = wet ? Math.max(0, hydro.lake[tile] ? (hydro.lakeLevel[tile] as number) : 0) + 0.05 : Math.max(0.03, bed + prof.depth * 0.55);
+        pt.copy(smp.d).multiplyScalar(R + level);
+        const prev = samples[Math.max(0, i - 1)]!.d;
+        const next = samples[Math.min(samples.length - 1, i + 1)]!.d;
+        fwd.copy(next).sub(prev);
+        up.copy(smp.d);
+        side.crossVectors(fwd, up).normalize();
+        const w = prof.width * 1.15 * unit * (wet ? 1.5 : 1);
+        for (const sg of [-1, 1]) {
+          const v = pt.clone().addScaledVector(side, sg * w);
           pos.push(v.x, v.y, v.z);
-          along.push(t * 0.37 + f * 1.2);
-          across.push(s);
+          along.push(alongBase + i * 0.15);
+          across.push(sg);
           width.push(w);
-          this.riverTiles.push(f < 0.5 ? t : to);
+          this.riverTiles.push(tile);
         }
-        if (k > 0) {
-          const o = base + (k - 1) * 2;
+        if (i > 0) {
+          const o = base + (i - 1) * 2;
           // Counter-clockwise seen from above (front faces up).
           idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2);
         }
-      }
+      });
+      alongBase += samples.length * 0.15 + 3.7;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -123,6 +162,26 @@ export class RiverView {
     const R = land.planet.params.radius;
     const pos: number[] = [];
     const idx: number[] = [];
+    // Corners on the shore push outward, so the water runs under the rising bank and the
+    // ground (not the hex outline) draws the shoreline.
+    const cornerTiles = new Map<number, number[]>();
+    for (let t = 0; t < grid.count; t++) for (const c of grid.cornersOf(t)) {
+      let l = cornerTiles.get(c);
+      if (!l) cornerTiles.set(c, (l = []));
+      l.push(t);
+    }
+    const spacing = Math.sqrt((4 * Math.PI) / grid.count);
+    const corner = (c: number, out: THREE.Vector3) => {
+      out.set(grid.corners[c * 3] as number, grid.corners[c * 3 + 1] as number, grid.corners[c * 3 + 2] as number);
+      const ts = cornerTiles.get(c) ?? [];
+      const lakes = ts.filter((x) => land.hydro.lake[x]);
+      if (lakes.length === ts.length || lakes.length === 0) return out;
+      const mid = new THREE.Vector3();
+      for (const x of lakes) mid.add(new THREE.Vector3(...grid.centerOf(x)));
+      mid.multiplyScalar(1 / lakes.length);
+      return out.addScaledVector(out.clone().sub(mid).normalize(), spacing * 0.45).normalize();
+    };
+    const cv = new THREE.Vector3();
     for (let t = 0; t < grid.count; t++) {
       if (!land.hydro.lake[t]) continue;
       const r = R + (land.hydro.lakeLevel[t] as number);
@@ -131,7 +190,8 @@ export class RiverView {
       this.lakeTiles.push(t);
       const cs = grid.cornersOf(t);
       for (const c of cs) {
-        pos.push((grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
+        corner(c, cv).multiplyScalar(r);
+        pos.push(cv.x, cv.y, cv.z);
         this.lakeTiles.push(t);
       }
       for (let k = 0; k < cs.length; k++) idx.push(base, base + 1 + k, base + 1 + ((k + 1) % cs.length));

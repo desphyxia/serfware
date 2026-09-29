@@ -10,7 +10,7 @@ const BIOME_COLORS: Record<Biome, [string, string]> = {
   [Biome.Meadow]: ["#7fa653", "#98b85e"],
   [Biome.Forest]: ["#557f3f", "#6b9148"],
   [Biome.DeepForest]: ["#3c6436", "#4a7340"],
-  [Biome.Steppe]: ["#b3a76a", "#c4b577"],
+  [Biome.Steppe]: ["#a3a45e", "#b4ae66"],
   [Biome.Marsh]: ["#5f7a4c", "#6f8a57"],
   [Biome.Rock]: ["#8d8479", "#a0978a"],
   [Biome.Snow]: ["#eef2f4", "#ffffff"],

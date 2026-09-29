@@ -9,6 +9,7 @@ import { AtmosphereShell, CloudLayer } from "./atmosphere";
 import { EconView } from "./econView";
 import { Fauna } from "./fauna";
 import { GrassPatch } from "./grass";
+import { Undergrowth } from "./undergrowth";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -42,6 +43,7 @@ export class WorldView {
   readonly econ: EconView;
   readonly overlays: Overlays;
   readonly grass: GrassPatch;
+  readonly undergrowth: Undergrowth;
   readonly fauna: Fauna;
   readonly particles = new Particles();
   readonly rivers: RiverView;
@@ -96,9 +98,10 @@ export class WorldView {
     this.frames = new SurfaceFrames(planet, this.field);
     this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask, (t) => this.seasonAt(t));
     this.rivers = new RiverView(world.land, this.frames);
-    this.econ = new EconView(world.economy, this.frames);
+    this.econ = new EconView(world.economy, this.frames, this.tileData);
     this.overlays = new Overlays(world.land, this.frames);
     this.grass = new GrassPatch(world.land, this.frames, this.mask);
+    this.undergrowth = new Undergrowth(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.group.add(
       this.terrain.group,
@@ -109,6 +112,7 @@ export class WorldView {
       this.econ.group,
       this.overlays.group,
       this.grass.group,
+      this.undergrowth.group,
       this.fauna.group,
       this.particles.points,
       this.wells.group,
@@ -222,6 +226,7 @@ export class WorldView {
     this.econ.night.value = 1 - p.daylight;
     this.econ.update(p.time, p.dt);
     this.grass.update(p.focus, p.closeness, p.vegetation);
+    this.undergrowth.update(p.focus, p.closeness, p.vegetation);
     this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
@@ -295,6 +300,7 @@ export class WorldView {
     this.terrain.dispose();
     this.nature.dispose();
     this.grass.dispose();
+    this.undergrowth.dispose();
     this.fauna.dispose();
     this.particles.dispose();
     this.econ.dispose();
