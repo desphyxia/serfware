@@ -8,6 +8,8 @@ import type { Selection } from "./ui/infoPanel";
 
 export interface ToolHost {
   world(): World;
+  /** The player this machine builds for. */
+  player(): number;
   overlays(): Overlays;
   command(cmd: Command): boolean;
   notify(text: string, kind?: "info" | "warn" | "good"): void;
@@ -70,15 +72,16 @@ export class Tools {
     ov.setPreview(null, false);
     ov.setGhost(null, -1, -1, false);
 
-    const key = `${this.tool}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}`;
+    const pl = this.host.player();
+    const key = `${this.tool}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}`;
     if (key !== this.markerKey) {
       this.markerKey = key;
       const tiles: number[] = [];
       if (this.tool === "flag" || this.isBuilding(this.tool)) {
         const large = this.isBuilding(this.tool) && !!BUILDINGS[BUILDING_INDEX.get(this.tool) as number]?.large;
         for (let i = 0; i < land.territory.length; i++) {
-          if (!land.territory[i]) continue;
-          if (this.tool === "flag" ? land.canPlaceFlag(i) && land.use[i] !== Use.Road : land.canBuild(i, land.bestFlagTile(i), large)) tiles.push(i);
+          if (land.territory[i] !== pl + 1) continue;
+          if (this.tool === "flag" ? land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road : land.canBuild(i, land.bestFlagTile(i, pl), large, pl)) tiles.push(i);
         }
       }
       ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : "#b8f08c");
@@ -86,28 +89,30 @@ export class Tools {
     if (t < 0) return;
 
     if (this.tool === "flag") {
-      ov.setGhost("flag", t, -1, land.canPlaceFlag(t));
+      ov.setGhost("flag", t, -1, land.canPlaceFlag(t, pl));
     } else if (this.isBuilding(this.tool)) {
-      const flagTile = land.bestFlagTile(t);
+      const flagTile = land.bestFlagTile(t, pl);
       const eco = w.economy;
       const existing = eco.flagAt(flagTile);
-      const ok = flagTile >= 0 && land.canBuild(t, flagTile) && !(existing && existing.building >= 0);
+      const ok = flagTile >= 0 && land.canBuild(t, flagTile, false, pl) && !(existing && existing.building >= 0);
       ov.setGhost(this.tool, t, flagTile, ok);
     } else if (this.tool === "road" && this.roadStart >= 0 && t !== this.roadStart) {
       const path = this.roadPath(this.roadStart, t);
-      if (path) ov.setPreview(path, w.economy.checkRoad(path) === null);
+      if (path) ov.setPreview(path, w.economy.checkRoad(path, pl) === null);
     }
   }
 
   private roadPath(from: number, to: number): number[] | null {
     const land = this.host.world().land;
-    return land.findPath(from, to, (x) => land.roadable(x), 2500);
+    const pl = this.host.player();
+    return land.findPath(from, to, (x) => land.roadable(x, pl), 2500);
   }
 
   click(t: number): void {
     const w = this.host.world();
     const land = w.land;
     const eco = w.economy;
+    const pl = this.host.player();
     if (t < 0) return;
     switch (this.tool) {
       case "select": {
@@ -128,7 +133,7 @@ export class Tools {
           else if (land.use[t] === Use.Building) {
             const b = eco.buildingAt(t);
             if (b) this.roadStart = (eco.flags[b.flag] as { tile: number }).tile;
-          } else if (land.canPlaceFlag(t)) {
+          } else if (land.canPlaceFlag(t, pl)) {
             if (this.host.command({ t: "flag", tile: t })) this.roadStart = t;
           } else this.host.notify("Start a road at a flag.", "warn");
           this.refresh();
@@ -140,7 +145,7 @@ export class Tools {
           this.host.notify("No way through there.", "warn");
           return;
         }
-        const err = eco.checkRoad(path);
+        const err = eco.checkRoad(path, pl);
         if (err) {
           this.host.notify(err, "warn");
           return;
@@ -173,7 +178,7 @@ export class Tools {
       }
       default: {
         if (!this.isBuilding(this.tool)) return;
-        const flagTile = land.bestFlagTile(t);
+        const flagTile = land.bestFlagTile(t, pl);
         if (flagTile < 0) {
           this.host.notify("No room for this building's flag here.", "warn");
           return;

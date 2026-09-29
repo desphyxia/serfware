@@ -66,7 +66,7 @@ export class InfoPanel extends Panel {
         body.push(h("div", { class: "chips" }, ...b.stock.map((n, i) => goodChip(i, n))));
         body.push(h("p", { class: "hint" }, `${b.residents} settlers resting inside.`));
       } else if (!b.built) {
-        const connected = eco.route(eco.buildings[eco.keep]!.flag, b.flag).dist !== Infinity;
+        const connected = eco.route(eco.buildings[eco.keeps[b.owner] as number]!.flag, b.flag).dist !== Infinity;
         body.push(h("p", { class: connected ? "status" : "status warn" }, connected ? (b.builder >= 0 ? "Builder at work." : "Waiting for a builder.") : "Not connected. Build a road from this flag to your roads."));
         body.push(h("h3", { class: "sub" }, "Materials delivered"));
         body.push(h("div", { class: "chips" }, ...b.cost.map((n, i) => (n > 0 ? goodChip(i, `${b.delivered[i]}/${n}`) : null)).filter((x): x is HTMLElement => !!x)));
@@ -77,7 +77,7 @@ export class InfoPanel extends Panel {
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));
         if (b.output > 0) body.push(h("p", { class: "hint" }, `${b.output} finished, waiting to go out.`));
       }
-      if (b.id !== eco.keep) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(b.tile) }, "Demolish")));
+      if (!eco.keeps.includes(b.id)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(b.tile) }, "Demolish")));
     } else if (this.sel.kind === "flag") {
       const f = eco.flags[this.sel.id];
       if (!f || !f.alive) return this.select(null);
@@ -90,7 +90,7 @@ export class InfoPanel extends Panel {
       }
       if (counts.size) body.push(h("div", { class: "chips" }, ...[...counts].map(([t, n]) => goodChip(t, n))));
       if (f.goods.length >= 6) body.push(h("p", { class: "hint warn" }, "This flag is crowded. Add a parallel road or split long roads with flags."));
-      if (f.building !== eco.keep) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(f.tile) }, "Remove flag")));
+      if (!eco.keeps.includes(f.building)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(f.tile) }, "Remove flag")));
     } else {
       const r = eco.roads[this.sel.id];
       if (!r || !r.alive) return this.select(null);
@@ -107,9 +107,9 @@ export class InfoPanel extends Panel {
 export class StockBar {
   readonly root = h("div", { class: "stockbar", "aria-label": "Stock" });
 
-  update(eco: Economy): void {
-    const totals = eco.storageTotals();
-    const pop = eco.population();
+  update(eco: Economy, player = 0): void {
+    const totals = eco.storageTotals(player);
+    const pop = eco.population(player);
     this.root.replaceChildren(
       ...totals.map((n, i) => goodChip(i, n)),
       h("span", { class: "chip-good pop", title: "Settlers resting / at work" }, `Settlers ${pop.idle} / ${pop.working}`),

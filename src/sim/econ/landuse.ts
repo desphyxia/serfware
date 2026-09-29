@@ -39,6 +39,7 @@ export class LandUse {
   readonly nextGrowth: Int32Array;
   /** Tree variety (0..3) for visuals. */
   readonly variety: Uint8Array;
+  /** Owner of each tile's land: 0 = nobody, otherwise player index + 1. */
   readonly territory: Uint8Array;
   /** Footpath wear from settlers walking off-road (desire paths). */
   readonly wear: Uint16Array;
@@ -114,11 +115,11 @@ export class LandUse {
     return this.isLand(t) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock;
   }
 
-  /** A flag or road may go here. */
-  roadable(t: number): boolean {
+  /** A flag or road of `owner` may go here. */
+  roadable(t: number, owner = 0): boolean {
     return (
       this.isLand(t) &&
-      this.territory[t] === 1 &&
+      this.territory[t] === owner + 1 &&
       (this.use[t] === Use.Free || this.use[t] === Use.Blocked) &&
       this.feature[t] !== Feature.Tree &&
       this.feature[t] !== Feature.Rock &&
@@ -126,23 +127,23 @@ export class LandUse {
     );
   }
 
-  canPlaceFlag(t: number): boolean {
-    if (!(this.roadable(t) || this.use[t] === Use.Road)) return false;
+  canPlaceFlag(t: number, owner = 0): boolean {
+    if (!(this.roadable(t, owner) || this.use[t] === Use.Road)) return false;
     if (this.use[t] === Use.Blocked) return false;
     // Flags need breathing room: no neighbouring flag.
     for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
-    return this.territory[t] === 1;
+    return this.territory[t] === owner + 1;
   }
 
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
-  canBuild(t: number, flagTile: number, large = false): boolean {
+  canBuild(t: number, flagTile: number, large = false, owner = 0): boolean {
     const grid = this.planet.grid;
-    if (!this.isLand(t) || this.territory[t] !== 1) return false;
+    if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
     if (this.use[t] !== Use.Free || this.feature[t] === Feature.Tree || this.feature[t] === Feature.Rock) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > 1.3) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
-    if (!(this.use[flagTile] === Use.Flag || this.canPlaceFlag(flagTile))) return false;
+    if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 : this.canPlaceFlag(flagTile, owner))) return false;
     for (const n of grid.neighborsOf(t)) {
       if (this.use[n] === Use.Building) return false;
       if (large && n !== flagTile && (this.use[n] !== Use.Free || this.feature[n] === Feature.Rock)) return false;
@@ -151,13 +152,13 @@ export class LandUse {
   }
 
   /** Neighbour of `t` best suited as its flag: an existing flag first, else the flattest valid spot. */
-  bestFlagTile(t: number): number {
+  bestFlagTile(t: number, owner = 0): number {
     const grid = this.planet.grid;
     let best = -1;
     let bestScore = Infinity;
     for (const n of grid.neighborsOf(t)) {
-      if (this.use[n] === Use.Flag) return n;
-      if (!this.canPlaceFlag(n)) continue;
+      if (this.use[n] === Use.Flag) return this.territory[n] === owner + 1 ? n : -1;
+      if (!this.canPlaceFlag(n, owner)) continue;
       const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + n * 1e-9;
       if (s < bestScore) {
         bestScore = s;
@@ -167,15 +168,15 @@ export class LandUse {
     return best;
   }
 
-  /** Mark tiles within `radius` steps of `center` as own territory. */
-  claim(center: number, radius: number): void {
+  /** Claim unowned tiles within `radius` steps of `center` for `owner`. */
+  claim(center: number, radius: number, owner = 0): void {
     const grid = this.planet.grid;
     const dist = new Map<number, number>([[center, 0]]);
     const queue = [center];
     for (let i = 0; i < queue.length; i++) {
       const t = queue[i] as number;
       const d = dist.get(t) as number;
-      this.territory[t] = 1;
+      if (this.territory[t] === 0) this.territory[t] = owner + 1;
       if (d >= radius) continue;
       for (const n of grid.neighborsOf(t)) {
         if (!dist.has(n)) {

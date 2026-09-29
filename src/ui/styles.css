@@ -594,3 +594,41 @@ input.switch {
 .inspector {
   bottom: calc(140px * var(--ui-scale) + 10px);
 }
+
+/* ---------- Banner, saves, lobby ---------- */
+.banner {
+  position: absolute;
+  top: calc(56px * var(--ui-scale) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(240, 178, 90, 0.92);
+  color: #1b1208;
+  font-weight: 600;
+  font-size: calc(13px * var(--ui-scale));
+}
+.save-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+.save-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.save-row strong {
+  font-weight: 600;
+}
+.player-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+}

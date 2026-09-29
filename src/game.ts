@@ -9,12 +9,15 @@ import { PlanetCamera } from "./render/planetCamera";
 import { GameRenderer } from "./render/renderer";
 import { SkyDome } from "./render/sky";
 import { WorldView } from "./render/worldView";
-import { formatDay, TICK_MS, ticksPerDay } from "./sim/clock";
+import { formatDay, ticksPerDay } from "./sim/clock";
 import { BIOME_NAMES } from "./sim/planet/terrain";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 import { World } from "./sim/world";
 import type { Command } from "./sim/econ/economy";
+import type { HostLobby, JoinLobby } from "./net/lobby";
+import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
+import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
 import { starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
@@ -38,6 +41,9 @@ export function formatLatLon(p: THREE.Vector3): string {
 export class Game {
   world: World;
   view: WorldView;
+  session: Session;
+  private readonly menu: GameMenu;
+  private autosaveTimer = 120000;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   cam: PlanetCamera;
@@ -72,8 +78,13 @@ export class Game {
   private readonly pointer = new THREE.Vector2(9, 9);
   private pointerDirty = false;
   private hoverTile = -1;
-  speed = 1;
-  private acc = 0;
+  get speed(): number {
+    return this.session.speed;
+  }
+  set speed(v: number) {
+    this.session.setSpeed(v);
+    if (this.session.info.mode === "solo") this.session.speed = v;
+  }
   private lastFrame = 0;
   private lastRender = 0;
   private readonly frameTimes: number[] = [];
@@ -97,6 +108,7 @@ export class Game {
     container.append(this.loading);
 
     this.world = new World(seed);
+    this.session = new SoloSession(this.world);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 9000);
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
     this.sky = new SkyDome(hashString(seed));
@@ -116,6 +128,7 @@ export class Game {
       settings: () => this.settingsPanel.toggle(),
       debug: () => this.debug.toggle(),
       report: () => this.report.show(),
+      menu: () => this.menu.toggle(),
     });
     this.inspector = h("div", { class: "inspector", hidden: true, "aria-live": "polite" });
     this.settingsPanel = new SettingsPanel(settings, {
@@ -154,6 +167,7 @@ export class Game {
     });
     this.tools = new Tools({
       world: () => this.world,
+      player: () => this.session.player,
       overlays: () => this.view.overlays,
       command: (cmd) => this.command(cmd),
       notify: (text, kind) => this.toasts.show(text, kind),
@@ -161,6 +175,18 @@ export class Game {
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
     });
     this.buildBar = new BuildBar((id) => this.tools.set(id));
+    this.menu = new GameMenu({
+      saveNow: (name) => this.saveNow(name),
+      listSaves: () => this.listSaves(),
+      load: (id) => void this.loadSave(id),
+      remove: (id) => this.removeSave(id),
+      exportCurrent: () => JSON.stringify(makeSave(this.session, this.world.seed, BUILD.id)),
+      importText: (text) => void this.importSave(text),
+      seed: () => this.world.seed,
+      startSession: (lobby, mode) => this.startHosted(lobby, mode),
+      joined: (lobby) => this.watchJoin(lobby),
+      notify: (text, kind) => this.toasts.show(text, kind),
+    });
     this.buildBar.setActive("select");
     container.append(
       this.hud.root,
@@ -169,6 +195,7 @@ export class Game {
       this.buildBar.root,
       this.toasts.root,
       this.info.root,
+      this.menu.root,
       this.debug.root,
       this.settingsPanel.root,
       this.report.root,
@@ -206,7 +233,7 @@ export class Game {
 
   /** Issue a player command; failures are explained with a toast. */
   command(cmd: Command): boolean {
-    const r = this.world.command(cmd);
+    const r = this.session.submit(cmd);
     if (!r.ok && r.reason) this.toasts.show(r.reason, "warn");
     else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
     return r.ok;
@@ -215,8 +242,9 @@ export class Game {
   /** Start looking at the Hearthship. */
   private focusStart(): void {
     const eco = this.world.economy;
-    if (eco.keep >= 0) {
-      const keep = eco.buildings[eco.keep]!;
+    const keepId = eco.keeps[this.session.player] ?? eco.keep;
+    if (keepId >= 0) {
+      const keep = eco.buildings[keepId]!;
       this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(keep.tile)), 34);
       return;
     }
@@ -300,16 +328,7 @@ export class Game {
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.scene.remove(this.view.group);
-    this.view.dispose();
-    this.world = new World(seed);
-    this.view = new WorldView(this.world, this.settings.get().graphics, hashString(seed));
-    this.scene.add(this.view.group);
-    this.cam = this.makeCamera(this.gfx.canvas);
-    this.hoverTile = -1;
-    this.info.select(null);
-    this.tools.set("select");
-    this.focusStart();
+    this.useSession(new SoloSession(new World(seed)));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -317,6 +336,132 @@ export class Game {
     }
     this.loading.hidden = true;
     log.info(`New world ${seed}: ${this.world.planet.grid.count} tiles in ${(performance.now() - t0).toFixed(0)} ms`);
+  }
+
+  /** Swap in a new world and session (new game, load, or multiplayer start). */
+  useSession(session: Session): void {
+    this.session.close();
+    this.scene.remove(this.view.group);
+    this.view.dispose();
+    this.session = session;
+    this.world = session.world;
+    this.view = new WorldView(this.world, this.settings.get().graphics, hashString(this.world.seed));
+    this.scene.add(this.view.group);
+    this.cam = this.makeCamera(this.gfx.canvas);
+    this.hoverTile = -1;
+    this.info.select(null);
+    this.tools.set("select");
+    this.focusStart();
+    session.onDesync = (detail) => {
+      crash.capture({ kind: "desync", message: detail });
+      this.toasts.show("The game went out of sync. A report has been prepared (F8).", "warn");
+    };
+  }
+
+  /** Programmatic multiplayer entry points (used by the menu and the multiplayer test). */
+  hostLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }, mode: "shared" | "neighbours"): Promise<HostLobby> {
+    return this.menu.openHost(o, mode);
+  }
+
+  joinLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }): Promise<JoinLobby> {
+    return this.menu.openJoin(o);
+  }
+
+  startLobby(lobby: HostLobby, mode: "shared" | "neighbours"): void {
+    this.startHosted(lobby, mode);
+  }
+
+  private startHosted(lobby: HostLobby, mode: "shared" | "neighbours"): void {
+    const seed = this.world.seed;
+    this.useSession(lobby.start(seed, mode));
+    this.menu.hide();
+    this.toasts.show(`Game started with ${lobby.players.length} players.`, "good");
+  }
+
+  private watchJoin(lobby: JoinLobby): void {
+    lobby.onStart = (session) => {
+      this.useSession(session);
+      this.menu.hide();
+      this.toasts.show(`Joined "${session.world.seed}" as player ${session.localPlayer + 1}.`, "good");
+    };
+  }
+
+  // ---------------------------------------------------------------- saves
+
+  private readSaves(): SaveMeta[] {
+    try {
+      return JSON.parse(localStorage.getItem("seedfall.saves") ?? "[]") as SaveMeta[];
+    } catch {
+      return [];
+    }
+  }
+
+  listSaves(): SaveMeta[] {
+    return this.readSaves().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  saveNow(name: string, id = `s${Date.now().toString(36)}`): SaveMeta | null {
+    const save = makeSave(this.session, name, BUILD.id);
+    try {
+      localStorage.setItem(`seedfall.save.${id}`, JSON.stringify(save));
+      const list = this.readSaves().filter((m) => m.id !== id);
+      const meta = saveMeta(id, save);
+      list.push(meta);
+      localStorage.setItem("seedfall.saves", JSON.stringify(list));
+      log.info(`Saved ${id} at tick ${save.tick} (${save.commands.length} commands)`);
+      return meta;
+    } catch (e) {
+      this.toasts.show(`Could not save here: ${(e as Error).message}. Use Copy save instead.`, "warn");
+      return null;
+    }
+  }
+
+  removeSave(id: string): void {
+    try {
+      localStorage.removeItem(`seedfall.save.${id}`);
+      localStorage.setItem("seedfall.saves", JSON.stringify(this.readSaves().filter((m) => m.id !== id)));
+    } catch {
+      // Nothing to remove when storage is unavailable.
+    }
+  }
+
+  async loadSave(id: string): Promise<void> {
+    let text: string | null;
+    try {
+      text = localStorage.getItem(`seedfall.save.${id}`);
+    } catch {
+      text = null;
+    }
+    if (!text) {
+      this.toasts.show("That save could not be read.", "warn");
+      return;
+    }
+    await this.importSave(text);
+  }
+
+  async importSave(text: string): Promise<void> {
+    let save: SaveFile;
+    try {
+      save = JSON.parse(text) as SaveFile;
+    } catch {
+      this.toasts.show("That doesn't look like a Seedfall save.", "warn");
+      return;
+    }
+    this.loading.hidden = false;
+    (this.loading.firstChild as HTMLElement).textContent = save.name || save.seed;
+    await new Promise((r) => setTimeout(r, 40));
+    try {
+      const { world, matches, log: cmds } = replaySave(save);
+      const session = new SoloSession(world);
+      session.log.push(...cmds);
+      this.useSession(session);
+      this.menu.hide();
+      this.toasts.show(matches ? `Loaded "${save.name}".` : `Loaded "${save.name}", but this build simulates differently, so it may not match exactly.`, matches ? "good" : "warn");
+    } catch (e) {
+      crash.capture({ kind: "error", message: `Load failed: ${(e as Error).message}`, stack: (e as Error).stack });
+    } finally {
+      this.loading.hidden = true;
+    }
   }
 
   private applyShadowSettings(): void {
@@ -373,6 +518,8 @@ export class Game {
       } else if (e.key === " ") {
         e.preventDefault();
         this.speed = this.speed === 0 ? 1 : 0;
+      } else if (e.key.toLowerCase() === "m") {
+        this.menu.toggle();
       } else if (e.key.toLowerCase() === "g") {
         this.view.setGrid(!this.view.grid);
       } else {
@@ -434,15 +581,16 @@ export class Game {
     this.lastFrame = now;
     this.lastRender = now;
 
-    this.acc += dt * this.speed;
-    let steps = 0;
-    while (this.acc >= TICK_MS && steps < 200) {
-      this.world.step();
-      this.acc -= TICK_MS;
-      steps++;
-      this.tickCounter.ticks++;
+    const steps = this.session.advance(dt);
+    this.tickCounter.ticks += steps;
+    this.hud.setBanner(this.session.status());
+    if (this.session.info.mode === "solo") {
+      this.autosaveTimer -= dt;
+      if (this.autosaveTimer <= 0) {
+        this.autosaveTimer = 120000;
+        if (this.session.log.length > 0) this.saveNow(`Autosave · ${this.world.seed}`, "autosave");
+      }
     }
-    if (steps >= 200) this.acc = 0;
     if (now - this.tickCounter.since > 1000) {
       this.tickCounter.rate = (this.tickCounter.ticks * 1000) / (now - this.tickCounter.since);
       this.tickCounter.ticks = 0;
@@ -466,7 +614,7 @@ export class Game {
     this.uiTimer -= dt;
     if (this.uiTimer <= 0) {
       this.uiTimer = 400;
-      this.stock.update(eco);
+      this.stock.update(eco, this.session.player);
       this.info.refresh();
     }
     this.gfx.render();
