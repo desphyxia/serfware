@@ -52,7 +52,6 @@ export class RiverView {
   readonly lakeTiles: number[] = [];
 
   private buildRivers(land: LandUse, frames: SurfaceFrames): THREE.Mesh {
-    const { hydro } = land;
     const pos: number[] = [];
     const along: number[] = [];
     const across: number[] = [];
@@ -65,20 +64,28 @@ export class RiverView {
     const q = new THREE.Vector3();
     for (let t = 0; t < land.soil.length; t++) {
       if (!land.isRiver(t)) continue;
-      const to = hydro.flowTo[t] as number;
+      const to = land.hydro.flowTo[t] as number;
       if (to < 0) continue;
-      const w0 = Math.min(0.9, 0.22 + 0.16 * Math.sqrt((hydro.flow[t] as number) / hydro.riverFlow));
-      const w1 = land.isLand(to) ? Math.min(0.9, 0.22 + 0.16 * Math.sqrt((hydro.flow[to] as number) / hydro.riverFlow)) : w0 * 1.6;
+      // Fill the carved bed to about 60% of its depth; the surface spans the bed at that level.
+      const field = frames.field;
+      const unit = field.spacing * field.R;
+      const pa = field.riverProfile(t);
+      const pb = land.isRiver(to) ? field.riverProfile(to) : pa;
+      const w0 = pa.width * 1.5 * unit;
+      const w1 = land.isLand(to) ? pb.width * 1.5 * unit : w0 * 1.6;
+      const lift0 = pa.depth * 0.6;
+      const lift1 = land.isLand(to) ? pb.depth * 0.6 : 0.07;
       const seg = 5;
       const base = pos.length / 3;
       for (let k = 0; k <= seg; k++) {
         const f = k / seg;
-        frames.between(t, to, f, 0.07, p);
-        frames.between(t, to, Math.min(1, f + 0.05), 0.07, q);
+        const lift = lift0 + (lift1 - lift0) * f;
+        frames.between(t, to, f, lift, p);
+        frames.between(t, to, Math.min(1, f + 0.05), lift, q);
         up.copy(p).normalize();
         dir.copy(q).sub(p);
         if (k === seg) {
-          frames.between(t, to, f - 0.05, 0.07, q);
+          frames.between(t, to, f - 0.05, lift, q);
           dir.copy(p).sub(q);
         }
         side.crossVectors(dir, up).normalize();
@@ -93,7 +100,8 @@ export class RiverView {
         }
         if (k > 0) {
           const o = base + (k - 1) * 2;
-          idx.push(o, o + 2, o + 1, o + 1, o + 2, o + 3);
+          // Counter-clockwise seen from above (front faces up).
+          idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2);
         }
       }
     }

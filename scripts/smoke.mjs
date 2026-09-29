@@ -29,7 +29,12 @@ try {
 
   const reportErrors = await page.evaluate(() => window.__seedfall.errors());
   mkdirSync("artifacts", { recursive: true });
-  await page.screenshot({ path: "artifacts/smoke.png" });
+  // Software rendering is slow (seconds per frame on CI): pause the loop so the capture isn't
+  // queued behind frames.
+  await page.evaluate(() => {
+    window.__seedfall.game.hold = true;
+  });
+  await page.screenshot({ path: "artifacts/smoke.png", timeout: 120000 });
   if (errors.length || reportErrors) {
     throw new Error(`Errors during smoke test:\n${errors.join("\n")}\ncrash reporter errors: ${reportErrors}`);
   }

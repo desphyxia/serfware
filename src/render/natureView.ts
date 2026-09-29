@@ -36,7 +36,8 @@ export class NatureView {
     private readonly season: (t: number) => { autumn: number; bare: number; snow: number } = () => ({ autumn: 0, bare: 0, snow: 0 }),
   ) {
     const mat = new PainterlyMaterial({ vertexColors: true, flatShading: true });
-    const treeMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, wind: 1 });
+    // Smooth shading: the foliage carries soft, outward-leaning normals.
+    const treeMat = new PainterlyMaterial({ vertexColors: true, wind: 1, brush: 1.4 });
     const make = (g: THREE.BufferGeometry, n: number, material = mat) => {
       const m = new THREE.InstancedMesh(g, material, n);
       m.castShadow = true;

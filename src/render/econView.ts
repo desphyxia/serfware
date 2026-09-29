@@ -7,17 +7,16 @@ import { PAINT, PainterlyMaterial } from "./painterly";
 import { SpriteBatch } from "./sprites";
 import { mrt, output, vec4 } from "three/tsl";
 import { playerColor } from "./players";
+import { Anim, FigureBatch, Hat, Tool } from "./figures";
 import {
   LANTERN_FLAME,
   WINDMILL_HUB,
   windmillRotor,
   buildingGeometry,
   constructionSite,
-  crateGeometry,
+  goodGeometry,
   flagGeometry,
   pennantGeometry,
-  settlerBodyGeometry,
-  settlerHeadGeometry,
 } from "./models";
 
 export const GOOD_COLORS: Record<string, string> = {
@@ -43,7 +42,7 @@ export const GOOD_COLORS: Record<string, string> = {
 const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0"), warden: new THREE.Color("#d8b25a"), attacker: new THREE.Color("#c0504a") };
 const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
-const MAX_GOODS = 6000;
+const MAX_GOODS_EACH = 2500;
 
 /** Roads, flags, buildings, goods and settlers drawn from the economy each frame. */
 export class EconView {
@@ -63,10 +62,11 @@ export class EconView {
   private readonly buildings = new Map<number, { mesh: THREE.Mesh; key: string }>();
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
-  private readonly bodies: THREE.InstancedMesh;
-  private readonly heads: THREE.InstancedMesh;
-  private readonly carried: THREE.InstancedMesh;
-  private readonly crates: THREE.InstancedMesh;
+  private readonly figures = new FigureBatch(MAX_SETTLERS);
+  private figureCount = 0;
+  /** Goods miniatures, one instanced mesh per good type (on flags and carried). */
+  private readonly goodMeshes: THREE.InstancedMesh[];
+  private readonly goodCounts: number[];
   private structure = "";
   private readonly flames: THREE.InstancedMesh;
   private readonly halos = new SpriteBatch(1024, { additive: true, renderOrder: 9, glow: 1 });
@@ -77,7 +77,6 @@ export class EconView {
   private readonly display = new Map<number, THREE.Vector3>();
   /** Settler id drawn at each body instance, for picking. */
   readonly instanceSettler: number[] = [];
-  private readonly goodColors: THREE.Color[];
   /** Night factor 0..1 (shared with the painterly window glow). */
   readonly night = PAINT.night;
   private readonly emitterCache = new Map<string, Emitter>();
@@ -90,7 +89,6 @@ export class EconView {
     this.frames = frames;
     const propMat = new PainterlyMaterial({ vertexColors: true, brush: 0.5 });
     const flagMat = new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: "#3a2410", brush: 0 });
-    const plain = new PainterlyMaterial({ brush: 0.4 });
     const inst = (g: THREE.BufferGeometry, m: THREE.Material, n: number, shadow = true) => {
       const mesh = new THREE.InstancedMesh(g, m, n);
       mesh.count = 0;
@@ -101,17 +99,16 @@ export class EconView {
     };
     this.flagPoles = inst(flagGeometry(), propMat, 2000);
     this.pennants = inst(pennantGeometry(), flagMat, 2000, false);
-    this.bodies = inst(settlerBodyGeometry(), new PainterlyMaterial({ vertexColors: true, brush: 0.4 }), MAX_SETTLERS);
-    this.heads = inst(settlerHeadGeometry(), propMat, MAX_SETTLERS);
-    this.carried = inst(crateGeometry(), plain, MAX_SETTLERS);
-    this.crates = inst(crateGeometry(), plain, MAX_GOODS);
+    this.group.add(this.figures.mesh);
+    const goodsMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 0.3 });
+    this.goodMeshes = GOODS.map((g) => inst(goodGeometry(g.id), goodsMat, MAX_GOODS_EACH));
+    this.goodCounts = GOODS.map(() => 0);
     const flameMat = new THREE.MeshBasicNodeMaterial({ color: "#ffffff" });
     // Flames glow: they feed the emissive target for bloom.
     flameMat.mrtNode = mrt({ emissive: vec4(output.rgb.mul(1.2), 1) });
     this.flames = inst(new THREE.IcosahedronGeometry(0.1, 1), flameMat, 1024, false);
     this.flames.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(1024 * 3), 3);
     this.group.add(this.halos.mesh);
-    this.goodColors = GOODS.map((g) => new THREE.Color(GOOD_COLORS[g.id] ?? (g.tool ? "#9aa1b3" : "#ffffff")));
     this.group.name = "economy";
   }
 
@@ -193,7 +190,7 @@ export class EconView {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
-    const edge = new THREE.Color("#8f7654");
+    const edge = new THREE.Color("#b39673");
     const mid = new THREE.Color("#c7ab80");
     const p = new THREE.Vector3();
     const q = new THREE.Vector3();
@@ -203,9 +200,35 @@ export class EconView {
       for (let i = 0; i < road.tiles.length - 1; i++) {
         const a = road.tiles[i] as number;
         const b = road.tiles[i + 1] as number;
-        for (let k = 0; k < 6; k++) pts.push(this.frames.between(a, b, k / 6, 0.22, new THREE.Vector3()));
+        for (let k = 0; k < 8; k++) pts.push(this.frames.between(a, b, k / 8, 0, new THREE.Vector3()));
       }
-      pts.push(this.frames.pos(road.tiles[road.tiles.length - 1] as number, 0.22));
+      pts.push(this.frames.pos(road.tiles[road.tiles.length - 1] as number));
+      const hint = road.tiles[0] as number;
+      // Each vertex sits just above the detailed ground under it, so the road follows the terrain.
+      const onGround = (v: THREE.Vector3) => {
+        const d = v.clone().normalize();
+        return d.multiplyScalar(this.frames.groundAt(d, hint) + 0.03);
+      };
+      // Round caps where the road meets its flags, so roads joining at a flag close up.
+      for (const end of [pts[0] as THREE.Vector3, pts[pts.length - 1] as THREE.Vector3]) {
+        const up = end.clone().normalize();
+        const tA = new THREE.Vector3(0, 1, 0).cross(up);
+        if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
+        tA.normalize();
+        const tB = up.clone().cross(tA);
+        const c0 = pos.length / 3;
+        const c = onGround(end);
+        pos.push(c.x, c.y, c.z);
+        col.push(mid.r, mid.g, mid.b);
+        const seg = 12;
+        for (let k = 0; k < seg; k++) {
+          const a = (k / seg) * Math.PI * 2;
+          const v = onGround(end.clone().addScaledVector(tA, Math.cos(a) * 0.36).addScaledVector(tB, Math.sin(a) * 0.36));
+          pos.push(v.x, v.y, v.z);
+          col.push(edge.r, edge.g, edge.b);
+          idx.push(c0, c0 + 1 + k, c0 + 1 + ((k + 1) % seg));
+        }
+      }
       const base = pos.length / 3;
       pts.forEach((pt, i) => {
         const prev = pts[Math.max(0, i - 1)] as THREE.Vector3;
@@ -213,9 +236,10 @@ export class EconView {
         p.copy(next).sub(prev).normalize();
         const up = q.copy(pt).normalize();
         const side = new THREE.Vector3().crossVectors(p, up).normalize().multiplyScalar(0.36);
-        const l = pt.clone().add(side);
-        const r = pt.clone().sub(side);
-        pos.push(l.x, l.y, l.z, pt.x, pt.y + 0, pt.z, r.x, r.y, r.z);
+        const l = onGround(pt.clone().add(side));
+        const r = onGround(pt.clone().sub(side));
+        const c = onGround(pt);
+        pos.push(l.x, l.y, l.z, c.x, c.y, c.z, r.x, r.y, r.z);
         col.push(edge.r, edge.g, edge.b, mid.r, mid.g, mid.b, edge.r, edge.g, edge.b);
         if (i > 0) {
           const o = base + (i - 1) * 3;
@@ -281,7 +305,7 @@ export class EconView {
       const cur = this.buildings.get(b.id);
       if (cur && cur.key === key) continue;
       if (cur) this.group.remove(cur.mesh);
-      const geo = b.built ? buildingGeometry(b.def.id) : constructionSite(b.consumed / Math.max(1, b.costTotal));
+      const geo = b.built ? buildingGeometry(b.def.id, b.id) : constructionSite(b.consumed / Math.max(1, b.costTotal));
       const mesh = new THREE.Mesh(geo, b.stranded >= 0 ? this.strandedMat : this.buildingMat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -310,11 +334,22 @@ export class EconView {
     }
   }
 
+  private addGood(type: number, m: THREE.Matrix4): void {
+    const mesh = this.goodMeshes[type];
+    const n = this.goodCounts[type] as number;
+    if (!mesh || n >= MAX_GOODS_EACH) return;
+    mesh.setMatrixAt(n, m);
+    this.goodCounts[type] = n + 1;
+  }
+
+  /** Goods waiting at flags, set in a ring around the pole. Carried goods are added by `updateSettlers`. */
   private updateGoods(): void {
+    this.goodCounts.fill(0);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
+    const turn = new THREE.Quaternion();
     const s = new THREE.Vector3(1, 1, 1);
-    let n = 0;
+    const Y = new THREE.Vector3(0, 1, 0);
     for (const f of this.eco.flags) {
       if (!f.alive || f.goods.length === 0 || !this.seen(f.tile, f.owner, true)) continue;
       const center = this.frames.pos(f.tile);
@@ -325,20 +360,58 @@ export class EconView {
       const tB = up.clone().cross(tA);
       this.frames.orient(center, null, q);
       f.goods.forEach((gid, i) => {
-        if (n >= MAX_GOODS) return;
         const g = this.eco.goods[gid];
         if (!g) return;
         const a = (i / 8) * Math.PI * 2;
-        const p = center.clone().addScaledVector(tA, Math.cos(a) * 0.42).addScaledVector(tB, Math.sin(a) * 0.42);
-        m.compose(p, q, s);
-        this.crates.setMatrixAt(n, m);
-        this.crates.setColorAt(n, this.goodColors[g.type] as THREE.Color);
-        n++;
+        const p = center.clone().addScaledVector(tA, Math.cos(a) * 0.36).addScaledVector(tB, Math.sin(a) * 0.36);
+        turn.setFromAxisAngle(Y, -a + ((gid * 0.37) % 0.6));
+        m.compose(p, q.clone().multiply(turn), s);
+        this.addGood(g.type, m);
       });
     }
-    this.crates.count = n;
-    this.crates.instanceMatrix.needsUpdate = true;
-    if (this.crates.instanceColor) this.crates.instanceColor.needsUpdate = true;
+  }
+
+  private commitGoods(): void {
+    this.goodMeshes.forEach((mesh, i) => {
+      mesh.count = this.goodCounts[i] as number;
+      mesh.visible = mesh.count > 0;
+      mesh.instanceMatrix.needsUpdate = true;
+    });
+  }
+
+  /** Hat, tool and work motion for a settler. */
+  private looks(s: Settler): { hat: Hat; tool: Tool; work: Anim } {
+    switch (s.role) {
+      case "carrier":
+        return { hat: Hat.Cap, tool: Tool.None, work: Anim.Idle };
+      case "builder":
+        return { hat: Hat.Straw, tool: Tool.Hammer, work: Anim.Hammer };
+      case "geologist":
+        return { hat: Hat.Pointed, tool: Tool.Pick, work: Anim.Dig };
+      case "warden":
+      case "attacker":
+        return { hat: Hat.Helmet, tool: Tool.Sword, work: Anim.Duel };
+      default: {
+        const b = s.building >= 0 ? this.eco.buildings[s.building] : undefined;
+        switch (b?.def.id) {
+          case "woodcutter":
+            return { hat: Hat.Hood, tool: Tool.Axe, work: Anim.Chop };
+          case "forester":
+            return { hat: Hat.Hood, tool: Tool.Spade, work: Anim.Dig };
+          case "quarry":
+            return { hat: Hat.Cap, tool: Tool.Pick, work: Anim.Hammer };
+          case "farm":
+            return { hat: Hat.Straw, tool: Tool.Spade, work: Anim.Dig };
+          case "coalmine":
+          case "ironmine":
+          case "goldmine":
+          case "granitemine":
+            return { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Hammer };
+          default:
+            return { hat: Hat.Hood, tool: Tool.None, work: Anim.Idle };
+        }
+      }
+    }
   }
 
   private settlerTarget(s: Settler, out: THREE.Vector3): THREE.Vector3 {
@@ -352,9 +425,9 @@ export class EconView {
     const q = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
     const target = new THREE.Vector3();
+    const load = new THREE.Vector3();
     const k = 1 - Math.exp(-dt * 12);
     let n = 0;
-    let c = 0;
     const alive = new Set<number>();
     for (const s of this.eco.settlers) {
       if (!s.alive) continue;
@@ -373,32 +446,27 @@ export class EconView {
       }
       d.lerp(target, k);
       if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || !this.seen(s.path[s.pi] as number, s.owner, true)) continue;
-      const working = s.state === "work" || s.state === "duel";
-      const bob = moving ? Math.abs(Math.sin(time * 13 + s.id)) * 0.05 : working ? Math.abs(Math.sin(time * 6 + s.id)) * 0.06 : 0;
+      const look = this.looks(s);
+      const carrying = s.carrying >= 0;
+      const anim = s.state === "duel" ? Anim.Duel : moving ? (carrying ? Anim.Carry : Anim.Walk) : s.state === "work" ? look.work : Anim.Idle;
+      const bob = moving ? Math.abs(Math.sin(time * 11 + s.id * 1.7)) * 0.025 : 0;
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);
       this.frames.orient(p, p.clone().add(heading), q);
-      m.compose(p, q, one);
-      this.bodies.setMatrixAt(n, m);
-      this.bodies.setColorAt(n, ROLE_COLORS[s.role]);
+      const colour = s.role === "warden" || s.role === "attacker" ? playerColor(s.owner) : ROLE_COLORS[s.role];
+      this.figures.set(n, p, q, colour, anim, (s.id * 0.618) % 1 * 10, look.hat, anim === Anim.Carry ? Tool.None : look.tool);
       this.instanceSettler[n] = s.id;
-      this.heads.setMatrixAt(n, m);
       n++;
-      if (s.carrying >= 0 && c < MAX_SETTLERS) {
-        const up = p.clone().normalize();
-        m.compose(p.clone().addScaledVector(up, 0.56), q, one);
-        this.carried.setMatrixAt(c, m);
-        this.carried.setColorAt(c, this.goodColors[s.carrying] as THREE.Color);
-        c++;
+      if (carrying) {
+        // Held over the head in the raised right hand.
+        load.set(0.05, 0.6, 0.03).applyQuaternion(q).add(p);
+        m.compose(load, q, one);
+        this.addGood(s.carrying, m);
       }
     }
     for (const id of this.display.keys()) if (!alive.has(id)) this.display.delete(id);
-    this.bodies.count = n;
-    this.heads.count = n;
-    this.carried.count = c;
-    for (const mesh of [this.bodies, this.heads, this.carried]) {
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    }
+    this.figureCount = n;
+    this.figures.flush(n, time);
+    this.commitGoods();
   }
 
   /** Settler under a ray, or -1. */
@@ -407,7 +475,7 @@ export class EconView {
     let best = -1;
     let bestD = reach * reach;
     const p = new THREE.Vector3();
-    for (let i = 0; i < this.bodies.count; i++) {
+    for (let i = 0; i < this.figureCount; i++) {
       const id = this.instanceSettler[i] as number;
       const d = this.display.get(id);
       if (!d) continue;
@@ -487,6 +555,7 @@ export class EconView {
   dispose(): void {
     this.roadMesh?.geometry.dispose();
     for (const v of this.buildings.values()) if (v.mesh.userData.site) v.mesh.geometry.dispose();
-    for (const mesh of [this.flagPoles, this.pennants, this.bodies, this.heads, this.carried, this.crates]) mesh.dispose();
+    for (const mesh of [this.flagPoles, this.pennants, ...this.goodMeshes]) mesh.dispose();
+    this.figures.mesh.geometry.dispose();
   }
 }

@@ -19,7 +19,7 @@ import type { Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
-import { starterChain } from "./sim/econ/planner";
+import { demoSettlement, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
@@ -134,6 +134,7 @@ export class Game {
     this.view.setViewer(this.session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.focusStart();
+    this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
 
     this.hud = new Hud({
       settings: () => this.settingsPanel.toggle(),
@@ -169,6 +170,7 @@ export class Game {
           this.fogOn = !this.fogOn;
           this.view.setViewer(this.session.player, this.fogOn);
         },
+        "Visit hamlet": () => this.visitHamlet(),
         "Starter chain": () => this.toasts.show(`Placed ${starterChain(this.world)} buildings with roads.`, "good"),
         "Test crash": () =>
           setTimeout(() => {
@@ -264,7 +266,7 @@ export class Game {
       planet.params.radius,
       (dir) => {
         const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.hoverTile : 0);
-        return planet.surfaceRadius(t);
+        return this.view ? this.view.frames.groundAt(dir, t) : planet.surfaceRadius(t);
       },
       { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll },
     );
@@ -341,6 +343,17 @@ export class Game {
     return !!b;
   }
 
+  /** Look at a settler of a role, preferring one on the move and carrying (screenshots). */
+  focusSettler(role = "carrier", distance = 5): boolean {
+    const pl = this.session.player;
+    const all = this.world.economy.settlers.filter((s) => s.alive && s.owner === pl && s.role === role && !["rest", "craft", "guard"].includes(s.state));
+    const best = all.find((s) => s.carrying >= 0) ?? all[0];
+    if (!best) return false;
+    this.focusTile(best.path[best.pi] as number, distance);
+    this.following = best.person;
+    return true;
+  }
+
   focusTile(tile: number, distance = 20): void {
     this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(tile)), distance);
   }
@@ -387,6 +400,22 @@ export class Game {
     const front = this.world.climate.fronts[0];
     if (!front) return;
     Object.assign(front, { x: f.x, y: f.y, z: f.z, radius: 0.35, strength, age: 20, life: 400 });
+    this.world.climate.step(this.world.tick);
+  }
+
+  /** The art target scene: a grown demo settlement seen from the overview camera in fair weather. */
+  visitHamlet(): void {
+    const n = demoSettlement(this.world);
+    for (let i = 0; i < 6000; i++) this.world.step();
+    this.focusPlayer(0, 30);
+    this.clearWeather();
+    this.toasts.show(`Hamlet: ${n} buildings placed.`, "good");
+  }
+
+  /** Screenshot hook: push every weather front to the far side of the planet. */
+  clearWeather(): void {
+    const f = this.cam.focus;
+    for (const front of this.world.climate.fronts) Object.assign(front, { x: -f.x, y: -f.y, z: -f.z });
     this.world.climate.step(this.world.tick);
   }
 
@@ -536,6 +565,7 @@ export class Game {
     this.following = -1;
     this.tools.set("select");
     this.focusStart();
+    this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
     session.onDesync = (detail) => {
       crash.capture({ kind: "desync", message: detail });
       this.toasts.show("The game went out of sync. A report has been prepared (F8).", "warn");
@@ -815,6 +845,7 @@ export class Game {
       this.info.refresh();
       this.economyPanel.refresh();
     }
+    this.view.updateTerrain(this.camera.position);
     this.gfx.render();
 
     const day = this.world.localDay(this.focusLon());
