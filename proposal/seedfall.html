@@ -251,7 +251,7 @@ legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.12em;text-trans
         <tr><td>Geologists plant signs showing ore below</td><td>Kept, with strata you can inspect in cross-section</td><td>Veins deplete, groundwater moves, caves open</td></tr>
         <tr><td>Toolmaker's output decides professions</td><td>Kept, with tool priority sliders</td><td>Settlers also gain skill, age, teach and remember</td></tr>
         <tr><td>Distribution sliders for food, coal, steel</td><td>Kept, grouped by material</td><td>Seasonal presets and per-colony policies</td></tr>
-        <tr><td>Knights, military buildings, duels at the door, gold morale</td><td>Wardens, rangers, outriders and engineers; duels at the door and gold-driven resolve both kept</td><td>Supply lines, fatigue, terrain, weather, night and Star Wells shape every fight</td></tr>
+        <tr><td>Knights, military buildings, duels at the door, gold morale</td><td>Wardens, rangers, outriders and engineers; border-only targets, duels at the door and gold-driven resolve all kept</td><td>Supply lines, fatigue, terrain, weather, night and Star Wells shape every fight</td></tr>
         <tr><td>Flat, static tile map</td><td>Small living planets</td><td>Curvature, day and night, axial tilt, tides, erosion, ecology, terraforming</td></tr>
       </tbody>
     </table></div>
@@ -479,7 +479,7 @@ legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.12em;text-trans
     <div class="head"><span class="eyebrow">Conflict</span><h2>Combat is logistics with consequences</h2></div>
     <div class="prose">
       <p class="lede">Fights are won the same way as everything else in Seedfall: on the roads.</p>
-      <p>Soldiers are settlers given arms made by your own economy. Reinforcements, food and weapons all travel flag to flag, so a strong economy with a well-lit road network beats a large army at the end of a muddy lane. The core comes straight from Serf City: <strong>you send soldiers from your buildings to an enemy building, and they duel at its door one at a time until one side runs out.</strong> Seedfall keeps that and makes everything that decides a duel visible before you commit: rank, arms, resolve, fatigue and ground.</p>
+      <p>Soldiers are settlers given arms made by your own economy. Reinforcements, food and weapons all travel flag to flag, so a strong economy with a well-lit road network beats a large army at the end of a muddy lane. The core comes straight from Serf City: <strong>you send soldiers from your buildings to an enemy building, and they duel at its door one at a time until one side runs out.</strong> As in the original, you can't strike anywhere you like. Only enemy lantern buildings close to your border can be targeted, and only from your own garrisons within reach. War moves as a front, one building at a time. Seedfall keeps that and makes everything that decides a duel visible before you commit: rank, arms, resolve, fatigue and ground.</p>
     </div>
     <div class="plate">
       <canvas id="war" style="height:clamp(340px,42vw,470px)" aria-label="Planner view of a border assault: amber wardens march from a beacon tower to a blue lamp house, duel at its door, capture it, and the border redraws"></canvas>
@@ -494,9 +494,16 @@ legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.12em;text-trans
       <div class="note"><span class="k">Made from tools · timber, stone</span><h3>Engineers</h3><p>Build palisades, bridges and field camps. A field camp is a temporary flag with food that removes fatigue for attackers, and it makes long offensives possible.</p></div>
     </div>
 
+    <h3 style="font-size:var(--s2)">What you can attack</h3>
+    <div class="grid3">
+      <div class="note"><span class="k">Kept from 1993</span><h3>Only lantern buildings</h3><p>Targets are enemy lantern posts, lamp houses, beacon towers and keeps. Farms, workshops and storehouses are never attacked directly. They change hands, or go dark, when the land around them does.</p></div>
+      <div class="note"><span class="k">Kept from 1993</span><h3>Only within reach</h3><p>A target must be inside the attack reach of at least one of your garrisoned lantern buildings, which is roughly its sight radius. Only those nearby garrisons can send wardens. Deep targets become reachable after you take the buildings in front of them.</p></div>
+      <div class="note"><span class="k">Exceptions</span><h3>Raids and beachheads</h3><p>Outriders can ride to unlit road flags beyond the front, but they can only block goods, never take buildings. Across planets, a beachhead keep opens a new front where it lands.</p></div>
+    </div>
+
     <h3 style="font-size:var(--s2)">Lantern buildings</h3>
     <div class="tablewrap"><table>
-      <thead><tr><th>Building</th><th>Garrison</th><th>Light radius</th><th>Sight</th><th>Role</th></tr></thead>
+      <thead><tr><th>Building</th><th>Garrison</th><th>Light radius</th><th>Sight and attack reach</th><th>Role</th></tr></thead>
       <tbody>
         <tr><td>Lantern post</td><td class="num">1–2</td><td class="num">6 tiles</td><td class="num">8 tiles</td><td>Cheap. Lights roads so outriders can't cut them.</td></tr>
         <tr><td>Lamp house</td><td class="num">3–4</td><td class="num">9 tiles</td><td class="num">11 tiles</td><td>First real defence. Holds a stock of food for its garrison.</td></tr>
@@ -508,7 +515,7 @@ legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.12em;text-trans
     <h3 style="font-size:var(--s2)">An assault, step by step</h3>
     <ol class="track">
       <li><span class="n">01</span><h3>Scout</h3><p>You only see what your light and scouts see. Enemy garrisons show as estimates until you look closer.</p></li>
-      <li><span class="n">02</span><h3>Muster</h3><p>Pick a target in range and how many wardens each of your buildings sends. Every building keeps at least one.</p></li>
+      <li><span class="n">02</span><h3>Muster</h3><p>Pick an enemy lantern building within reach of your garrisons and choose how many wardens each one sends. Every building keeps at least one.</p></li>
       <li><span class="n">03</span><h3>March</h3><p>Soldiers walk. Distance from your nearest store, slopes, snow and ranger volleys add fatigue.</p></li>
       <li><span class="n">04</span><h3>Duel at the door</h3><p>Defenders step out one at a time. Each duel is a readable exchange of a few blows. Winners stay, tired.</p></li>
       <li><span class="n">05</span><h3>Capture</h3><p>When the last defender falls or yields, the building changes hands, its light changes colour and the border redraws.</p></li>
@@ -1509,7 +1516,7 @@ const FEAT = {
     "Living world": [["Water flow, floods, irrigation", "core"], ["Erosion and deposition", "ext"], ["Wind field", "core"], ["Weather fronts and forecasts", "ext"], ["Fire spread", "ext"], ["Fauna populations", "ext"], ["Plant succession", "ext"], ["Soil fertility and rotation", "core"], ["Groundwater and aquifers", "ext"], ["Building wear and patina", "str"]],
     "Ground": [["Geologist signposts", "core"], ["Strata and cross-section view", "core"], ["Vein volume and depletion", "core"], ["Shaft props and collapse", "ext"], ["Caves and ruins", "ext"]],
     "Colonies & terraforming": [["Survey probes", "ext"], ["Packing the Hearthship", "ext"], ["Rooted status and policies", "ext"], ["Launch windows", "ext"], ["Cultural drift", "str"], ["Atmosphere, heat, water targets", "ext"], ["Seed mixes and succession", "ext"], ["Microclimates and domes", "core"], ["Native life and reserves", "ext"], ["Bloom", "ext"]],
-    "Combat": [["Lantern buildings; territory as light", "core"], ["Wardens and duels at the door", "core"], ["Rangers, outriders, engineers", "ext"], ["Rank, arms, resolve, fatigue, ground", "core"], ["Gold and Glow raise resolve", "core"], ["Odds shown before attacking", "core"], ["Supply lines and lit roads", "core"], ["Outrider raids on unlit flags", "ext"], ["Stranded buildings and restoring", "core"], ["Wounded or Mortal stakes", "core"], ["Prisoners and exchanges", "ext"], ["Night, fog, weather and tides in battle", "ext"], ["Beachheads and launch windows", "ext"]],
+    "Combat": [["Lantern buildings; territory as light", "core"], ["Attacks only on lantern buildings within reach", "core"], ["Wardens and duels at the door", "core"], ["Rangers, outriders, engineers", "ext"], ["Rank, arms, resolve, fatigue, ground", "core"], ["Gold and Glow raise resolve", "core"], ["Odds shown before attacking", "core"], ["Supply lines and lit roads", "core"], ["Outrider raids on unlit flags", "ext"], ["Stranded buildings and restoring", "core"], ["Wounded or Mortal stakes", "core"], ["Prisoners and exchanges", "ext"], ["Night, fog, weather and tides in battle", "ext"], ["Beachheads and launch windows", "ext"]],
     "Multiplayer": [["Deterministic lockstep, drop-in co-op", "core"], ["Co-op: shared keep", "core"], ["Co-op: neighbours and exchange flags", "core"], ["Co-op: relay across planets", "ext"], ["PvP skirmish, conquest and Star Wells", "core"], ["Team PvP, 2v2 to 4v4", "ext"], ["Bloom race", "ext"], ["Peace clock", "core"], ["Enforced pacts and reputation", "ext"], ["AI steward on disconnect", "core"], ["Balanced start scoring", "core"], ["Spectating and replays", "ext"], ["Ranked on curated seeds", "str"], ["Frontier servers", "str"], ["Nomads, hamlets and natives", "ext"]],
     "Wellbeing & knowledge": [["Glow (five parts)", "core"], ["Festivals per world", "ext"], ["Decoration", "core"], ["Almanac by observation", "core"], ["Teaching and invention", "ext"], ["Precursor ruins", "ext"]],
     "Adversity": [["Wildfire, flood, blight", "ext"], ["Cold snap, eruption, meteors", "ext"], ["Sandstorms and pests", "ext"], ["Gentle / Honest / Hard settings", "core"]],
