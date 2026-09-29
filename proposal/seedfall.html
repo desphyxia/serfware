@@ -161,6 +161,21 @@ svg text{font-family:var(--f-mono)}
   .p-dist{grid-column:3;grid-row:3;align-self:end}
 }
 
+/* combat calculator */
+.calc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:16px;padding:16px}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 14px 14px;margin:0;display:flex;flex-direction:column;gap:10px;min-width:0}
+legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lantern);padding:0 6px}
+.field{display:grid;grid-template-columns:72px minmax(0,1fr) 30px;gap:10px;align-items:center;font-size:.84rem;color:var(--ink-2)}
+.field input[type=range]{width:100%;flex:none}
+.field output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
+.field select{grid-column:2 / 4;font:inherit;font-size:.84rem;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px 6px;min-width:0}
+.field select + span{display:none}
+.calc-out{display:flex;flex-direction:column;gap:12px;padding:10px 4px;min-width:0}
+.calc-out .big{font-family:var(--f-display);font-size:3rem;line-height:1;font-variant-numeric:tabular-nums}
+.calc-out dl{display:flex;gap:22px;flex-wrap:wrap;margin:0}
+.calc-out dt{font-family:var(--f-mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.calc-out dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
 /* swatches */
 .swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:14px}
 .sw{border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;background:var(--deep)}
@@ -204,10 +219,11 @@ svg text{font-family:var(--f-mono)}
       <p class="lede">In 1993 Serf City (The Settlers) made logistics feel alive. You didn't command people. You laid roads, planted flags, and watched thousands of tiny carriers hand goods to each other until a castle stood where a forest had been.</p>
       <p>Seedfall keeps that exact pleasure: <strong>one carrier per road segment, goods passed flag to flag, tools that decide professions, and a territory that grows as your economy does.</strong> What changes is the world underneath. Maps become small spherical planets with their own gravity, day length, seasons, tides and weather. Water flows, fire spreads, soil remembers what you grew in it. A star system of very different worlds waits to be settled, and the late game is the slow, visible work of terraforming a planet from rust and frost into forest and rain.</p>
       <p>The tone is cosy without being childish. Nothing shouts at you. Settlers have names, households and memories, and a failing harvest is a problem to solve, not a game-over screen. Depth comes from systems that interact, not from pressure.</p>
+      <p>It is built to be played together: friends sharing one keep, neighbours trading across a border, or rival keeps contesting a planet. Combat follows the original closely. Soldiers walk the same roads as bread and timber, so the strongest army is the one with the best supply.</p>
     </div>
     <dl class="facts">
       <div><dt>Genre</dt><dd>Logistics settlement builder</dd></div>
-      <div><dt>Players</dt><dd>Solo · 2–4 co-op · async trade</dd></div>
+      <div><dt>Players</dt><dd>1–8 · co-op, PvP and teams</dd></div>
       <div><dt>Platform</dt><dd>PC first, handheld-verified; consoles later</dd></div>
       <div><dt>Session</dt><dd>30 min to open-ended</dd></div>
       <div><dt>Scale</dt><dd>2,562–40,962 tiles per planet</dd></div>
@@ -217,7 +233,7 @@ svg text{font-family:var(--f-mono)}
       <div><span class="eyebrow">Pillar</span><h3>The chain is the game</h3><p>Every log, loaf and ingot is a physical object carried by a person you can follow. Bottlenecks are visible as crowded flags, not red numbers.</p></div>
       <div><span class="eyebrow">Pillar</span><h3>Worlds with weather</h3><p>Each planet runs a light simulation of water, wind, heat, soil and life. The map changes under you, and you learn to read it.</p></div>
       <div><span class="eyebrow">Pillar</span><h3>Slow warmth</h3><p>Soft failure, readable pacing, pause at any time. Beauty and comfort are mechanics, and the settlement sounds and looks happier as it thrives.</p></div>
-      <div><span class="eyebrow">Pillar</span><h3>Many small worlds</h3><p>Planets are small enough to walk around. A system of six gives you contrasting problems, and each colony needs the others.</p></div>
+      <div><span class="eyebrow">Pillar</span><h3>Built to share</h3><p>Every planet is made for one to eight players. Co-op shares roads and megaprojects; PvP is fought over lanterns, supply roads and Star Wells.</p></div>
     </div>
   </section>
 
@@ -235,7 +251,7 @@ svg text{font-family:var(--f-mono)}
         <tr><td>Geologists plant signs showing ore below</td><td>Kept, with strata you can inspect in cross-section</td><td>Veins deplete, groundwater moves, caves open</td></tr>
         <tr><td>Toolmaker's output decides professions</td><td>Kept, with tool priority sliders</td><td>Settlers also gain skill, age, teach and remember</td></tr>
         <tr><td>Distribution sliders for food, coal, steel</td><td>Kept, grouped by material</td><td>Seasonal presets and per-colony policies</td></tr>
-        <tr><td>Knights, military buildings and gold morale</td><td>Lantern wardens push borders; combat is an optional mode</td><td>Influence, festivals and contests settle most disputes</td></tr>
+        <tr><td>Knights, military buildings, duels at the door, gold morale</td><td>Wardens, rangers, outriders and engineers; duels at the door and gold-driven resolve both kept</td><td>Supply lines, fatigue, terrain, weather, night and Star Wells shape every fight</td></tr>
         <tr><td>Flat, static tile map</td><td>Small living planets</td><td>Curvature, day and night, axial tilt, tides, erosion, ecology, terraforming</td></tr>
       </tbody>
     </table></div>
@@ -343,7 +359,18 @@ svg text{font-family:var(--f-mono)}
         <tr><td>Skyreef <span style="color:var(--muted)">(moon of Oru)</span></td><td class="num">2,562</td><td class="num">0.4 g</td><td class="num">70 h</td><td>Skyreef</td><td>Buoyant stone, gas, silk</td><td>Ground; everything floats</td></tr>
       </tbody>
     </table></div>
-    <div class="prose"><p style="font-size:.9rem;color:var(--muted)">Tile counts are real Goldberg-polyhedron sizes (10T+2 hexagons). Every planet has exactly twelve pentagonal tiles, and the game treats them as landmarks: see <a href="#tech">Technology</a>.</p></div>
+    <div class="prose"><p style="font-size:.9rem;color:var(--muted)">Tile counts match classic Goldberg sizes (10T+2) so planets compare easily, but each grid is generated from its planet's seed.</p></div>
+    <div class="head" style="margin-top:14px"><span class="eyebrow">Star Wells</span><h3 style="font-size:var(--s2)">Twelve on every planet, never in the same places</h3></div>
+    <div class="prose">
+      <p>Geometry forces one rule. A sphere tiled with only hexagons and pentagons always needs exactly <strong>twelve pentagons</strong> (it follows from Euler's formula). The standard grid puts them at the corners of an icosahedron, 63.4° apart, so every planet would have the same pattern.</p>
+      <p>Seedfall builds each grid from the planet's seed. It scatters points, relaxes them into hexagons, and steers the twelve defects to places the generator chooses: a wide scatter on one world, a tight cluster on another, a chain along a mountain ridge on a third. Placement rules keep them apart from start sites and from each other. The twelve pentagons become <strong>Star Wells</strong>: ancient sites with ruins, rare resources and the victory points for PvP. Because their layout differs on every planet, so does each planet's strategic map.</p>
+    </div>
+    <div class="grid3">
+      <div class="plate"><canvas id="well0" style="height:230px" aria-label="Globe with twelve pentagons in the evenly spaced icosahedral pattern"></canvas><div class="cap"><b>Plate 04a · Standard grid</b><span>Identical on every world. Rejected.</span></div></div>
+      <div class="plate"><canvas id="well1" style="height:230px" aria-label="Globe with twelve pentagons scattered irregularly"></canvas><div class="cap"><b>Plate 04b · Hearth, seed 4417</b><span>A wide, uneven scatter. Long walks between wells.</span></div></div>
+      <div class="plate"><canvas id="well2" style="height:230px" aria-label="Globe with a tight cluster of five pentagons and a chain of four along the equator"></canvas><div class="cap"><b>Plate 04c · Cinder, seed 0923</b><span>A cluster of five and a ridge chain. Whoever holds the cluster holds the planet.</span></div></div>
+    </div>
+
   </section>
 
   <!-- ============ 8 BIOMES ============ -->
@@ -358,7 +385,7 @@ svg text{font-family:var(--f-mono)}
     <div class="head"><span class="eyebrow">Beneath</span><h2>Geology you can see in section</h2></div>
     <div class="plate">
       <canvas id="geo" style="height:clamp(320px,38vw,420px)" aria-label="Cross-section of the ground: soil, clay, sandstone with a groundwater lens, granite and basalt, with ore veins, a cave, a mine shaft and geologist signposts on the surface"></canvas>
-      <div class="cap"><b>Plate 04 · Section through the Hearth foothills</b><span>Geologists walk out and plant signposts; the coloured board shows what lies below. Hold <span class="mono">Alt</span> in game to slice the ground like this anywhere.</span></div>
+      <div class="cap"><b>Plate 13 · Section through the Hearth foothills</b><span>Geologists walk out and plant signposts; the coloured board shows what lies below. Hold <span class="mono">Alt</span> in game to slice the ground like this anywhere.</span></div>
     </div>
     <div class="grid3">
       <div class="note"><span class="k">Kept</span><h3>Geologist signposts</h3><p>Send a geologist to a flag; they wander and plant signs. It is slow, charming and still the best way to find a seam.</p></div>
@@ -417,7 +444,7 @@ svg text{font-family:var(--f-mono)}
       <div style="padding:6px 10px 12px;overflow-x:auto">
         <svg id="tfChart" viewBox="0 0 680 230" role="img" aria-label="Chart of progress toward a habitable target over 600 years. Pressure rises first, then temperature, then surface water; oxygen rises last." style="width:100%;min-width:520px;height:auto;display:block"></svg>
       </div>
-      <div class="cap"><b>Plate 05 · Rime, Kettle Valley</b><span>Lines show progress toward a habitable target (100 %). Oxygen comes last because only living things make it.</span></div>
+      <div class="cap"><b>Plate 14 · Rime, Kettle Valley</b><span>Lines show progress toward a habitable target (100 %). Oxygen comes last because only living things make it.</span></div>
     </div>
     <div class="grid3">
       <div class="note"><span class="k">Heat &amp; air</span><h3>Warm it, thicken it</h3><p>Orbital mirrors, greenhouse-gas works, redirected ice comets. Each is a megaproject built by your economy, with goods launched from other worlds.</p></div>
@@ -447,17 +474,119 @@ svg text{font-family:var(--f-mono)}
     </div>
   </section>
 
-  <!-- ============ 13 BORDERS ============ -->
-  <section id="borders" data-t="Borders & neighbours">
-    <div class="head"><span class="eyebrow">Territory</span><h2>Borders, neighbours and three ways to share a world</h2></div>
-    <div class="prose"><p>Serf City's guard huts, towers and fortresses become <strong>lantern posts, lamp houses, beacon towers and lighthouse keeps</strong>. Each is staffed by wardens and lights a border radius. At night you can see your territory as a ring of warm light across the planet.</p></div>
+  <!-- ============ 13 COMBAT ============ -->
+  <section id="combat" data-t="Combat">
+    <div class="head"><span class="eyebrow">Conflict</span><h2>Combat is logistics with consequences</h2></div>
+    <div class="prose">
+      <p class="lede">Fights are won the same way as everything else in Seedfall: on the roads.</p>
+      <p>Soldiers are settlers given arms made by your own economy. Reinforcements, food and weapons all travel flag to flag, so a strong economy with a well-lit road network beats a large army at the end of a muddy lane. The core comes straight from Serf City: <strong>you send soldiers from your buildings to an enemy building, and they duel at its door one at a time until one side runs out.</strong> Seedfall keeps that and makes everything that decides a duel visible before you commit: rank, arms, resolve, fatigue and ground.</p>
+    </div>
+    <div class="plate">
+      <canvas id="war" style="height:clamp(340px,42vw,470px)" aria-label="Planner view of a border assault: amber wardens march from a beacon tower to a blue lamp house, duel at its door, capture it, and the border redraws"></canvas>
+      <div class="cap"><b>Plate 15 · A border assault, live</b><span>Territory is light. Amber wardens march from a beacon tower, duel the lamp house's garrison at the door, and take it. The border redraws, and a blue workshop inside the new border goes dark and becomes stranded.</span></div>
+    </div>
+
+    <h3 style="font-size:var(--s2)">Who fights</h3>
+    <div class="grid2">
+      <div class="note"><span class="k">Made from spear + shield · steel, timber</span><h3>Wardens</h3><p>The backbone. They garrison lantern buildings and fight the duels at the door. Five ranks, earned by winning duels or by training at the keep at a cost in gold.</p></div>
+      <div class="note"><span class="k">Made from bow · timber, flax string</span><h3>Rangers</h3><p>Posted in beacon towers and keeps. They don't duel. They loose volleys at attackers crossing their sight, adding fatigue before the fight reaches the door. Night and fog blind them.</p></div>
+      <div class="note"><span class="k">Made from saddle + mount · stable, grain</span><h3>Outriders</h3><p>Fast and lightly armed. They raid <em>unlit</em> road flags: an outrider standing on your flag stops goods from passing. They can't take buildings. They are the reason you light long roads.</p></div>
+      <div class="note"><span class="k">Made from tools · timber, stone</span><h3>Engineers</h3><p>Build palisades, bridges and field camps. A field camp is a temporary flag with food that removes fatigue for attackers, and it makes long offensives possible.</p></div>
+    </div>
+
+    <h3 style="font-size:var(--s2)">Lantern buildings</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Building</th><th>Garrison</th><th>Light radius</th><th>Sight</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td>Lantern post</td><td class="num">1–2</td><td class="num">6 tiles</td><td class="num">8 tiles</td><td>Cheap. Lights roads so outriders can't cut them.</td></tr>
+        <tr><td>Lamp house</td><td class="num">3–4</td><td class="num">9 tiles</td><td class="num">11 tiles</td><td>First real defence. Holds a stock of food for its garrison.</td></tr>
+        <tr><td>Beacon tower</td><td class="num">6–8</td><td class="num">12 tiles</td><td class="num">18 tiles</td><td>Houses rangers. Signals the keep, so reinforcements set out early.</td></tr>
+        <tr><td>Lighthouse keep</td><td class="num">12–16</td><td class="num">16 tiles</td><td class="num">22 tiles</td><td>Heals the wounded, trains ranks, and is where settlers rally.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 style="font-size:var(--s2)">An assault, step by step</h3>
+    <ol class="track">
+      <li><span class="n">01</span><h3>Scout</h3><p>You only see what your light and scouts see. Enemy garrisons show as estimates until you look closer.</p></li>
+      <li><span class="n">02</span><h3>Muster</h3><p>Pick a target in range and how many wardens each of your buildings sends. Every building keeps at least one.</p></li>
+      <li><span class="n">03</span><h3>March</h3><p>Soldiers walk. Distance from your nearest store, slopes, snow and ranger volleys add fatigue.</p></li>
+      <li><span class="n">04</span><h3>Duel at the door</h3><p>Defenders step out one at a time. Each duel is a readable exchange of a few blows. Winners stay, tired.</p></li>
+      <li><span class="n">05</span><h3>Capture</h3><p>When the last defender falls or yields, the building changes hands, its light changes colour and the border redraws.</p></li>
+      <li><span class="n">06</span><h3>Aftermath</h3><p>Enemy buildings now inside your border are stranded, not burned. The wounded walk home. Anyone cut off is taken prisoner.</p></li>
+    </ol>
+
+    <div class="plate">
+      <div class="calc-grid">
+        <fieldset>
+          <legend>Attackers</legend>
+          <div class="field"><label for="aN">Wardens</label><input type="range" id="aN" min="1" max="12" value="5"><output id="aNo">5</output></div>
+          <div class="field"><label for="aR">Rank</label><input type="range" id="aR" min="1" max="5" value="2"><output id="aRo">2</output></div>
+          <div class="field"><label for="aA">Arms</label><select id="aA"><option value="0">Bronze</option><option value="1" selected>Iron</option><option value="2">Steel</option><option value="3">Crystal</option></select><span></span></div>
+          <div class="field"><label for="aM">Resolve</label><input type="range" id="aM" min="-2" max="2" value="1"><output id="aMo">+1</output></div>
+          <div class="field"><label for="aF">Fatigue</label><select id="aF"><option value="0">Near own store</option><option value="1" selected>6+ flags from store</option><option value="2">Long march, snow or uphill</option></select><span></span></div>
+        </fieldset>
+        <fieldset>
+          <legend>Defenders</legend>
+          <div class="field"><label for="dN">Wardens</label><input type="range" id="dN" min="1" max="8" value="3"><output id="dNo">3</output></div>
+          <div class="field"><label for="dR">Rank</label><input type="range" id="dR" min="1" max="5" value="2"><output id="dRo">2</output></div>
+          <div class="field"><label for="dA">Arms</label><select id="dA"><option value="0">Bronze</option><option value="1" selected>Iron</option><option value="2">Steel</option><option value="3">Crystal</option></select><span></span></div>
+          <div class="field"><label for="dM">Resolve</label><input type="range" id="dM" min="-2" max="2" value="0"><output id="dMo">0</output></div>
+          <div class="field"><label for="dG">Ground</label><select id="dG"><option value="1" selected>Own door only</option><option value="2">Door + high ground</option><option value="2">Door + palisade</option><option value="3">Door, high ground, palisade</option></select><span></span></div>
+        </fieldset>
+        <div class="calc-out">
+          <span class="eyebrow">Chance the assault takes the building</span>
+          <div class="big" id="cWin">–</div>
+          <div class="bar" style="height:8px"><i id="cBar" style="width:0;background:var(--lantern)"></i></div>
+          <dl>
+            <div><dt>One duel</dt><dd id="cDuel">–</dd></div>
+            <div><dt>Attackers lost</dt><dd id="cAL">–</dd></div>
+            <div><dt>Defenders lost</dt><dd id="cDL">–</dd></div>
+          </dl>
+          <p class="mono" style="font-size:.72rem;color:var(--muted)">strength = rank + arms + resolve − fatigue (+ ground for defenders)<br>duel win = 1 / (1 + e<sup>−0.7 × difference</sup>)</p>
+        </div>
+      </div>
+      <div class="cap"><b>Plate 16 · Duel odds, working</b><span>The game shows this estimate before you send anyone. Try a small, fresh, well-armed squad against a big tired one. Losses are expected values across all outcomes.</span></div>
+    </div>
+
     <div class="grid3">
-      <div class="note"><span class="k">Mode</span><h3>Peaceful</h3><p>No rivals. Neutral nomad caravans visit to trade, and native creatures share the land.</p></div>
-      <div class="note"><span class="k">Mode</span><h3>Rivalry</h3><p>Borders press by influence: Glow, festivals and trade win over neutral hamlets. Contested lanterns are settled by contests between champions, such as log-rolling, stone-lifting and choirs.</p></div>
-      <div class="note"><span class="k">Mode</span><h3>Classic</h3><p>The original's conflict, stylised. Knights train on weapons, gold raises their morale, and towers change hands. Defeated settlers go home rather than die.</p></div>
-      <div class="note"><span class="k">Neighbours</span><h3>Nomads and hamlets</h3><p>Travelling traders bring seeds and rare goods and pay in knowledge. Hamlets can join you when your Glow outshines their need to stay apart.</p></div>
-      <div class="note"><span class="k">Natives</span><h3>Other life</h3><p>Grazing herds, burrowers that aerate soil, tide-crabs that eat your nets. Some can be tamed, some must be worked around.</p></div>
-      <div class="note"><span class="k">Diplomacy</span><h3>Letters between keeps</h3><p>With AI or human rivals: trade pacts, shared roads, joint megaprojects, gifts for festivals.</p></div>
+      <div class="note"><span class="k">Kept from 1993</span><h3>Gold raises resolve</h3><p>Gold and treasures in your storehouses raise every soldier's resolve, as in the original. So do high Glow, a fed garrison and fighting on home ground. Recent losses lower it.</p></div>
+      <div class="note"><span class="k">Supply</span><h3>Lit roads are safe roads</h3><p>Garrisons eat. A lamp house whose food road is cut loses resolve each day. Outriders can hold unlit flags, so lantern posts along your trade roads are defence too.</p></div>
+      <div class="note"><span class="k">Stakes setting</span><h3>Wounded or mortal</h3><p><strong>Wounded</strong> (default): losers retreat and recover at a keep over a season. <strong>Mortal</strong>: they die, and a memorial tree marks the place. Lobbies choose the setting.</p></div>
+      <div class="note"><span class="k">Losses</span><h3>Stranded, not burned</h3><p>Serf City burned buildings in lost land. Here they go dark: workers carry what they can home. Retake the land within a season to restore them, or the new owner can reopen them at half cost.</p></div>
+      <div class="note"><span class="k">World</span><h3>Night, weather, terrain</h3><p>Night hides a march from towers. Fog blinds rangers. Mud and snow add fatigue. Rivers funnel attacks onto bridges, and tides on Tessel open and close routes twice a day.</p></div>
+      <div class="note"><span class="k">Across planets</span><h3>Beachheads and windows</h3><p>An invasion must land outside enemy light and build a beachhead keep. Skyships arrive only in launch windows, so the defender knows when to expect them. There is no bombardment from orbit.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 13b MULTIPLAYER ============ -->
+  <section id="multiplayer" data-t="Multiplayer">
+    <div class="head"><span class="eyebrow">Together</span><h2>Built for co-op and PvP from the first prototype</h2></div>
+    <div class="prose">
+      <p>Every planet size is tuned for a player count, and every system in this document works with several keeps on one world. Co-op and PvP use the same simulation. The difference is who owns which lanterns.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Mode</th><th>Players</th><th>Length</th><th>How it plays</th></tr></thead>
+      <tbody>
+        <tr><td>Co-op · Shared keep</td><td class="num">2–4</td><td>Open-ended</td><td>One economy, several hands. Players naturally take roles: roads, production, terraforming, defence.</td></tr>
+        <tr><td>Co-op · Neighbours</td><td class="num">2–4</td><td>Open-ended</td><td>Separate keeps on one planet. Exchange flags pass goods across borders, and roads can be jointly owned. Megaprojects need everyone's goods.</td></tr>
+        <tr><td>Co-op · Relay</td><td class="num">2–6</td><td>Long</td><td>Each player settles a different planet in the system and trades through launch windows. Rime can't bloom without Cinder's heat and Tessel's water.</td></tr>
+        <tr><td>PvP · Skirmish</td><td class="num">2–4</td><td class="num">60–90 min</td><td>A small planet, a short peace clock, and conquest or Star Wells to win.</td></tr>
+        <tr><td>PvP · Teams</td><td class="num">4–8</td><td class="num">2–3 h</td><td>2v2 up to 4v4. Teammates share sight, exchange flags and lantern light. Each team runs co-op internally.</td></tr>
+        <tr><td>PvP · Bloom race</td><td class="num">2–6</td><td class="num">3–5 h</td><td>First planet to a self-sustaining Bloom wins. Combat is allowed but costly; most races are won by the economy.</td></tr>
+        <tr><td>Co-op vs world</td><td class="num">1–4</td><td>Scenario</td><td>Hard-setting survival and AI rivals: hold a Rime colony through its first winter, or retake a flooded valley.</td></tr>
+        <tr><td>Frontier servers</td><td>up to 16</td><td>Weeks</td><td>A persistent star system that runs in real time. Each newcomer gets their own peace clock. Stretch goal.</td></tr>
+      </tbody>
+    </table></div>
+    <div class="grid3">
+      <div class="note"><span class="k">Victory</span><h3>Ways to win</h3><p>Conquest (take every keep), Star Wells (hold a majority of a planet's twelve for one full year), Bloom, Prosperity (a production target) or Influence (win over the most hamlets). Hosts can combine them.</p></div>
+      <div class="note"><span class="k">Pacing</span><h3>Peace clock</h3><p>No attacks before a set time, from 0 to 3 in-game years. Builders get their cosy opening, and the tension rises as the clock runs down.</p></div>
+      <div class="note"><span class="k">Diplomacy</span><h3>Pacts the game enforces</h3><p>Truces, trade pacts, shared roads and prisoner exchanges are signed in game. Breaking one costs Glow and leaves a mark on your reputation that other players can see.</p></div>
+      <div class="note"><span class="k">Fairness</span><h3>Balanced starts on uneven worlds</h3><p>Planets aren't symmetric, so the generator scores each start site for water, ore, soil and distance to Star Wells, then re-rolls until the sites are within 5 % of each other. Ranked play uses curated seeds.</p></div>
+      <div class="note"><span class="k">Comebacks</span><h3>Losing slowly, recovering fast</h3><p>Defenders have home-ground bonuses. Attackers tire far from their stores. Stranded buildings can be restored. When a keep is threatened, settlers volunteer as militia.</p></div>
+      <div class="note"><span class="k">Netcode</span><h3>Lockstep, drop-in, no lost games</h3><p>Deterministic lockstep with a checksum every tick. Players can join co-op mid-game, and an AI steward takes over a disconnected player's keep until they return. Replays and spectating come with it.</p></div>
+      <div class="note"><span class="k">Neighbours</span><h3>Nomads, hamlets, natives</h3><p>Every mode can include neutral life. Nomad traders bring seeds and knowledge, hamlets join the most welcoming keep, and native creatures share the land.</p></div>
+      <div class="note"><span class="k">Async</span><h3>Letters and skyships</h3><p>Between sessions, send cargo to a friend's system. It arrives hours later in real time, with a letter and a postcard.</p></div>
+      <div class="note"><span class="k">Solo</span><h3>AI rivals</h3><p>AI keeps use the same rules and personalities: the Builder, the Trader, the Warden. They fill empty seats in any mode.</p></div>
     </div>
   </section>
 
@@ -518,13 +647,12 @@ svg text{font-family:var(--f-mono)}
   <!-- ============ 17 MODES ============ -->
   <section id="modes" data-t="Modes & progression">
     <div class="head"><span class="eyebrow">Structure</span><h2>Modes and progression</h2></div>
-    <div class="grid3">
-      <div class="note"><span class="k">Campaign</span><h3>The Long Voyage</h3><p>Twelve chapters across the Lanterne system, from the first landing on Hearth to the Bloom of Rime. Each chapter teaches one system and one world.</p></div>
+    <div class="prose"><p>Multiplayer modes are covered under <a href="#multiplayer">Multiplayer</a>. These are the frames that hold them.</p></div>
+    <div class="grid2">
+      <div class="note"><span class="k">Campaign · solo or co-op</span><h3>The Long Voyage</h3><p>Twelve chapters across the Lanterne system, from the first landing on Hearth to the Bloom of Rime. Each chapter teaches one system and one world. Two to four players can play it together, and three chapters are contested by AI rivals.</p></div>
       <div class="note"><span class="k">Sandbox</span><h3>Seeded systems</h3><p>Generate a system from a seed with sliders for planet count, harshness, native life and rivals. Share seeds as short words.</p></div>
-      <div class="note"><span class="k">Scenarios</span><h3>Handmade puzzles</h3><p>Rebuild after a flood, supply a lighthouse through winter, feed a city from a single tidal island.</p></div>
-      <div class="note"><span class="k">Co-op</span><h3>2–4 keeps, one world</h3><p>Shared or separate economies. Roads can be jointly owned, and goods can cross borders on shared flags.</p></div>
-      <div class="note"><span class="k">Async</span><h3>Letters and skyships</h3><p>Send cargo to a friend's system. The skyship arrives hours later in real time, with a letter and a pressed flower.</p></div>
-      <div class="note"><span class="k">Creative</span><h3>World painter</h3><p>Sculpt planets, place biomes, write scenarios and share them through the workshop. Full mod support for buildings and goods.</p></div>
+      <div class="note"><span class="k">Scenarios</span><h3>Handmade puzzles</h3><p>Rebuild after a flood, supply a lighthouse through winter, or hold a bridge against a stronger neighbour.</p></div>
+      <div class="note"><span class="k">Creative</span><h3>World painter</h3><p>Sculpt planets, place biomes and Star Wells, write scenarios and share them through the workshop. Full mod support for buildings, goods and units.</p></div>
     </div>
   </section>
 
@@ -552,7 +680,7 @@ svg text{font-family:var(--f-mono)}
           <div style="display:flex;flex-direction:column;gap:6px" id="distRows"></div>
         </div>
       </div></div>
-      <div class="cap"><b>Plate 06 · Interface concept</b><span>Quiet by default. Panels fade when the camera is still; the sliders on the right work.</span></div>
+      <div class="cap"><b>Plate 17 · Interface concept</b><span>Quiet by default. Panels fade when the camera is still; the sliders on the right work.</span></div>
     </div>
     <div class="swatches">
       <div class="sw"><div class="strip"><i style="background:#2b4a73"></i><i style="background:#6f93b8"></i><i style="background:#e9c9a0"></i><i style="background:#5d8a5a"></i><i style="background:#c8553d"></i></div><p><b>Morning</b>Cool sky, first warm light on roofs. Roads read clearly.</p></div>
@@ -574,7 +702,7 @@ svg text{font-family:var(--f-mono)}
   <section id="tech" data-t="Technology">
     <div class="head"><span class="eyebrow">Technology</span><h2>How the planets are built</h2></div>
     <div class="grid2">
-      <div class="note"><span class="k">Grid</span><h3>Hexes on a sphere</h3><p>Each planet is a Goldberg polyhedron: hexagons plus exactly twelve pentagons. Instead of hiding the pentagons, the game makes them the twelve <strong>Star Wells</strong> of each world, ancient sites that hold precursor ruins, rare resources or unique views.</p></div>
+      <div class="note"><span class="k">Grid</span><h3>Seeded hexes on a sphere</h3><p>Each planet's grid is generated from its seed: scattered points, relaxed into hexagons, with the twelve required pentagons steered to seeded positions. Tile areas vary by a few percent, so the simulation weights water, soil and territory by each tile's real area. Rare pentagon–heptagon pairs can mark fault lines.</p></div>
       <div class="note"><span class="k">Simulation</span><h3>Deterministic and layered</h3><p>A fixed-point simulation at 10 ticks per second runs the economy and settlers for lockstep co-op. Water, heat and erosion run on the GPU at coarser rates and sync as snapshots.</p></div>
       <div class="note"><span class="k">Scale</span><h3>Twelve thousand settlers per planet</h3><p>Entity-component architecture; settlers far from the camera are simulated on the road graph only and animated as impostors. Idle planets run in summary mode.</p></div>
       <div class="note"><span class="k">Rendering</span><h3>Modern, scalable</h3><p>Clustered lighting for thousands of lanterns, virtual texturing for per-tile wear, probe-based GI, temporal upscaling. A handheld preset keeps 30 fps with the same simulation.</p></div>
@@ -587,11 +715,11 @@ svg text{font-family:var(--f-mono)}
   <section id="roadmap" data-t="Roadmap & risks">
     <div class="head"><span class="eyebrow">Production</span><h2>Roadmap and risks</h2></div>
     <ol class="track">
-      <li><span class="n">Phase 0 · 4 mo</span><h3>Roads on a ball</h3><p>Flags, carriers and five buildings on a spherical hex grid. Is the camera readable?</p></li>
-      <li><span class="n">Phase 1 · 8 mo</span><h3>Hearth slice</h3><p>Full Meadowlands economy, settlers, seasons, Glow. Art target locked.</p></li>
+      <li><span class="n">Phase 0 · 4 mo</span><h3>Roads on a ball</h3><p>Flags, carriers and five buildings on a seeded spherical grid, two players in lockstep from day one.</p></li>
+      <li><span class="n">Phase 1 · 8 mo</span><h3>Hearth slice</h3><p>Full Meadowlands economy, settlers, seasons, Glow. 2-player co-op and duel combat. Art target locked.</p></li>
       <li><span class="n">Phase 2 · 8 mo</span><h3>Living world</h3><p>Water, fire, wind, soil, ecology. Almanac. Two more biomes.</p></li>
-      <li><span class="n">Phase 3 · 10 mo</span><h3>The system</h3><p>Colonisation, launch rails, trade, all eight biomes. Early access.</p></li>
-      <li><span class="n">Phase 4 · 8 mo</span><h3>Bloom</h3><p>Terraforming, campaign, co-op, async letters, modding. Release 1.0.</p></li>
+      <li><span class="n">Phase 3 · 10 mo</span><h3>The system</h3><p>Colonisation, launch rails, all eight biomes, team PvP and relay co-op. Early access.</p></li>
+      <li><span class="n">Phase 4 · 8 mo</span><h3>Bloom</h3><p>Terraforming, campaign, Bloom race, async letters, modding. Release 1.0.</p></li>
     </ol>
     <div class="tablewrap"><table>
       <thead><tr><th>Risk</th><th>Why it matters</th><th>Mitigation</th></tr></thead>
@@ -599,6 +727,9 @@ svg text{font-family:var(--f-mono)}
         <tr><td>Reading a sphere</td><td>Curvature can confuse planning and hide roads over the horizon</td><td>A flattening planner view (Plate 02), road overlays that wrap around, horizon markers</td></tr>
         <tr><td>Simulation cost</td><td>Many systems times six planets</td><td>Summary mode for unwatched planets; GPU fields at low tick rates</td></tr>
         <tr><td>Cosy vs deep</td><td>Depth can turn into stress</td><td>Warnings before events, soft failure, difficulty that changes consequences rather than speed</td></tr>
+        <tr><td>PvP vs cosy</td><td>Competitive pressure can sour the mood for builders</td><td>Peace clock, Wounded stakes by default, separate PvP and co-op playlists; combat is never needed to finish solo or co-op</td></tr>
+        <tr><td>Desync</td><td>Lockstep breaks if one machine computes differently</td><td>Fixed-point simulation, per-tick checksums, and replays that reproduce any desync</td></tr>
+        <tr><td>Fair starts</td><td>Uneven planets and seeded Star Wells favour some sites</td><td>Generator scoring of start sites, curated ranked seeds, handicap options</td></tr>
         <tr><td>Scope</td><td>Eight biomes and terraforming is a lot</td><td>Biomes share systems and differ by one rule each; terraforming reuses the same simulation</td></tr>
       </tbody>
     </table></div>
@@ -1047,7 +1178,7 @@ const FEAT = {
   const grid = document.getElementById("biomeGrid");
   BIOMES.forEach((B, i) => {
     const el = document.createElement("article"); el.className = "plate biome";
-    el.innerHTML = `<canvas aria-label="Concept art of ${B.name}"></canvas><div class="body"><span class="meta">PLATE ${String(7 + i).padStart(2, "0")} · ${B.meta}</span><h3>${B.name}</h3><p>${B.desc}</p><ul>${B.rules.map(x => `<li>${x}</li>`).join("")}</ul></div>`;
+    el.innerHTML = `<canvas aria-label="Concept art of ${B.name}"></canvas><div class="body"><span class="meta">PLATE ${String(5 + i).padStart(2, "0")} · ${B.meta}</span><h3>${B.name}</h3><p>${B.desc}</p><ul>${B.rules.map(x => `<li>${x}</li>`).join("")}</ul></div>`;
     grid.appendChild(el);
     scene(el.querySelector("canvas"), biomePainter(B, 100 + i * 13));
   });
@@ -1184,6 +1315,149 @@ const FEAT = {
 })();
 
 /* =====================================================================
+   STAR WELLS GLOBES
+   ===================================================================== */
+(function(){
+  const norm = v => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const ph = (1 + Math.sqrt(5)) / 2, ico = [];
+  for (const s1 of [-1, 1]) for (const s2 of [-1, 1]){ ico.push(norm([0, s1, s2 * ph]), norm([s1, s2 * ph, 0]), norm([s2 * ph, 0, s1])); }
+  const randDir = r => { const z = r() * 2 - 1, a = r() * TAU, s = Math.sqrt(1 - z * z); return [s * Math.cos(a), z, s * Math.sin(a)]; };
+  const scatter = (r, n, minDeg, pts = [], gen = randDir) => { const c = Math.cos(minDeg * Math.PI / 180); let tries = 0; while (pts.length < n && tries++ < 5000){ const p = gen(r); if (pts.every(q => dot(p, q) < c)) pts.push(p); } return pts; };
+  const hearth = scatter(rng(4417), 12, 28);
+  const cr = rng(923), ctr = norm([.4, .5, .7]);
+  const near = r => norm([ctr[0] + (r() - .5) * .55, ctr[1] + (r() - .5) * .55, ctr[2] + (r() - .5) * .55]);
+  const cinder = scatter(cr, 5, 9, [], near);
+  for (let i = 0; i < 4; i++){ const a = 2.4 + i * .32; cinder.push(norm([Math.cos(a), (cr() - .5) * .08, Math.sin(a)])); }
+  scatter(cr, 12, 30, cinder);
+  const sets = [[ico, "#8a8f9c"], [hearth, "#7fb07a"], [cinder, "#e07a4f"]];
+  sets.forEach(([pts, col], idx) => {
+    const links = pts.map((p, i) => pts.map((q, j) => [j, dot(p, q)]).filter(x => x[0] !== i).sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0]));
+    scene(document.getElementById("well" + idx), (ctx, w, h, t) => {
+      const R = Math.min(w, h) * .4, cx = w / 2, cy = h / 2, ang = RM ? .6 : t * .18 + idx, tl = .35;
+      const P = v => { const x1 = v[0] * Math.cos(ang) + v[2] * Math.sin(ang), z1 = -v[0] * Math.sin(ang) + v[2] * Math.cos(ang); const y2 = v[1] * Math.cos(tl) - z1 * Math.sin(tl), z2 = v[1] * Math.sin(tl) + z1 * Math.cos(tl); return [cx + x1 * R, cy - y2 * R, z2]; };
+      ctx.fillStyle = "#161b28"; ctx.fillRect(0, 0, w, h);
+      glow(ctx, cx, cy, R * 1.25, col, .12);
+      const g = ctx.createRadialGradient(cx - R * .35, cy - R * .35, R * .1, cx, cy, R); g.addColorStop(0, mix(col, "#ffffff", .15)); g.addColorStop(1, mix(col, "#10141e", .75));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+      ctx.strokeStyle = "rgba(236,229,212,.12)"; ctx.lineWidth = 1;
+      const line = f => { let on = false; ctx.beginPath(); for (let s = 0; s <= 48; s++){ const [x, y, z] = P(f(s / 48)); if (z > 0){ on ? ctx.lineTo(x, y) : ctx.moveTo(x, y); on = true; } else on = false; } ctx.stroke(); };
+      for (let lo = 0; lo < 6; lo++) line(u => { const la = -Math.PI / 2 + u * Math.PI, a = lo * Math.PI / 6; return [Math.cos(la) * Math.cos(a), Math.sin(la), Math.cos(la) * Math.sin(a)]; });
+      for (let la = -60; la <= 60; la += 30) line(u => { const l = la * Math.PI / 180, a = u * TAU; return [Math.cos(l) * Math.cos(a), Math.sin(l), Math.cos(l) * Math.sin(a)]; });
+      ctx.strokeStyle = "rgba(240,178,90,.4)";
+      pts.forEach((p, i) => links[i].forEach(j => { if (j < i && links[j].includes(i)) return; line(u => { const q = pts[j]; return norm([lerp(p[0], q[0], u), lerp(p[1], q[1], u), lerp(p[2], q[2], u)]); }); }));
+      const pr = pts.map(P).sort((a, b) => a[2] - b[2]);
+      for (const [x, y, z] of pr){
+        if (z <= 0){ ctx.fillStyle = "rgba(240,178,90,.18)"; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, TAU); ctx.fill(); continue; }
+        const s = R * .075 * (.55 + .45 * z); glow(ctx, x, y, s * 2.6, "#f0b25a", .35 * z);
+        ctx.fillStyle = `rgba(255,213,138,${(.5 + .5 * z).toFixed(2)})`; ctx.beginPath();
+        for (let k = 0; k < 5; k++){ const a = -Math.PI / 2 + k * TAU / 5; const px = x + Math.cos(a) * s, py = y + Math.sin(a) * s * (.5 + .5 * z); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+        ctx.closePath(); ctx.fill();
+      }
+    });
+  });
+})();
+
+/* =====================================================================
+   BORDER ASSAULT
+   ===================================================================== */
+(function(){
+  const LAN = [
+    { x:.09, y:.5, r:.2, s:0, n:"KEEP · 16" }, { x:.25, y:.24, r:.13, s:0, n:"BEACON TOWER · 8" }, { x:.28, y:.76, r:.11, s:0, n:"LAMP HOUSE · 4" }, { x:.42, y:.5, r:.095, s:0, n:"LANTERN POST · 2" },
+    { x:.91, y:.5, r:.2, s:1, n:"KEEP · 16" }, { x:.76, y:.24, r:.12, s:1, n:"LAMP HOUSE · 4" }, { x:.61, y:.52, r:.11, s:1, n:"LAMP HOUSE · 3", target:true }, { x:.74, y:.78, r:.13, s:1, n:"BEACON TOWER · 8" }
+  ];
+  const ROADS = [[0,1],[0,2],[0,3],[1,3],[2,3],[4,5],[4,6],[4,7],[5,6],[6,7]];
+  const WORK = { x:.66, y:.66 };
+  const COL = ["#f0b25a", "#7fc4c8"];
+  const CYCLE = 15, OUT = ["A", "D", "A", "A"];
+  let cache = { key: "" };
+  function field(w, h, flipped){
+    const key = w + "x" + h + ":" + flipped; if (cache.key === key) return cache;
+    const cs = 8, cols = Math.ceil(w / cs), rows = Math.ceil(h / cs), own = new Int8Array(cols * rows);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++){
+      const px = (i + .5) * cs, py = (j + .5) * cs, best = [-1, -1];
+      for (const l of LAN){ const s = l.target && flipped ? 0 : l.s; const R = l.r * w; const v = (R - Math.hypot(px - l.x * w, py - l.y * h)) / R; if (v > best[s]) best[s] = v; }
+      own[j * cols + i] = best[0] <= 0 && best[1] <= 0 ? -1 : best[0] >= best[1] ? 0 : 1;
+    }
+    cache = { key, cs, cols, rows, own }; return cache;
+  }
+  const r = rng(58), dust = []; for (let i = 0; i < 60; i++) dust.push([r(), r()]);
+  scene(document.getElementById("war"), (ctx, w, h, t) => {
+    const ph = RM ? 12 : t % CYCLE, flipped = ph >= 10.2;
+    const k = Math.max(.7, Math.min(1.2, w / 900));
+    const X = l => l.x * w, Y = l => l.y * h;
+    ctx.fillStyle = "#12161f"; ctx.fillRect(0, 0, w, h);
+    const F = field(w, h, flipped);
+    for (let j = 0; j < F.rows; j++) for (let i = 0; i < F.cols; i++){
+      const o = F.own[j * F.cols + i]; if (o < 0) continue;
+      ctx.fillStyle = rgba(COL[o], .07); ctx.fillRect(i * F.cs, j * F.cs, F.cs, F.cs);
+      const rt = i + 1 < F.cols ? F.own[j * F.cols + i + 1] : o, dn = j + 1 < F.rows ? F.own[(j + 1) * F.cols + i] : o;
+      if (rt !== o || dn !== o){ ctx.fillStyle = rgba(COL[o], .75); ctx.fillRect(i * F.cs + F.cs / 2 - 1.2, j * F.cs + F.cs / 2 - 1.2, 2.4, 2.4); }
+    }
+    for (const l of LAN){ const s = l.target && flipped ? 0 : l.s; glow(ctx, X(l), Y(l), l.r * w * .55, COL[s], .12); }
+    // star well
+    const sw = { x: .5, y: .13 }; glow(ctx, sw.x * w, sw.y * h, 26 * k, "#ffd58a", .35);
+    ctx.fillStyle = "#ffd58a"; ctx.beginPath(); for (let i = 0; i < 5; i++){ const a = -Math.PI / 2 + i * TAU / 5; const px = sw.x * w + Math.cos(a) * 8 * k, py = sw.y * h + Math.sin(a) * 8 * k; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); ctx.fill();
+    // roads
+    ctx.lineCap = "round";
+    for (const [a, b] of ROADS){ ctx.strokeStyle = "#4f4538"; ctx.lineWidth = 5 * k; ctx.beginPath(); ctx.moveTo(X(LAN[a]), Y(LAN[a])); ctx.lineTo(X(LAN[b]), Y(LAN[b])); ctx.stroke(); }
+    ROADS.forEach(([a, b], i) => { const u = (Math.sin(t * .7 + i * 1.7) + 1) / 2, s = LAN[a].s; const x = lerp(X(LAN[a]), X(LAN[b]), u), y = lerp(Y(LAN[a]), Y(LAN[b]), u); ctx.fillStyle = "#ece5d4"; ctx.beginPath(); ctx.arc(x, y, 2.4 * k, 0, TAU); ctx.fill(); ctx.fillStyle = rgba(COL[s], .9); ctx.fillRect(x - 2.5 * k, y - 8 * k, 5 * k, 4 * k); });
+    // workshop (stranded after capture)
+    const wx = WORK.x * w, wy = WORK.y * h; ctx.strokeStyle = "#4f4538"; ctx.lineWidth = 3 * k; ctx.beginPath(); ctx.moveTo(X(LAN[6]), Y(LAN[6])); ctx.lineTo(wx, wy); ctx.stroke();
+    ctx.fillStyle = flipped ? "#1d212b" : "#2a3142"; ctx.strokeStyle = flipped ? "#3a3f4c" : "#7fc4c8"; ctx.lineWidth = 1.2; ctx.fillRect(wx - 9 * k, wy - 9 * k, 18 * k, 18 * k); ctx.strokeRect(wx - 9 * k, wy - 9 * k, 18 * k, 18 * k);
+    if (!flipped){ ctx.fillStyle = "#e0b27a"; ctx.beginPath(); ctx.arc(wx, wy, 3.5 * k, 0, TAU); ctx.fill(); }
+    // lantern buildings
+    ctx.font = `500 ${Math.round(10 * k)}px "IBM Plex Mono", monospace`; ctx.textAlign = "center";
+    for (const l of LAN){ const s = l.target && flipped ? 0 : l.s, x = X(l), y = Y(l), big = l.n.startsWith("KEEP") ? 1.4 : 1;
+      ctx.fillStyle = "#1d2332"; ctx.strokeStyle = COL[s]; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 9 * k * big, 0, TAU); ctx.fill(); ctx.stroke();
+      const pl = .8 + .2 * Math.sin(t * 2 + l.x * 9); glow(ctx, x, y, 12 * k * big, COL[s], .5 * pl); ctx.fillStyle = COL[s]; ctx.beginPath(); ctx.arc(x, y, 3 * k * big, 0, TAU); ctx.fill();
+      if (w > 600){ ctx.fillStyle = "rgba(201,195,180,.85)"; ctx.fillText(l.target && flipped ? "CAPTURED" : l.n, x, y + 24 * k * big); } }
+    if (w > 600){ ctx.fillStyle = "#ffd58a"; ctx.fillText("STAR WELL", sw.x * w, sw.y * h - 16 * k); if (flipped){ ctx.fillStyle = "rgba(201,195,180,.7)"; ctx.fillText("STRANDED", wx, wy + 22 * k); } }
+    // assault
+    const T = LAN[6], door = [X(T) - 16 * k, Y(T)], path = [[X(LAN[1]), Y(LAN[1])], [X(LAN[3]), Y(LAN[3])], door];
+    const along = u => { const d1 = Math.hypot(path[1][0] - path[0][0], path[1][1] - path[0][1]), d2 = Math.hypot(path[2][0] - path[1][0], path[2][1] - path[1][1]); const s = u * (d1 + d2); return s < d1 ? [lerp(path[0][0], path[1][0], s / d1), lerp(path[0][1], path[1][1], s / d1)] : [lerp(path[1][0], path[2][0], (s - d1) / d2), lerp(path[1][1], path[2][1], (s - d1) / d2)]; };
+    const duelsDone = ph < 5 ? 0 : Math.min(4, Math.floor((ph - 5) / 1.3));
+    const aLostAt = 1, aliveIdx = [0, 1, 2, 3, 4].filter(i => !(i === 0 && duelsDone > aLostAt));
+    let dLeft = 3; for (let j = 0; j < duelsDone; j++) if (OUT[j] === "A") dLeft--;
+    const inDuel = ph >= 5 && ph < 10.2 && duelsDone < 4, duelT = (ph - 5) % 1.3;
+    const warden = (x, y, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, 4 * k, 0, TAU); ctx.fill(); ctx.fillStyle = "#12161f"; ctx.beginPath(); ctx.arc(x, y, 1.6 * k, 0, TAU); ctx.fill(); };
+    if (ph < 12.5){
+      aliveIdx.forEach((i, q) => { const u = clamp((ph - i * .35) / 4.4); let [x, y] = along(u); if (u >= 1){ x = door[0] - q * 10 * k; y = door[1] + (q % 2 ? 5 : -5) * k * (q ? 1 : 0); } if (flipped){ x = lerp(x, X(T) + (q - 1.5) * 9 * k, clamp((ph - 10.2) / 1.2)); y = lerp(y, Y(T) - 16 * k, clamp((ph - 10.2) / 1.2)); } warden(x, y, COL[0]); });
+      if (duelsDone > aLostAt){ const u = clamp((ph - (5 + 2 * 1.3)) / 5); const [x, y] = along(1 - u * .6); ctx.globalAlpha = .55; warden(x, y + 8 * k, COL[0]); ctx.globalAlpha = 1; }
+    }
+    if (!flipped){ for (let d = 0; d < dLeft; d++){ const out = inDuel && d === 0; const x = out ? door[0] + 10 * k : X(T) + (d - 1) * 8 * k, y = out ? door[1] : Y(T) + 16 * k; warden(x, y, COL[1]); } }
+    if (inDuel && duelT < 1){ const n = 6; for (let i = 0; i < n; i++){ const a = t * 9 + i * TAU / n, rr = (4 + 6 * Math.abs(Math.sin(t * 12 + i))) * k; ctx.fillStyle = `rgba(255,230,170,${(.8 * (1 - duelT)).toFixed(2)})`; ctx.fillRect(door[0] + 5 * k + Math.cos(a) * rr, door[1] + Math.sin(a) * rr, 2, 2); } }
+    // fog vignette
+    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .4, w / 2, h / 2, Math.max(w, h) * .75); vg.addColorStop(0, "rgba(8,10,16,0)"); vg.addColorStop(1, "rgba(8,10,16,.6)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  });
+})();
+
+/* =====================================================================
+   DUEL CALCULATOR
+   ===================================================================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  const ids = ["aN", "aR", "aA", "aM", "aF", "dN", "dR", "dA", "dM", "dG"];
+  const sign = v => v > 0 ? "+" + v : String(v).replace("-", "−");
+  function calc(){
+    const v = {}; ids.forEach(id => v[id] = +$(id).value);
+    ["aN", "aR", "dN", "dR"].forEach(id => $(id + "o").textContent = v[id]);
+    $("aMo").textContent = sign(v.aM); $("dMo").textContent = sign(v.dM);
+    const sa = v.aR + v.aA + v.aM - v.aF, sd = v.dR + v.dA + v.dM + v.dG;
+    const p = 1 / (1 + Math.exp(-.7 * (sa - sd)));
+    const A = v.aN, D = v.dN, P = [];
+    for (let a = 0; a <= A; a++){ P.push(new Float64Array(D + 1)); }
+    P[A][D] = 1; let win = 0, eAL = 0, eDL = 0;
+    for (let s = A + D; s >= 0; s--) for (let a = Math.min(A, s); a >= 0; a--){ const d = s - a; if (d < 0 || d > D) continue; const pr = P[a][d]; if (!pr) continue;
+      if (a === 0 || d === 0){ if (d === 0) win += pr; eAL += pr * (A - a); eDL += pr * (D - d); continue; }
+      P[a][d - 1] += pr * p; P[a - 1][d] += pr * (1 - p); }
+    $("cWin").textContent = Math.round(win * 100) + " %"; $("cBar").style.width = (win * 100).toFixed(1) + "%";
+    $("cDuel").textContent = Math.round(p * 100) + " %"; $("cAL").textContent = eAL.toFixed(1) + " of " + A; $("cDL").textContent = eDL.toFixed(1) + " of " + D;
+  }
+  ids.forEach(id => $(id).addEventListener("input", calc)); calc();
+})();
+
+/* =====================================================================
    LOOP DIAGRAM
    ===================================================================== */
 (function(){
@@ -1231,14 +1505,15 @@ const FEAT = {
     "Logistics": [["Roads between flags, one carrier per segment", "core"], ["Eight goods per flag; visible congestion", "core"], ["Road tiers (dirt to boardwalk)", "core"], ["Desire paths suggest roads", "ext"], ["Pack animals per biome", "core"], ["Canals and barges", "ext"], ["Ropeways, gliders, ice roads", "ext"], ["Crossroad depots", "ext"], ["Urgent and bulk priorities", "core"], ["Launch rails and skyships", "ext"]],
     "Settlers": [["Named, simulated individuals", "core"], ["Tools assign professions", "core"], ["Skill, mastery and titles", "core"], ["Households and generations", "ext"], ["Needs: food, warmth, rest, belonging", "core"], ["Traits shaped by home world", "ext"], ["Elders teach; memorial trees", "ext"], ["Follow cam and settler journals", "core"]],
     "Economy": [["Production chains, 11 families", "core"], ["Distribution sliders", "core"], ["Tool priority sliders", "core"], ["Spoilage and weathering", "ext"], ["Masterwork quality", "ext"], ["Seasonal presets and colony policies", "ext"], ["Interplanetary trade", "ext"], ["Nomad caravans", "ext"]],
-    "Planet & physics": [["Spherical hex-grid planets", "core"], ["Gravity affects speed, load, height", "ext"], ["Day length and day/night", "core"], ["Axial tilt, seasons by latitude", "ext"], ["Moons and tides", "ext"], ["Tidally locked worlds", "ext"], ["Star Wells on the 12 pentagons", "ext"], ["Drifting islands in low gravity", "str"]],
+    "Planet & physics": [["Spherical hex-grid planets", "core"], ["Gravity affects speed, load, height", "ext"], ["Day length and day/night", "core"], ["Axial tilt, seasons by latitude", "ext"], ["Moons and tides", "ext"], ["Tidally locked worlds", "ext"], ["Star Wells on 12 seeded pentagons", "core"], ["Pentagon–heptagon fault lines", "str"], ["Drifting islands in low gravity", "str"]],
     "Living world": [["Water flow, floods, irrigation", "core"], ["Erosion and deposition", "ext"], ["Wind field", "core"], ["Weather fronts and forecasts", "ext"], ["Fire spread", "ext"], ["Fauna populations", "ext"], ["Plant succession", "ext"], ["Soil fertility and rotation", "core"], ["Groundwater and aquifers", "ext"], ["Building wear and patina", "str"]],
     "Ground": [["Geologist signposts", "core"], ["Strata and cross-section view", "core"], ["Vein volume and depletion", "core"], ["Shaft props and collapse", "ext"], ["Caves and ruins", "ext"]],
     "Colonies & terraforming": [["Survey probes", "ext"], ["Packing the Hearthship", "ext"], ["Rooted status and policies", "ext"], ["Launch windows", "ext"], ["Cultural drift", "str"], ["Atmosphere, heat, water targets", "ext"], ["Seed mixes and succession", "ext"], ["Microclimates and domes", "core"], ["Native life and reserves", "ext"], ["Bloom", "ext"]],
-    "Territory & neighbours": [["Lantern wardens and borders", "core"], ["Peaceful mode", "core"], ["Rivalry by influence and contests", "ext"], ["Classic knights and gold morale", "str"], ["Hamlets that join", "ext"], ["Letters and pacts", "ext"]],
+    "Combat": [["Lantern buildings; territory as light", "core"], ["Wardens and duels at the door", "core"], ["Rangers, outriders, engineers", "ext"], ["Rank, arms, resolve, fatigue, ground", "core"], ["Gold and Glow raise resolve", "core"], ["Odds shown before attacking", "core"], ["Supply lines and lit roads", "core"], ["Outrider raids on unlit flags", "ext"], ["Stranded buildings and restoring", "core"], ["Wounded or Mortal stakes", "core"], ["Prisoners and exchanges", "ext"], ["Night, fog, weather and tides in battle", "ext"], ["Beachheads and launch windows", "ext"]],
+    "Multiplayer": [["Deterministic lockstep, drop-in co-op", "core"], ["Co-op: shared keep", "core"], ["Co-op: neighbours and exchange flags", "core"], ["Co-op: relay across planets", "ext"], ["PvP skirmish, conquest and Star Wells", "core"], ["Team PvP, 2v2 to 4v4", "ext"], ["Bloom race", "ext"], ["Peace clock", "core"], ["Enforced pacts and reputation", "ext"], ["AI steward on disconnect", "core"], ["Balanced start scoring", "core"], ["Spectating and replays", "ext"], ["Ranked on curated seeds", "str"], ["Frontier servers", "str"], ["Nomads, hamlets and natives", "ext"]],
     "Wellbeing & knowledge": [["Glow (five parts)", "core"], ["Festivals per world", "ext"], ["Decoration", "core"], ["Almanac by observation", "core"], ["Teaching and invention", "ext"], ["Precursor ruins", "ext"]],
     "Adversity": [["Wildfire, flood, blight", "ext"], ["Cold snap, eruption, meteors", "ext"], ["Sandstorms and pests", "ext"], ["Gentle / Honest / Hard settings", "core"]],
-    "Modes & presentation": [["Campaign: The Long Voyage", "ext"], ["Seeded sandbox", "core"], ["Scenarios", "ext"], ["2–4 player co-op", "ext"], ["Async letters and skyships", "str"], ["World painter and mods", "str"], ["Adaptive, settlement-built score", "core"], ["Photo mode and postcards", "ext"], ["Time-lapse replays", "str"], ["Accessibility suite", "core"]]
+    "Modes & presentation": [["Campaign: The Long Voyage", "ext"], ["Seeded sandbox", "core"], ["Scenarios", "ext"], ["Async letters and skyships", "str"], ["World painter and mods", "str"], ["Adaptive, settlement-built score", "core"], ["Photo mode and postcards", "ext"], ["Time-lapse replays", "str"], ["Accessibility suite", "core"]]
   };
   const lab = { core: ["c-core", "Core"], ext: ["c-ext", "Extended"], str: ["c-str", "Stretch"] };
   document.getElementById("mechIndex").innerHTML = Object.entries(IDX).map(([g, xs]) => `<div><h3>${g}</h3><ul>${xs.map(([n, tier]) => `<li><span>${n}</span><span class="chip ${lab[tier][0]}">${lab[tier][1]}</span></li>`).join("")}</ul></div>`).join("");
