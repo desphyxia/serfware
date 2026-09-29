@@ -69,6 +69,20 @@ export class WorldView {
     surface.land.dispose();
     this.field = new TerrainField(planet, world.land, seed);
     this.tileData = new TileData(planet.grid.count);
+    // Shore: land tiles next to the sea or a lake get beaches (fading over a second ring).
+    {
+      const { grid } = planet;
+      const land = world.land;
+      const wet = (t: number) => !land.isLand(t) || land.hydro.lake[t] === 1;
+      const ring = new Float32Array(grid.count);
+      for (let t = 0; t < grid.count; t++) if (!wet(t)) for (const n of grid.neighborsOf(t)) if (wet(n)) ring[t] = 1;
+      for (let t = 0; t < grid.count; t++) {
+        let v = ring[t] as number;
+        if (!v && !wet(t)) for (const n of grid.neighborsOf(t)) if (ring[n]) v = 0.35;
+        this.tileData.set(t, "shore", wet(t) ? 1 : v);
+      }
+      this.tileData.commit("b");
+    }
     this.groundMat = makeGroundMaterial(this.tileData, R);
     this.terrain = new ChunkedTerrain(planet, this.field, this.groundMat, graphics.terrainDetail);
 

@@ -41,6 +41,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const snow = A.z;
   const autumn = A.w;
   const mud = B.x;
+  const shore = B.z;
 
   const p = positionWorld;
   const up = normalize(p);
@@ -68,7 +69,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   c = mix(c, rock, rockMix);
 
   // Beaches: wet dark sand at the waterline, dry pale sand just above.
-  const beach = float(1).sub(smoothstep(0.15, 0.45, height)).mul(float(1).sub(rockMix));
+  const beach = float(1).sub(smoothstep(0.15, 0.55, height)).mul(float(1).sub(rockMix)).mul(smoothstep(0.2, 0.8, shore));
   const sand = mix(vec3(0.62, 0.55, 0.4), vec3(0.85, 0.78, 0.6), smoothstep(0.02, 0.2, height));
   c = mix(c, sand, beach.mul(0.85));
 

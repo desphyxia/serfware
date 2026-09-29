@@ -169,10 +169,8 @@ export class TerrainField {
       const dy = y - (ay + vy * s);
       const dz = z - (az + vz * s);
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / this.spacing;
-      const strength = Math.min(1, Math.sqrt((hydro.flow[a] as number) / hydro.riverFlow) * 0.35 + 0.35);
-      const width = 0.16 + 0.12 * strength;
+      const { width, depth } = this.riverProfile(a);
       if (d > width * 2.2) return;
-      const depth = 0.35 + 0.45 * strength;
       h -= depth * smooth(width * 2.2, width * 0.5, d);
     };
     carve(t);
@@ -192,6 +190,13 @@ export class TerrainField {
     pad(t);
     for (const n of grid.neighborsOf(t)) pad(n);
     return { h, tile: t };
+  }
+
+  /** Riverbed shape along the river leaving tile `t`: half-width (in tile spacings) and depth. */
+  riverProfile(t: number): { width: number; depth: number } {
+    const hydro = this.land.hydro;
+    const strength = Math.min(1, Math.sqrt((hydro.flow[t] as number) / hydro.riverFlow) * 0.35 + 0.35);
+    return { width: 0.16 + 0.12 * strength, depth: 0.35 + 0.45 * strength };
   }
 
   /** Height of the levelled pad at a tile centre: the smooth blend, without detail. */
