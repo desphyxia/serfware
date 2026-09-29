@@ -23,6 +23,23 @@ export class AiBuilder {
   ) {}
 
   private started = false;
+  private thoughts = 0;
+
+  /** Attack the nearest enemy lantern it can take with good odds, using as few wardens as it can. */
+  private attack(w: World): boolean {
+    const eco = w.economy;
+    const pl = this.player;
+    if (w.tick < eco.peaceUntil) return false;
+    const targets = eco.buildings.filter((b) => b.alive && b.built && b.owner !== pl && b.def.light && !eco.defeated[b.owner] && !eco.attackBlocked(pl, b));
+    for (const t of targets) {
+      const pool = eco.attackersFor(pl, t).length;
+      if (pool < 2) continue;
+      for (let n = 2; n <= pool; n++) {
+        if (eco.attackOdds(pl, t, n) >= 0.7) return w.command({ t: "attack", target: t.id, count: Math.min(pool, n + 1), player: pl }).ok;
+      }
+    }
+    return false;
+  }
 
   think(w: World): void {
     const eco = w.economy;
@@ -39,6 +56,8 @@ export class AiBuilder {
     const plank = stock[goodId("plank")] ?? 0;
     const stone = stock[goodId("stone")] ?? 0;
     const log = stock[goodId("log")] ?? 0;
+    this.thoughts++;
+    if (this.thoughts % 4 === 0 && this.attack(w)) return;
     if (sites >= 3 || (sites >= 1 && plank < 2)) return;
     // Keep enough hands free: when nobody is idle, build homes before anything else.
     const idle = eco.population(pl).idle;

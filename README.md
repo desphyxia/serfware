@@ -47,6 +47,18 @@ Solo worlds start with one AI rival (Settings → World sets 0–3). The rival b
 with lanterns like a player would, from inside the deterministic simulation. The debug dialog
 can lift the fog.
 
+## Combat
+
+Only enemy lantern buildings and Hearthships within reach of your own lit lanterns can be
+attacked. Select one to see how many wardens can go (each lantern keeps one at home) and the
+chance to take it. Wardens march cross-country (mounts tire them less), loose a volley if they
+carry bows, then duel at the door one at a time. Rank, blades, fatigue, resolve (gold, Glow,
+full bellies) and the defenders' home ground decide each duel. Take a building and the border
+redraws; buildings cut off are stranded, not burned, and come back if the land is won back
+within a season. Take a Hearthship and that settlement falls. You can also win by holding 7 of
+the 12 Star Wells for a day. Battle stakes (Settings → World) are Wounded by default, or Mortal.
+Weaponsmiths make blades, bowyers bows, and stables mounts; gold in storage pays for promotions.
+
 ## Keys
 
 | Key | Action |

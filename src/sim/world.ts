@@ -2,6 +2,7 @@ import { dayInfo, START_FRACTION, ticksPerDay, type DayInfo } from "./clock";
 import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { LandUse } from "./econ/landuse";
+import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
@@ -15,6 +16,10 @@ export interface WorldOptions {
   players?: number;
   /** AI rivals, added after the human players. */
   rivals?: number;
+  /** What losing a duel costs: a wound (default) or a life. */
+  stakes?: "wounded" | "mortal";
+  /** Game days before anyone may attack. */
+  peaceDays?: number;
 }
 
 /**
@@ -56,6 +61,8 @@ export class World {
       f -= Math.floor(f);
       this.tick = Math.round((f * perDay) / 10) * 10;
     }
+    this.economy.stakes = opts.stakes ?? "wounded";
+    this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
   }
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
@@ -66,7 +73,7 @@ export class World {
   step(): void {
     this.tick++;
     this.economy.step(this.tick);
-    for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0) ai.think(this);
+    for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
   }
 
   /** Time at the prime meridian. */

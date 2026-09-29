@@ -8,6 +8,8 @@ export interface GoodDef {
   /** Interchangeable group, e.g. bread, fish and meat are all "food". */
   group?: string;
   tool?: boolean;
+  /** Carried by wardens: blade, bow, mount. */
+  arms?: boolean;
 }
 
 export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine";
@@ -50,6 +52,16 @@ export interface BuildingDef {
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];
 export const BUILDINGS: readonly BuildingDef[] = content.buildings as BuildingDef[];
 export const START = content.start as { settlers: number; stock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number } };
+export const COMBAT = content.combat as {
+  ranks: string[];
+  reach: number;
+  duelTicks: number;
+  strandedDays: number;
+  woundedDays: number;
+  peaceDays: number;
+  wellsToWin: number;
+  wellHoldDays: number;
+};
 export const DEFAULT_DISTRIBUTION = content.distribution as Record<string, Record<string, number>>;
 export const DEFAULT_TOOL_PRIORITY = content.toolPriority as Record<string, number>;
 

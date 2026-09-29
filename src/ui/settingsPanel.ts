@@ -9,10 +9,11 @@ export class SettingsPanel extends Panel {
   private readonly presetButtons = new Map<string, HTMLButtonElement>();
   private readonly seedInput: HTMLInputElement;
   private readonly rivalsInput: HTMLSelectElement;
+  private readonly stakesInput: HTMLSelectElement;
 
   constructor(
     private readonly store: SettingsStore,
-    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number) => void; rivals: () => number },
+    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number, stakes?: "wounded" | "mortal") => void; rivals: () => number; stakes: () => "wounded" | "mortal" },
   ) {
     super("settings", "Settings", { width: 380 });
     const tabs = h("div", { class: "tabs", role: "tablist" });
@@ -89,13 +90,16 @@ export class SettingsPanel extends Panel {
     w.append(this.row("Seed", this.seedInput, null, "w-seed"));
     this.rivalsInput = h("select", { id: "w-rivals" }, ...[0, 1, 2, 3].map((n) => h("option", { value: String(n) }, n === 0 ? "None" : String(n)))) as HTMLSelectElement;
     w.append(this.row("AI rivals", this.rivalsInput, null, "w-rivals"));
+    this.stakesInput = h("select", { id: "w-stakes" }, h("option", { value: "wounded" }, "Wounded (losers limp home)"), h("option", { value: "mortal" }, "Mortal (losers fall)")) as HTMLSelectElement;
+    w.append(this.row("Battle stakes", this.stakesInput, null, "w-stakes"));
     const rivals = () => Number(this.rivalsInput.value);
+    const stakes = () => this.stakesInput.value as "wounded" | "mortal";
     w.append(
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals()) }, "Generate this seed"),
-        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals()) }, "Random seed"),
+        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals(), stakes()) }, "Generate this seed"),
+        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals(), stakes()) }, "Random seed"),
       ),
       h("p", { class: "hint" }, "The same seed always produces the same world. Include it in bug reports."),
     );
@@ -110,6 +114,7 @@ export class SettingsPanel extends Panel {
   protected override onShow(): void {
     this.seedInput.value = this.world.seed();
     this.rivalsInput.value = String(this.world.rivals());
+    this.stakesInput.value = this.world.stakes();
     this.sync(this.store.get());
   }
 

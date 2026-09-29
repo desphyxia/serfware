@@ -1,11 +1,18 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
 import { FLAG_CAPACITY, type Economy } from "../sim/econ/economy";
-import { fullName, title as skillTitle, tradeName } from "../sim/econ/people";
+import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
+import { rankTitle } from "../sim/econ/combat";
+import { COMBAT } from "../sim/econ/defs";
 import { GOOD_COLORS } from "../render/econView";
 import { h, Panel } from "./dom";
 
 export type Selection = { kind: "building" | "flag" | "road" | "person"; id: number } | null;
+
+function armsText(arms: number): string {
+  const parts = [arms & ARM_BLADE ? "blade" : "", arms & ARM_BOW ? "bow" : "", arms & ARM_MOUNT ? "mount" : ""].filter(Boolean);
+  return parts.length ? ` with ${parts.join(", ")}` : "";
+}
 
 export function playerName(owner: number): string {
   return owner === 0 ? "the first settlement" : `rival settlement ${owner}`;
@@ -45,7 +52,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -58,8 +65,48 @@ export class InfoPanel extends Panel {
     } else this.hide();
   }
 
+  private attackCount = 0;
+  private attackTarget = -1;
+
+  private dayTicks(eco: Economy): number {
+    return eco.dayLength;
+  }
+
+  /** Attack section for an enemy lantern: who can go, odds, and the order. */
+  private attackUi(targetId: number): HTMLElement[] {
+    const eco = this.eco();
+    const me = this.actions.player();
+    const target = eco.buildings[targetId];
+    if (!target) return [];
+    const blocked = eco.attackBlocked(me, target);
+    if (blocked) return [h("p", { class: "hint" }, blocked)];
+    const pool = eco.attackersFor(me, target).length;
+    if (!pool) return [h("p", { class: "hint" }, "No wardens can be spared. Each lantern keeps one at home.")];
+    if (this.attackTarget !== targetId) {
+      this.attackTarget = targetId;
+      this.attackCount = pool;
+    }
+    this.attackCount = Math.max(1, Math.min(pool, this.attackCount));
+    const odds = eco.attackOdds(me, target, this.attackCount);
+    const input = h("input", { type: "range", id: "atk-n", min: 1, max: pool, step: 1 }) as HTMLInputElement;
+    input.value = String(this.attackCount);
+    input.addEventListener("input", () => {
+      this.attackCount = Number(input.value);
+      this.refresh();
+    });
+    const pct = Math.round(odds * 100);
+    return [
+      h("h3", { class: "sub" }, "Attack"),
+      h("div", { class: "row" }, h("label", { for: "atk-n" }, "Wardens"), input, h("output", {}, `${this.attackCount} of ${pool}`)),
+      h("p", { class: pct >= 60 ? "status" : "status warn" }, `About ${pct} % chance to take it.`),
+      h("p", { class: "hint" }, "Rank, blades, the march, your settlement's resolve and the defenders' home ground all count. Bows loose a volley first."),
+      h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.attack(targetId, this.attackCount) }, `Send ${this.attackCount}`)),
+    ];
+  }
+
   refresh(): void {
     if (!this.visible || !this.sel) return;
+    if (document.activeElement?.id === "atk-n") return;
     const eco = this.eco();
     const body: HTMLElement[] = [];
     const title = this.root.querySelector(".panel-head h2") as HTMLElement;
@@ -72,7 +119,13 @@ export class InfoPanel extends Panel {
       const where = s
         ? s.role === "carrier"
           ? `Carrying on the roads, ${STATE_TEXT[s.state] ?? s.state}.`
-          : s.role === "warden"
+          : s.role === "attacker"
+            ? s.state === "march"
+              ? "Marching to attack."
+              : s.state === "duel"
+                ? "Fighting a duel at the door!"
+                : "Waiting at the door for the next duel."
+            : s.role === "warden"
             ? `Warden at the ${work?.def.name.toLowerCase() ?? "lantern"}, ${STATE_TEXT[s.state] ?? s.state}.`
             : `${s.role === "builder" ? "Building" : s.role === "geologist" ? "Surveying" : `Working at the ${work?.def.name.toLowerCase() ?? "workshop"}`}, ${STATE_TEXT[s.state] ?? s.state}.`
         : p.stage === "child"
@@ -81,6 +134,8 @@ export class InfoPanel extends Panel {
             ? "At home."
             : "Resting in the Hearthship.";
       body.push(h("p", { class: "lede" }, `${eco.ageDays(p)} days old · ${p.stage}${p.house >= 0 ? " · has a home" : ""}`));
+      if (p.rank > 0 || p.arms || (s && (s.role === "warden" || s.role === "attacker"))) body.push(h("p", { class: "hint" }, `${rankTitle(p.rank)}${armsText(p.arms)}`));
+      if (p.woundedUntil > eco.tick) body.push(h("p", { class: "status warn" }, "Recovering from a wound."));
       body.push(h("p", { class: "status" }, where));
       const skills = Object.entries(p.skills)
         .filter(([, v]) => v > 0.02)
@@ -105,9 +160,21 @@ export class InfoPanel extends Panel {
       const theirs = b.owner !== this.actions.player();
       if (theirs) {
         body.push(h("p", { class: "status warn" }, `Belongs to ${playerName(b.owner)}.`));
-        if (b.def.light) body.push(h("p", { class: "hint" }, b.lit ? "Its lantern is lit." : "Its lantern is dark."));
+        if (b.stranded >= 0) body.push(h("p", { class: "hint" }, "Cut off and standing idle."));
+        else if (b.def.light) {
+          const isKeep = eco.keeps.includes(b.id);
+          body.push(h("p", { class: "hint" }, isKeep ? "Their Hearthship. Take it and their settlement falls." : b.lit ? "Its lantern is lit." : "Its lantern is dark."));
+          const defs = eco.defendersOf(b);
+          if (defs.length) body.push(h("p", { class: "hint" }, `${defs.length} warden${defs.length === 1 ? "" : "s"} on watch inside.`));
+          else if (isKeep) body.push(h("p", { class: "hint" }, "No wardens: its people will take up arms."));
+          body.push(...this.attackUi(b.id));
+        }
         this.body.replaceChildren(...body);
         return;
+      }
+      if (b.stranded >= 0) {
+        const left = Math.max(0, COMBAT.strandedDays * this.dayTicks(eco) - (eco.tick - b.stranded));
+        body.push(h("p", { class: "status warn" }, `Cut off. Win the land back within ${Math.ceil(left / (this.dayTicks(eco) / 24))} hours or it falls to ruin.`));
       }
       body.push(h("p", { class: "lede" }, b.def.description));
       if (b.def.slots) {
@@ -117,6 +184,19 @@ export class InfoPanel extends Panel {
         else {
           body.push(h("p", { class: b.lit ? "status" : "status warn" }, b.lit ? `Lit. Light reaches ${b.def.light} steps.` : "Dark. Waiting for a warden to light it."));
           body.push(h("p", { class: "hint" }, `${on} of ${b.def.slots} wardens on watch${coming ? `, ${coming} on the way` : ""}. Wants ${eco.garrisonWant(b)} (${b.frontier ? "frontier" : "inland"} policy).`));
+          const roster = eco.defendersOf(b).reverse();
+          if (roster.length)
+            body.push(
+              h(
+                "ul",
+                { class: "journal roster" },
+                ...roster.map((s) => {
+                  const p = eco.people[s.person] as Person;
+                  return h("li", {}, h("a", { href: "#", onclick: (e: Event) => (e.preventDefault(), this.select({ kind: "person", id: p.id })) }, fullName(p)), ` · ${rankTitle(p.rank)}${armsText(p.arms)}`);
+                }),
+              ),
+            );
+          if (b.siege.length) body.push(h("p", { class: "status warn" }, `Under attack: ${b.siege.length} at the door.`));
         }
       }
       if (b.def.storage) {

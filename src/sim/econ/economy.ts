@@ -1,7 +1,7 @@
 import type { StateHasher } from "../hash";
 import { ticksPerDay } from "../clock";
 import { mix32, Rng } from "../rng";
-import { fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
+import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
 import {
   BUILDINGS,
   buildingType,
@@ -16,9 +16,11 @@ import {
   inputKeyFor,
   START,
   TOOLS,
+  COMBAT,
   type BuildingDef,
 } from "./defs";
 import { MinHeap } from "./heap";
+import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
 import { Deposit, DEPOSIT_IDS, Feature, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
 /**
@@ -102,6 +104,13 @@ export interface Building {
   lit: boolean;
   /** Lantern buildings: close to another player's border. */
   frontier: boolean;
+  /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
+  stranded: number;
+  /** Attackers waiting at the door, and the duel being fought there. */
+  siege: number[];
+  duel: { attacker: number; defender: number; until: number } | null;
+  /** Hearthships: militia raised today (at most five a day). */
+  levy: number;
   alive: boolean;
 }
 
@@ -113,7 +122,7 @@ export interface Prefs {
   garrison: { frontier: number; inland: number };
 }
 
-export type Role = "carrier" | "builder" | "worker" | "geologist" | "warden";
+export type Role = "carrier" | "builder" | "worker" | "geologist" | "warden" | "attacker";
 
 export interface Settler {
   id: number;
@@ -164,6 +173,7 @@ export type Command = (
   | { t: "prio"; key: string; target: string; value: number }
   | { t: "toolprio"; tool: string; value: number }
   | { t: "garrison"; zone: "frontier" | "inland"; value: number }
+  | { t: "attack"; target: number; count: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -189,6 +199,17 @@ export class Economy {
   readonly glow: number[] = [];
   readonly glowParts: GlowParts[] = [];
   private lifeRng: Rng | null = null;
+  private combatRng: Rng | null = null;
+  /** "wounded": the loser of a duel limps home; "mortal": they fall. */
+  stakes: "wounded" | "mortal" = "wounded";
+  /** No attacks before this tick. */
+  peaceUntil = 0;
+  readonly defeated: boolean[] = [];
+  /** Player who has won, or -1. */
+  winner = -1;
+  winReason = "";
+  /** Per player: tick since they have held enough Star Wells, or -1. */
+  readonly wellsSince: number[] = [];
   private readonly dayTicks: number;
   private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
@@ -244,7 +265,7 @@ export class Economy {
         const d = (grid.center[t * 3] as number) * (grid.center[o * 3] as number) + (grid.center[t * 3 + 1] as number) * (grid.center[o * 3 + 1] as number) + (grid.center[t * 3 + 2] as number) * (grid.center[o * 3 + 2] as number);
         const ang = Math.sqrt(Math.max(0, 2 - 2 * d)); // chord length ~ angle
         if (ang < land.spacing * (START.territoryRadius * 2 + 4)) spread -= 1000;
-        else spread -= Math.abs(ang - land.spacing * (START.territoryRadius * 2 + 10)) * 40;
+        else spread -= (Math.abs(ang - land.spacing * (START.territoryRadius * 2 + 10)) / land.spacing) * 6;
       }
       const score =
         spread +
@@ -291,6 +312,9 @@ export class Economy {
     keep.built = true;
     keep.lit = true;
     this.lifeRng ??= rng.fork("life");
+    this.combatRng ??= rng.fork("combat");
+    this.defeated[player] = false;
+    this.wellsSince[player] = -1;
     const r = rng.fork(`people-${player}`);
     let family = randomFamily(r);
     for (let i = 0; i < START.settlers; i++) {
@@ -323,10 +347,19 @@ export class Economy {
       settler: -1,
       lifespan: born + (LIFE_DAYS + r.int(0, 15)) * this.dayTicks,
       journal: [],
+      rank: 0,
+      xp: 0,
+      arms: 0,
+      woundedUntil: 0,
       alive: true,
     };
     this.people.push(p);
     return p;
+  }
+
+  /** Ticks in a game day. */
+  get dayLength(): number {
+    return this.dayTicks;
   }
 
   /** Age in whole game days. */
@@ -364,6 +397,8 @@ export class Economy {
       case "toolprio":
         (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
+      case "attack":
+        return this.cmdAttack(cmd.target, cmd.count, p);
       case "garrison":
         if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
@@ -579,6 +614,10 @@ export class Economy {
       garrison: [],
       lit: false,
       frontier: false,
+      stranded: -1,
+      siege: [],
+      duel: null,
+      levy: 0,
       alive: true,
     };
     this.buildings.push(b);
@@ -771,6 +810,8 @@ export class Economy {
   need(b: Building, type: number): number {
     if (!b.alive) return 0;
     if (!b.built) return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
+    if (b.stranded >= 0) return 0;
+    if (b.def.slots) return this.armsNeed(b, type);
     if (b.worker < 0 || b.exhausted) return 0;
     const key = inputKeyFor(b.def, type);
     if (!key) return 0;
@@ -907,7 +948,7 @@ export class Economy {
     let best: { origin: Building; person: Person } | null = null;
     let bestScore = -Infinity;
     for (const p of this.people) {
-      if (!p.alive || p.owner !== owner || p.stage !== "adult" || p.settler >= 0) continue;
+      if (!p.alive || p.owner !== owner || p.stage !== "adult" || p.settler >= 0 || p.woundedUntil > this.tick) continue;
       const house = p.house >= 0 ? this.buildings[p.house] : undefined;
       const origin = house && house.alive && house.built ? house : keep;
       if (!origin) continue;
@@ -980,6 +1021,10 @@ export class Economy {
       const b = this.buildings[s.building] as Building;
       b.garrison = b.garrison.filter((id) => id !== s.id);
     }
+    if (s.role === "attacker" && s.building >= 0) {
+      const b = this.buildings[s.building] as Building;
+      b.siege = b.siege.filter((id) => id !== s.id);
+    }
     this.releaseReservations(s);
     if (s.role === "builder" && s.building >= 0) {
       const b = this.buildings[s.building] as Building;
@@ -1015,7 +1060,7 @@ export class Economy {
       r.carrier = s.id;
     }
     for (const b of this.buildings) {
-      if (!b.alive) continue;
+      if (!b.alive || b.stranded >= 0 || this.defeated[b.owner]) continue;
       if (!b.built && b.builder < 0) {
         const pick = this.pickPerson(b.flag, "builder");
         if (!pick) continue;
@@ -1075,12 +1120,436 @@ export class Economy {
       this.sendHome(s);
       return;
     }
+    if (s.state === "guard" && this.tick % 25 === 0) this.equip(s, b);
     if (s.state === "goto" && this.walk(s)) {
       s.state = "guard";
+      this.equip(s, b);
       if (!b.lit) {
         b.lit = true;
         this.territoryDirty = true;
         this.notify(b.owner, `The ${b.def.name.toLowerCase()} is lit. Your border grows.`);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ combat
+
+  /** Cut a building off: workers and wardens leave, a lantern goes dark. */
+  private strand(b: Building): void {
+    if (b.stranded >= 0) return;
+    b.stranded = this.tick;
+    for (const id of [b.worker, b.builder, ...b.garrison]) if (id >= 0) this.sendHome(this.settlers[id] as Settler);
+    b.garrison = [];
+    if (b.lit && b.def.light) {
+      b.lit = false;
+      this.territoryDirty = true;
+    }
+    const flag = this.flags[b.flag] as Flag;
+    for (const r of [...flag.roads]) this.removeRoad(this.roads[r] as Road);
+    this.notify(b.owner, `Your ${b.def.name.toLowerCase()} is cut off. Win the land back within a season or it falls to ruin.`);
+    this.structureVersion++;
+  }
+
+  /** Stranded buildings come back when their land does, and fall to ruin after a season. */
+  private stepStranded(): void {
+    const land = this.land;
+    for (const b of this.buildings) {
+      if (!b.alive || b.stranded < 0) continue;
+      if (land.territory[b.tile] === b.owner + 1 && !this.defeated[b.owner]) {
+        b.stranded = -1;
+        this.structureVersion++;
+        this.notify(b.owner, `Your ${b.def.name.toLowerCase()} is back in your light.`);
+      } else if (this.tick - b.stranded > COMBAT.strandedDays * this.dayTicks) {
+        this.notify(b.owner, `Your stranded ${b.def.name.toLowerCase()} has fallen to ruin.`);
+        const flag = this.flags[b.flag] as Flag;
+        this.removeBuilding(b);
+        if (flag.alive && flag.roads.length === 0) this.removeFlag(flag);
+      }
+    }
+  }
+
+  /** Arms a lantern building asks for: one of each kind per warden who lacks it. */
+  private armsNeed(b: Building, type: number): number {
+    const bit = type === goodId("blade") ? ARM_BLADE : type === goodId("bow") ? ARM_BOW : type === goodId("mount") ? ARM_MOUNT : 0;
+    if (!bit || !b.built || this.priority(b, type) <= 0) return 0;
+    let lacking = 0;
+    for (const id of b.garrison) {
+      const p = this.people[(this.settlers[id] as Settler).person];
+      if (p && !(p.arms & bit)) lacking++;
+    }
+    return lacking - (b.stock[type] as number) - (b.pending[type] as number);
+  }
+
+  private equip(s: Settler, b: Building): void {
+    const p = this.people[s.person];
+    if (!p) return;
+    for (const [id, bit] of [["blade", ARM_BLADE], ["bow", ARM_BOW], ["mount", ARM_MOUNT]] as const) {
+      const g = goodId(id);
+      if (!(p.arms & bit) && (b.stock[g] as number) > 0) {
+        b.stock[g]!--;
+        p.arms |= bit;
+        note(p, `Was given a ${id}.`);
+      }
+    }
+  }
+
+  /** How bold a settlement's fighters are: gold in store, Glow, and full bellies. */
+  resolve(owner: number): number {
+    const gold = (this.storageTotals(owner)[goodId("gold")] as number) ?? 0;
+    return 0.85 + 0.15 * Math.min(1, gold / 8) + 0.15 * ((this.glow[owner] ?? 50) / 100) - (this.hungry[owner] ? 0.1 : 0);
+  }
+
+  private fighter(s: Settler, fatigue = 0): Fighter {
+    const p = this.people[s.person];
+    return { rank: p?.rank ?? 0, arms: p?.arms ?? 0, fatigue };
+  }
+
+  /** Wardens on watch inside a building, strongest last (they come out last). */
+  defendersOf(b: Building): Settler[] {
+    return b.garrison
+      .map((id) => this.settlers[id] as Settler)
+      .filter((s) => s.alive && s.state === "guard")
+      .sort((x, y) => this.fighterScore(x) - this.fighterScore(y) || x.id - y.id);
+  }
+
+  private fighterScore(s: Settler): number {
+    const p = this.people[s.person];
+    return (p?.rank ?? 0) * 10 + ((p?.arms ?? 0) & ARM_BLADE ? 5 : 0) + ((p?.arms ?? 0) & ARM_BOW ? 2 : 0);
+  }
+
+  /** Steps between two tiles, up to `max` (or Infinity). */
+  private steps(a: number, b: number, max: number): number {
+    let found = Infinity;
+    this.flood(a, max, (t, d) => {
+      if (t === b && d < found) found = d;
+    });
+    return found;
+  }
+
+  /** Can `player` attack `target`? Returns the reason if not. */
+  attackBlocked(player: number, target: Building): string | null {
+    if (this.winner >= 0) return "The game is over.";
+    if (this.tick < this.peaceUntil) return "The peace still holds.";
+    if (this.defeated[player]) return "Your settlement has fallen.";
+    if (!target.alive || !target.built || target.owner === player) return "That isn't an enemy lantern.";
+    if (!target.def.light || (!target.lit && !this.keeps.includes(target.id))) return "Only lit lanterns and Hearthships can be attacked.";
+    if (!this.attackSources(player, target).length) return "None of your lanterns is close enough.";
+    return null;
+  }
+
+  /** The player's lit lanterns within reach of a target, nearest first. */
+  private attackSources(player: number, target: Building): { b: Building; d: number }[] {
+    const out: { b: Building; d: number }[] = [];
+    const reach = new Map<number, number>();
+    let max = 0;
+    for (const b of this.buildings) if (b.alive && b.lit && b.owner === player && b.def.slots && b.stranded < 0) max = Math.max(max, (b.def.light as number) + COMBAT.reach);
+    if (!max) return out;
+    this.flood(target.tile, max, (t, d) => reach.set(t, d));
+    for (const b of this.buildings) {
+      if (!b.alive || !b.lit || b.owner !== player || !b.def.slots || b.stranded >= 0) continue;
+      const d = reach.get(b.tile);
+      if (d !== undefined && d <= (b.def.light as number) + COMBAT.reach) out.push({ b, d });
+    }
+    return out.sort((x, y) => x.d - y.d || x.b.id - y.b.id);
+  }
+
+  /** Wardens that could join an attack (each lantern keeps one at home), strongest first. */
+  attackersFor(player: number, target: Building): { s: Settler; from: Building; d: number }[] {
+    const out: { s: Settler; from: Building; d: number }[] = [];
+    for (const { b, d } of this.attackSources(player, target)) {
+      const on = this.defendersOf(b).reverse();
+      for (const s of on.slice(0, Math.max(0, on.length - 1))) out.push({ s, from: b, d });
+    }
+    return out.sort((x, y) => this.fighterScore(y.s) - this.fighterScore(x.s) || x.d - y.d || x.s.id - y.s.id);
+  }
+
+  /** Estimated chance that `count` of the player's wardens take `target`. */
+  attackOdds(player: number, target: Building, count: number): number {
+    const att = this.attackersFor(player, target).slice(0, count);
+    const ra = this.resolve(player);
+    const rd = this.resolve(target.owner);
+    const ground = this.keeps.includes(target.id) ? 1.2 : 1.1;
+    const defs = this.keeps.includes(target.id) && !target.garrison.length ? this.militia(target) : this.defendersOf(target).map((s) => this.fighter(s));
+    const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra, 1));
+    const dd = defs.map((f) => strength(f, rd, ground)).reverse();
+    const bowsA = att.filter(({ s }) => hasBow(this.fighter(s))).length;
+    const bowsD = defs.filter((f) => hasBow(f)).length;
+    return captureOdds(a, dd, bowsA, bowsD);
+  }
+
+  /** A Hearthship without wardens is defended by up to five of its idle adults. */
+  private militia(keep: Building): Fighter[] {
+    const n = Math.min(5 - keep.levy, this.people.filter((p) => p.alive && p.owner === keep.owner && p.stage === "adult" && p.settler < 0 && p.woundedUntil <= this.tick).length);
+    return new Array<Fighter>(n).fill({ rank: 0, arms: 0, fatigue: 0 });
+  }
+
+  private cmdAttack(targetId: number, count: number, p: number): CommandResult {
+    const target = this.buildings[targetId];
+    if (!target) return { ok: false, reason: "Nothing to attack there." };
+    const blocked = this.attackBlocked(p, target);
+    if (blocked) return { ok: false, reason: blocked };
+    const pool = this.attackersFor(p, target).slice(0, Math.max(0, Math.floor(count)));
+    if (!pool.length) return { ok: false, reason: "No wardens can be spared. Each lantern keeps one at home." };
+    const flagTile = (this.flags[target.flag] as Flag).tile;
+    let sent = 0;
+    for (const { s, from } of pool) {
+      const path = this.land.findPath(from.tile, flagTile, (t) => this.land.walkable(t) || t === from.tile || t === flagTile, 6000);
+      if (!path) continue;
+      from.garrison = from.garrison.filter((id) => id !== s.id);
+      s.role = "attacker";
+      s.building = target.id;
+      s.home = from.id;
+      s.state = "march";
+      s.visits = path.length;
+      this.setPath(s, path);
+      const person = this.people[s.person];
+      if (person) note(person, `Marched on a ${target.def.name.toLowerCase()}.`);
+      sent++;
+    }
+    if (!sent) return { ok: false, reason: "No way through to it." };
+    this.notify(target.owner, `Wardens are marching on your ${target.def.name.toLowerCase()}!`);
+    return { ok: true };
+  }
+
+  private stepAttacker(s: Settler): void {
+    const b = this.buildings[s.building];
+    if (!b || !b.alive || b.owner === s.owner || this.winner >= 0) {
+      this.sendHome(s);
+      return;
+    }
+    if (s.state === "march") {
+      if (!this.walk(s)) return;
+      s.state = "siege";
+      b.siege.push(s.id);
+      // Volleys: the attacker's bow at a random defender, and a defender's bow back.
+      const r = this.combatRng as Rng;
+      const me = this.fighter(s);
+      const defs = this.defendersOf(b);
+      if (hasBow(me) && defs.length > 1 && r.chance(VOLLEY_HIT)) this.hurt(r.pick(defs), "was struck by an arrow");
+      const archers = defs.filter((d) => hasBow(this.fighter(d)));
+      if (archers.length && r.chance(VOLLEY_HIT)) this.hurt(s, "was struck by an arrow at the door");
+    }
+  }
+
+  /** Duels at the doors of besieged buildings, one at a time. */
+  private stepSieges(): void {
+    for (const b of this.buildings) {
+      if (!b.alive || (!b.siege.length && !b.duel)) continue;
+      b.siege = b.siege.filter((id) => {
+        const s = this.settlers[id];
+        return !!s && s.alive && s.role === "attacker" && s.building === b.id && (s.state === "siege" || s.state === "duel");
+      });
+      if (b.duel) {
+        if (this.tick >= b.duel.until) this.resolveDuel(b);
+        continue;
+      }
+      const a = b.siege.map((id) => this.settlers[id] as Settler).find((s) => s.state === "siege");
+      if (!a) continue;
+      if (b.owner === a.owner) continue;
+      let defenders = this.defendersOf(b);
+      if (!defenders.length && this.keeps.includes(b.id)) defenders = this.raiseMilitia(b);
+      if (!defenders.length) {
+        this.capture(b, a.owner);
+        continue;
+      }
+      const d = defenders[defenders.length - 1] as Settler;
+      const flagTile = (this.flags[b.flag] as Flag).tile;
+      d.state = "duel";
+      this.setPath(d, [b.tile, flagTile]);
+      d.pi = 1;
+      a.state = "duel";
+      b.duel = { attacker: a.id, defender: d.id, until: this.tick + COMBAT.duelTicks };
+    }
+  }
+
+  /** Idle adults of a Hearthship take up arms when no warden is left to defend it. */
+  private raiseMilitia(keep: Building): Settler[] {
+    if (keep.levy >= 5) return [];
+    const pick = this.people.find((p) => p.alive && p.owner === keep.owner && p.stage === "adult" && p.settler < 0 && p.woundedUntil <= this.tick);
+    if (!pick) return [];
+    keep.levy++;
+    const s = this.spawnSettler("warden", keep, [], pick);
+    s.building = keep.id;
+    s.state = "guard";
+    keep.garrison.push(s.id);
+    note(pick, "Took up arms to defend the Hearthship.");
+    return [s];
+  }
+
+  private resolveDuel(b: Building): void {
+    const duel = b.duel as { attacker: number; defender: number; until: number };
+    b.duel = null;
+    const a = this.settlers[duel.attacker] as Settler;
+    const d = this.settlers[duel.defender] as Settler;
+    const aliveA = a.alive && a.state === "duel";
+    const aliveD = d.alive && d.state === "duel";
+    if (aliveD) {
+      d.state = "guard";
+      this.setPath(d, [b.tile]);
+    }
+    if (aliveA) a.state = "siege";
+    if (!aliveA || !aliveD) return;
+    const ground = this.keeps.includes(b.id) ? 1.2 : 1.1;
+    const fa = strength(this.fighter(a, fatigueFor(a.visits, this.people[a.person]?.arms ?? 0)), this.resolve(a.owner), 1);
+    const fd = strength(this.fighter(d), this.resolve(d.owner), ground);
+    const r = this.combatRng as Rng;
+    const [winner, loser] = r.next() < duelChance(fa, fd) ? [a, d] : [d, a];
+    const wp = this.people[winner.person];
+    if (wp) {
+      wp.xp += 2;
+      note(wp, `Won a duel at the door of a ${b.def.name.toLowerCase()}.`);
+    }
+    this.hurt(loser, `lost a duel at the door of a ${b.def.name.toLowerCase()}`);
+  }
+
+  /** The loser of a fight: wounded and sent home, or fallen if the stakes are mortal. */
+  private hurt(s: Settler, how: string): void {
+    const p = this.people[s.person];
+    if (s.role === "warden" && s.building >= 0) {
+      const b = this.buildings[s.building] as Building;
+      b.garrison = b.garrison.filter((id) => id !== s.id);
+    }
+    if (this.stakes === "mortal" && p) {
+      note(p, `Fell in battle: ${how}.`);
+      s.alive = false;
+      p.settler = -1;
+      this.farewell(p);
+      return;
+    }
+    if (p) {
+      p.woundedUntil = this.tick + COMBAT.woundedDays * this.dayTicks;
+      note(p, `Was wounded: ${how}.`);
+    }
+    if (s.role === "attacker") s.building = -1;
+    this.sendHome(s);
+  }
+
+  /** A building falls: the winners move in, the land shifts. */
+  private capture(b: Building, owner: number): void {
+    const old = b.owner;
+    const isKeep = this.keeps.includes(b.id);
+    for (const id of b.garrison) {
+      const s = this.settlers[id] as Settler;
+      if (s.alive) this.sendHome(s);
+    }
+    b.garrison = [];
+    const flag = this.flags[b.flag] as Flag;
+    for (const r of [...flag.roads]) this.removeRoad(this.roads[r] as Road);
+    for (const g of flag.goods) this.destroyGood(this.goods[g] as Good);
+    flag.goods = [];
+    flag.owner = owner;
+    b.owner = owner;
+    b.stock.fill(0);
+    b.pending.fill(0);
+    b.stranded = -1;
+    b.lit = true;
+    const winners = b.siege.map((id) => this.settlers[id] as Settler).filter((s) => s.alive && s.owner === owner);
+    b.siege = [];
+    const room = isKeep ? 0 : b.def.slots ?? 0;
+    winners.forEach((s, i) => {
+      if (i < room) {
+        s.role = "warden";
+        s.state = "guard";
+        s.building = b.id;
+        this.setPath(s, [b.tile]);
+        b.garrison.push(s.id);
+        const p = this.people[s.person];
+        if (p) {
+          p.xp += 3;
+          note(p, `Took a ${b.def.name.toLowerCase()} and now keeps watch there.`);
+        }
+      } else {
+        s.building = -1;
+        this.sendHome(s);
+      }
+    });
+    this.territoryDirty = true;
+    this.structureVersion++;
+    this.graphVersion++;
+    this.notify(owner, `You took a ${b.def.name.toLowerCase()}!`);
+    this.notify(old, `Your ${b.def.name.toLowerCase()} has fallen.`);
+    if (isKeep) this.fall(old, owner);
+  }
+
+  /** A player whose Hearthship falls is out. Their people join the victor; their lanterns go dark. */
+  private fall(loser: number, victor: number): void {
+    this.defeated[loser] = true;
+    for (const s of this.settlers) {
+      if (!s.alive || s.owner !== loser) continue;
+      s.alive = false;
+      const p = this.people[s.person];
+      if (p) p.settler = -1;
+    }
+    for (const b of this.buildings) {
+      if (!b.alive || b.owner !== loser) continue;
+      b.garrison = [];
+      b.worker = -1;
+      b.builder = -1;
+      if (b.lit) b.lit = false;
+    }
+    for (const r of this.roads) if (r.alive && r.owner === loser) r.carrier = -1;
+    for (const p of this.people) {
+      if (!p.alive || p.owner !== loser) continue;
+      p.owner = victor;
+      p.house = -1;
+      note(p, "Joined a new settlement after the Hearthship fell.");
+    }
+    this.territoryDirty = true;
+    this.notify(victor, "Their people join your settlement.");
+  }
+
+  /** Victory by conquest (last Hearthship standing) or by holding the Star Wells. */
+  private stepVictory(): void {
+    if (this.winner >= 0) return;
+    const alive = this.keeps.map((_, p) => p).filter((p) => !this.defeated[p]);
+    if (this.keeps.length > 1 && alive.length === 1) {
+      this.win(alive[0] as number, "conquest");
+      return;
+    }
+    const grid = this.land.planet.grid;
+    const held = new Array<number>(this.keeps.length).fill(0);
+    for (let t = 0; t < grid.count; t++) {
+      if (grid.degree(t) !== 5) continue;
+      const o = this.land.territory[t] as number;
+      if (o) held[o - 1] = (held[o - 1] as number) + 1;
+    }
+    for (const p of alive) {
+      if ((held[p] as number) >= COMBAT.wellsToWin) {
+        if ((this.wellsSince[p] ?? -1) < 0) {
+          this.wellsSince[p] = this.tick;
+          this.notify(p, `You hold ${held[p]} Star Wells. Keep them lit for a day to win.`);
+        } else if (this.tick - (this.wellsSince[p] as number) >= COMBAT.wellHoldDays * this.dayTicks) {
+          this.win(p, "wells");
+          return;
+        }
+      } else this.wellsSince[p] = -1;
+    }
+  }
+
+  private win(p: number, reason: "conquest" | "wells"): void {
+    this.winner = p;
+    this.winReason = reason;
+    for (let o = 0; o < this.keeps.length; o++)
+      this.notify(o, o === p ? (reason === "wells" ? "The Star Wells sing for you. Victory!" : "The last rival Hearthship has fallen. Victory!") : "Another settlement has won this world.");
+  }
+
+  /** Daily watch: wardens gain experience; gold in storage pays for faster promotion. */
+  private trainWardens(owner: number): void {
+    for (const s of this.settlers) {
+      if (!s.alive || s.owner !== owner || s.role !== "warden" || s.state !== "guard") continue;
+      const p = this.people[s.person];
+      if (!p || p.rank >= COMBAT.ranks.length - 1) continue;
+      p.xp++;
+      const goldAt = this.buildings.find((b) => b.alive && b.def.storage && b.owner === owner && (b.stock[goodId("gold")] as number) > 0);
+      if (goldAt && p.xp >= (p.rank + 1) * 2) {
+        goldAt.stock[goodId("gold")]!--;
+        p.rank++;
+        p.xp = 0;
+        note(p, `Was promoted to ${rankTitle(p.rank).toLowerCase()} (paid in gold).`);
+      } else if (p.xp >= (p.rank + 1) * 5) {
+        p.rank++;
+        p.xp = 0;
+        note(p, `Was promoted to ${rankTitle(p.rank).toLowerCase()}.`);
       }
     }
   }
@@ -1153,18 +1622,19 @@ export class Economy {
       if (old) lost.push(t);
     }
     if (changed) land.territoryVersion++;
-    // Burn what stands on lost land.
+    // What stands on lost land is stranded: it falls idle and can be won back within a season.
     for (const t of lost) {
       const ref = land.ref[t] as number;
       if (land.use[t] === Use.Building) {
         const b = this.buildings[ref] as Building;
-        if (b.alive && land.territory[t] !== b.owner + 1 && !this.keeps.includes(b.id)) {
-          this.notify(b.owner, `Your ${b.def.name.toLowerCase()} was left in the dark and burned down.`);
-          this.removeBuilding(b);
-        }
+        if (b.alive && land.territory[t] !== b.owner + 1 && !this.keeps.includes(b.id)) this.strand(b);
       } else if (land.use[t] === Use.Flag) {
         const f = this.flags[ref] as Flag;
-        if (f.alive && land.territory[t] !== f.owner + 1 && !this.keeps.includes(f.building)) this.removeFlag(f);
+        if (f.alive && land.territory[t] !== f.owner + 1 && !this.keeps.includes(f.building)) {
+          const hb = f.building >= 0 ? this.buildings[f.building] : undefined;
+          if (hb && hb.alive && hb.stranded >= 0) for (const r of [...f.roads]) this.removeRoad(this.roads[r] as Road);
+          else this.removeFlag(f);
+        }
       } else if (land.use[t] === Use.Road) {
         const r = this.roads[ref] as Road;
         if (r.alive && land.territory[t] !== r.owner + 1) this.removeRoad(r);
@@ -1812,6 +2282,7 @@ export class Economy {
     else if (s.role === "builder") this.stepBuilder(s);
     else if (s.role === "geologist") this.stepGeologist(s);
     else if (s.role === "warden") this.stepWarden(s);
+    else if (s.role === "attacker") this.stepAttacker(s);
     else this.stepWorker(s);
   }
 
@@ -1879,10 +2350,37 @@ export class Economy {
     const hour = Math.max(1, Math.round(this.dayTicks / 24));
     const daily = this.tick % this.dayTicks === 0;
     if (this.tick % hour !== 0 && !daily) return;
+    const hourIndex = Math.floor(this.tick / hour);
     for (let p = 0; p < this.keeps.length; p++) {
-      if (daily) this.dailyLife(p);
+      if (!daily && hourIndex % 3 === p % 3) this.newcomers(p);
+      if (daily) {
+        for (const k of this.keeps) (this.buildings[k] as Building).levy = 0;
+        this.dailyLife(p);
+        this.trainWardens(p);
+      }
       this.updateGlow(p);
     }
+  }
+
+  /** Room for people: the Hearthship's berths plus every house. */
+  capacity(owner: number): number {
+    return 30 + this.houses(owner).length * HOUSE_CAPACITY;
+  }
+
+  /**
+   * Newcomers: while there is room and the settlement is content and fed, a traveller joins
+   * at the Hearthship every few hours. Houses are how a settlement grows.
+   */
+  private newcomers(owner: number): void {
+    if (this.defeated[owner]) return;
+    const keep = this.buildings[this.keeps[owner] ?? -1];
+    if (!keep || keep.owner !== owner) return;
+    const all = this.members(owner);
+    if (all.length >= this.capacity(owner) || (this.glow[owner] ?? 0) < 50 || this.hungry[owner]) return;
+    const r = this.lifeRng as Rng;
+    const p = this.addPerson(owner, randomFirst(r), randomFamily(r), this.tick - r.int(17, 30) * this.dayTicks, r);
+    note(p, "Arrived at the Hearthship looking for a new home.");
+    this.notify(owner, `${fullName(p)} has come to join you.`);
   }
 
   private members(owner: number, stage?: string): Person[] {
@@ -2011,6 +2509,9 @@ export class Economy {
     for (const s of this.settlers) if (s.alive) this.stepSettler(s);
     this.stepNature();
     this.stepLife();
+    this.stepSieges();
+    if (tick % 50 === 0) this.stepStranded();
+    if (tick % 100 === 0) this.stepVictory();
     if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();
   }
@@ -2045,6 +2546,8 @@ export class Economy {
     for (const b of this.buildings) if (b.alive) h.int(b.consumed).int(b.output).int(b.residents).int(b.garrison.length).int(b.lit ? 1 : 0);
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
-    h.int(owned);
+    h.int(owned).int(this.winner);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner);
+    for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
   }
 }

@@ -79,6 +79,7 @@ export class Game {
   private readonly raycaster = new THREE.Raycaster();
   /** AI rivals in new solo worlds. */
   private rivals = 1;
+  private stakes: "wounded" | "mortal" = "wounded";
   /** Fog of war drawn (the debug dialog can lift it). */
   private fogOn = true;
   /** Person the camera follows, or -1. */
@@ -142,8 +143,9 @@ export class Game {
     this.inspector = h("div", { class: "inspector", hidden: true, "aria-live": "polite" });
     this.settingsPanel = new SettingsPanel(settings, {
       seed: () => this.world.seed,
-      newWorld: (s, rivals) => void this.newWorld(s, rivals),
+      newWorld: (s, rivals, stakes) => void this.newWorld(s, rivals, stakes),
       rivals: () => this.rivals,
+      stakes: () => this.stakes,
     });
     this.report = new ReportPanel();
     this.debug = new DebugPanel({
@@ -187,6 +189,9 @@ export class Game {
       },
       following: () => this.following,
       player: () => this.session.player,
+      attack: (target, count) => {
+        if (this.command({ t: "attack", target, count })) this.toasts.show(`${count} warden${count === 1 ? "" : "s"} set out.`, "good");
+      },
     });
     this.economyPanel = new EconomyPanel(
       () => this.world.economy,
@@ -284,6 +289,14 @@ export class Game {
     this.focusCoast();
   }
 
+  private victoryText(): string | null {
+    const eco = this.world.economy;
+    if (eco.defeated[this.session.player] && eco.winner < 0) return "Your Hearthship has fallen. Your people carry on elsewhere.";
+    if (eco.winner < 0) return null;
+    if (eco.winner === this.session.player) return eco.winReason === "wells" ? "Victory: the Star Wells sing for you." : "Victory: the last rival Hearthship has fallen.";
+    return "Another settlement has won this world.";
+  }
+
   /** Look at a player's Hearthship (screenshots and tests). */
   focusPlayer(player: number, distance = 40): void {
     const keep = this.world.economy.buildings[this.world.economy.keeps[player] ?? -1];
@@ -295,6 +308,14 @@ export class Game {
     const b = this.world.economy.buildings.find((x) => x.alive && x.def.id === type && x.owner === this.session.player);
     if (b) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(b.tile)), distance);
     return !!b;
+  }
+
+  focusTile(tile: number, distance = 20): void {
+    this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(tile)), distance);
+  }
+
+  selectBuilding(id: number): void {
+    this.info.select({ kind: "building", id });
   }
 
   setFog(on: boolean): void {
@@ -392,14 +413,15 @@ export class Game {
     requestAnimationFrame(frame);
   }
 
-  async newWorld(seedInput?: string, rivals = this.rivals): Promise<void> {
+  async newWorld(seedInput?: string, rivals = this.rivals, stakes = this.stakes): Promise<void> {
     this.rivals = rivals;
+    this.stakes = stakes;
     const seed = seedInput && seedInput.trim() ? normaliseSeed(seedInput) : randomSeedWord(Math.floor(Math.random() * 2 ** 32));
     this.loading.hidden = false;
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed, { rivals })));
+    this.useSession(new SoloSession(new World(seed, { rivals, stakes })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -665,7 +687,7 @@ export class Game {
 
     const steps = this.session.advance(dt);
     this.tickCounter.ticks += steps;
-    this.hud.setBanner(this.session.status());
+    this.hud.setBanner(this.session.status() ?? this.victoryText());
     if (this.session.info.mode === "solo") {
       this.autosaveTimer -= dt;
       if (this.autosaveTimer <= 0) {

@@ -38,7 +38,7 @@ describe("territory from light", () => {
     for (let t = 0; t < exp.length; t++) if (w.land.territory[t] === 1) expect(exp[t]).toBe(1);
   });
 
-  it("demolishing a lantern gives the land back and burns what stood on it", () => {
+  it("demolishing a lantern gives the land back and clears what stood on it", () => {
     const w = new World("lantern-shrink", { size: "tiny" });
     const base = owned(w, 0);
     placeOn(w, "lamphouse", borderTiles(w), 0);

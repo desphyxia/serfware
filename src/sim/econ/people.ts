@@ -23,8 +23,18 @@ export interface Person {
   /** Tick at which this person will pass away of old age. */
   lifespan: number;
   journal: string[];
+  /** Wardens: rank 0..4, experience toward the next, arms carried (see ARM_*). */
+  rank: number;
+  xp: number;
+  arms: number;
+  /** Tick until which this person is recovering from a wound (can't work or fight). */
+  woundedUntil: number;
   alive: boolean;
 }
+
+export const ARM_BLADE = 1;
+export const ARM_BOW = 2;
+export const ARM_MOUNT = 4;
 
 const FIRST = [
   "Ada", "Arlo", "Bea", "Bram", "Cleo", "Dara", "Eben", "Edda", "Elin", "Fenn", "Gus", "Hana", "Ilse", "Ivo", "Jun", "Kai",
