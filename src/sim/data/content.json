@@ -108,6 +108,21 @@
       "id": "tongs",
       "name": "Tongs",
       "tool": true
+    },
+    {
+      "id": "blade",
+      "name": "Blade",
+      "arms": true
+    },
+    {
+      "id": "bow",
+      "name": "Bow",
+      "arms": true
+    },
+    {
+      "id": "mount",
+      "name": "Mount",
+      "arms": true
     }
   ],
   "buildings": [
@@ -501,6 +516,65 @@
       },
       "light": 10,
       "slots": 5
+    },
+    {
+      "id": "weaponsmith",
+      "name": "Weaponsmith",
+      "category": "metal",
+      "description": "Forges blades from iron and coal. A warden with a blade fights much harder.",
+      "cost": {
+        "plank": 2,
+        "stone": 3
+      },
+      "job": "craft",
+      "tool": "hammer",
+      "inputs": {
+        "iron": 1,
+        "coal": 1
+      },
+      "inputStock": 3,
+      "workTicks": 110,
+      "restTicks": 10,
+      "produces": "blade"
+    },
+    {
+      "id": "bowyer",
+      "name": "Bowyer",
+      "category": "materials",
+      "description": "Bends planks into bows. Wardens with bows loose a volley before a fight at the door.",
+      "cost": {
+        "plank": 2,
+        "stone": 1
+      },
+      "job": "craft",
+      "tool": "saw",
+      "inputs": {
+        "plank": 1
+      },
+      "inputStock": 3,
+      "workTicks": 90,
+      "restTicks": 10,
+      "produces": "bow"
+    },
+    {
+      "id": "stable",
+      "name": "Stable",
+      "category": "food",
+      "description": "Raises riding mounts on grain. Mounted wardens march further before they tire.",
+      "large": true,
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
+      "job": "craft",
+      "tool": "crook",
+      "inputs": {
+        "grain": 2
+      },
+      "inputStock": 4,
+      "workTicks": 160,
+      "restTicks": 20,
+      "produces": "mount"
     }
   ],
   "distribution": {
@@ -512,19 +586,23 @@
     },
     "coal": {
       "smelter": 1,
-      "goldsmith": 0.5
+      "goldsmith": 0.5,
+      "weaponsmith": 0.7
     },
     "grain": {
       "mill": 1,
-      "pasture": 0.6
+      "pasture": 0.6,
+      "stable": 0.4
     },
     "plank": {
       "site": 1,
       "toolsmith": 0.5,
-      "sawmill": 0
+      "sawmill": 0,
+      "bowyer": 0.3
     },
     "iron": {
-      "toolsmith": 1
+      "toolsmith": 1,
+      "weaponsmith": 0.7
     }
   },
   "toolPriority": {
@@ -565,5 +643,21 @@
       "frontier": 0.6,
       "inland": 0.2
     }
+  },
+  "combat": {
+    "ranks": [
+      "Watcher",
+      "Warden",
+      "Sentinel",
+      "Captain",
+      "Flamekeeper"
+    ],
+    "reach": 6,
+    "duelTicks": 40,
+    "strandedDays": 6,
+    "woundedDays": 1,
+    "peaceDays": 1,
+    "wellsToWin": 7,
+    "wellHoldDays": 1
   }
 }

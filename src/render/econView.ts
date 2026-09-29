@@ -18,6 +18,9 @@ import {
 } from "./models";
 
 export const GOOD_COLORS: Record<string, string> = {
+  blade: "#c9d3de",
+  bow: "#8a5a2b",
+  mount: "#7a5236",
   log: "#9a6a42",
   stone: "#a9a59d",
   plank: "#e0b27a",
@@ -34,7 +37,7 @@ export const GOOD_COLORS: Record<string, string> = {
   gold: "#f0c85a",
 };
 
-const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0"), warden: new THREE.Color("#d8b25a") };
+const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0"), warden: new THREE.Color("#d8b25a"), attacker: new THREE.Color("#c0504a") };
 const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS = 6000;
@@ -52,6 +55,8 @@ export class EconView {
     polygonOffsetUnits: -6,
   });
   private readonly buildingMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
+  /** Stranded buildings: greyed and dim, like something left behind. */
+  private readonly strandedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true, color: "#7d7a74" });
   private readonly buildings = new Map<number, { mesh: THREE.Mesh; key: string }>();
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
@@ -296,12 +301,12 @@ export class EconView {
       if (!b.alive || !this.seen(b.tile, b.owner)) continue;
       seen.add(b.id);
       const stage = b.built ? "built" : `site${Math.min(4, Math.floor((b.consumed / Math.max(1, b.costTotal)) * 5))}`;
-      const key = `${b.def.id}:${stage}`;
+      const key = `${b.def.id}:${stage}:${b.stranded >= 0 ? "x" : ""}`;
       const cur = this.buildings.get(b.id);
       if (cur && cur.key === key) continue;
       if (cur) this.group.remove(cur.mesh);
       const geo = b.built ? buildingGeometry(b.def.id) : constructionSite(b.consumed / Math.max(1, b.costTotal));
-      const mesh = new THREE.Mesh(geo, this.buildingMat);
+      const mesh = new THREE.Mesh(geo, b.stranded >= 0 ? this.strandedMat : this.buildingMat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       const p = this.frames.pos(b.tile, -0.05);
@@ -392,7 +397,7 @@ export class EconView {
       }
       d.lerp(target, k);
       if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || !this.seen(s.path[s.pi] as number, s.owner, true)) continue;
-      const working = s.state === "work";
+      const working = s.state === "work" || s.state === "duel";
       const bob = moving ? Math.abs(Math.sin(time * 13 + s.id)) * 0.05 : working ? Math.abs(Math.sin(time * 6 + s.id)) * 0.06 : 0;
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);
       this.frames.orient(p, p.clone().add(heading), q);
@@ -481,6 +486,15 @@ export class EconView {
       if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.set(...c).applyMatrix4(mesh.matrixWorld);
       if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);
+    }
+    // Duels at the door: dust and sparks.
+    for (const b of this.eco.buildings) {
+      if (!b.alive || !b.duel || !this.seen(b.tile, b.owner, true)) continue;
+      const f = this.eco.flags[b.flag];
+      if (!f) continue;
+      const p = this.frames.pos(f.tile, 0.35);
+      get(`dd${b.id}`, "dust", 5).pos.copy(p);
+      get(`dx${b.id}`, "spark", 14).pos.copy(p);
     }
     for (const s of this.eco.settlers) {
       if (!s.alive || s.state !== "work") continue;

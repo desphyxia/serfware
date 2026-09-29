@@ -1,5 +1,5 @@
 import type { World } from "../world";
-import { BUILDINGS, buildingType, type BuildingDef } from "./defs";
+import { BUILDINGS, buildingType, GOOD_INDEX, type BuildingDef } from "./defs";
 import { Feature } from "./landuse";
 
 /**
@@ -126,4 +126,46 @@ export function demoSettlement(w: World, player = 0): number {
   if (keep) w.command({ t: "geologist", flagTile: w.economy.flags[keep.flag]!.tile, player });
   for (const type of ["beacon", "lamphouse", "lantern"]) if (placeOn(w, type, frontierTiles(w, player).slice(0, 30), player, true, 10) >= 0) n++;
   return n;
+}
+
+/**
+ * Debug and screenshot helper: push player `p`'s border toward player `q` with beacons, arm the
+ * wardens, and march on the nearest enemy lantern. Returns the target building id, or -1.
+ */
+export function demoBattle(w: World, p = 0, q = 1): number {
+  const eco = w.economy;
+  if (eco.keeps[q] === undefined) return -1;
+  eco.peaceUntil = 0;
+  w.command({ t: "garrison", zone: "frontier", value: 1, player: p });
+  w.command({ t: "garrison", zone: "inland", value: 1, player: p });
+  const keep = eco.buildings[eco.keeps[p] as number] as { stock: number[] };
+  keep.stock[GOOD_INDEX.get("blade") as number] = 10;
+  keep.stock[GOOD_INDEX.get("bow") as number] = 4;
+  keep.stock[GOOD_INDEX.get("stone") as number]! += 20;
+  const enemyKeep = eco.buildings[eco.keeps[q] as number] as { tile: number };
+  const c = w.planet.grid.center;
+  const dist = (t: number) => (c[t * 3]! - c[enemyKeep.tile * 3]!) ** 2 + (c[t * 3 + 1]! - c[enemyKeep.tile * 3 + 1]!) ** 2 + (c[t * 3 + 2]! - c[enemyKeep.tile * 3 + 2]!) ** 2;
+  const targetOf = () =>
+    eco.buildings
+      .filter((b) => b.alive && b.built && b.owner === q && b.def.light && !eco.attackBlocked(p, b))
+      .sort((a, b) => a.id - b.id)[0];
+  const ready = () => {
+    const t = targetOf();
+    return !!t && eco.attackersFor(p, t).length >= 3;
+  };
+  for (let round = 0; round < 5 && !ready(); round++) {
+    const own: number[] = [];
+    for (let t = 0; t < w.land.territory.length; t++) if (w.land.territory[t] === p + 1 && w.land.isLand(t)) own.push(t);
+    own.sort((a, b) => dist(a) - dist(b) || a - b);
+    let t = placeOn(w, "beacon", own.slice(0, 200), p, true, 60);
+    if (t < 0) t = placeOn(w, "lamphouse", own.slice(0, 200), p, true, 60);
+    if (t < 0) break;
+    const b = eco.buildings.find((x) => x.alive && x.tile === t) as { lit: boolean; garrison: number[] };
+    for (let i = 0; i < 20000 && !(b.lit && b.garrison.length >= 4); i++) w.step();
+  }
+  const target = targetOf();
+  if (!target) return -1;
+  for (let i = 0; i < 1500; i++) w.step();
+  w.command({ t: "attack", target: target.id, count: 99, player: p });
+  return target.id;
 }

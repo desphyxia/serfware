@@ -27,6 +27,7 @@ const all = [
   { name: "lanterns", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 12000; i++) g.world.step(); g.focusBuilding("beacon", 22); g.setHour(21.5); g.setView(22, 2.4, 0.15); } },
   { name: "rival", wait: 3000, setup: () => { const g = window.__seedfall.game; for (let i = 0; i < 30000; i++) g.world.step(); g.setFog(false); g.focusPlayer(1, 60); g.setHour(16.5); g.setView(60, 0.8, 0.1); } },
   { name: "fog", wait: 2500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 12000; i++) g.world.step(); g.focusPlayer(1, g.cam.maxDistance * 0.55); g.setHour(12); g.setView(g.cam.maxDistance * 0.55); } },
+  { name: "battle", seed: "amber-fox-12", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); const id = window.__seedfall.battle(); const b = g.world.economy.buildings[id]; for (let i = 0; i < 20000 && b && !b.duel; i++) g.world.step(); for (let i = 0; i < 12; i++) g.world.step(); g.setFog(false); if (b) g.focusTile(b.tile, 12); g.setHour(15); g.setView(12, 2.0, 0.15); if (b) g.selectBuilding(id); } },
   { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
@@ -36,7 +37,7 @@ const shots = only ? all.filter((s) => only.includes(s.name)) : all;
 const browser = await launch();
 try {
   for (const shot of shots) {
-    const { page, errors } = await openGame(browser, { seed, width: 1440, height: 900 });
+    const { page, errors } = await openGame(browser, { seed: shot.seed ?? seed, width: 1440, height: 900 });
     if (shot.setup) {
       await page.evaluate(shot.setup);
       await page.evaluate(() => {

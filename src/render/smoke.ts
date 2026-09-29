@@ -4,7 +4,7 @@ export interface Emitter {
   pos: THREE.Vector3;
   /** Particles per second. */
   rate: number;
-  kind: "smoke" | "steam" | "dust";
+  kind: "smoke" | "steam" | "dust" | "spark";
 }
 
 const MAX = 700;
@@ -89,13 +89,13 @@ export class Particles {
       const t = this.age[i]! / this.life[i]!;
       up.set(this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!).normalize();
       const k = this.kind[i]!;
-      const rise = k === 2 ? 0.2 : 0.55;
+      const rise = k === 2 ? 0.2 : k === 3 ? -0.4 : 0.55;
       for (let j = 0; j < 3; j++) {
         this.pos[i * 3 + j]! += (this.vel[i * 3 + j]! + up.getComponent(j) * rise + wind.getComponent(j) * t * 0.8) * dt;
         this.vel[i * 3 + j]! *= 0.98;
       }
-      const base = k === 0 ? 0.5 : k === 1 ? 0.35 : 0.45;
-      this.size[i] = (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
+      const base = k === 0 ? 0.5 : k === 1 ? 0.35 : k === 3 ? 1 : 0.45;
+      this.size[i] = k === 3 ? 0.35 * (1 - t) : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
       this.alpha[i] = base * Math.sin(Math.min(1, t) * Math.PI) * (1 - t * 0.4);
     }
     const g = this.points.geometry;
@@ -109,13 +109,14 @@ export class Particles {
     this.pos[i * 3] = e.pos.x + j();
     this.pos[i * 3 + 1] = e.pos.y + j();
     this.pos[i * 3 + 2] = e.pos.z + j();
-    this.vel[i * 3] = j();
-    this.vel[i * 3 + 1] = j();
-    this.vel[i * 3 + 2] = j();
+    const burst = e.kind === "spark" ? 12 : 1;
+    this.vel[i * 3] = j() * burst;
+    this.vel[i * 3 + 1] = j() * burst;
+    this.vel[i * 3 + 2] = j() * burst;
     this.age[i] = 0;
-    this.kind[i] = e.kind === "smoke" ? 0 : e.kind === "steam" ? 1 : 2;
-    this.life[i] = e.kind === "dust" ? 1.2 : 3.5 + this.rand() * 2;
-    this.shade[i] = e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : 0.75;
+    this.kind[i] = e.kind === "smoke" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : 3;
+    this.life[i] = e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : 3.5 + this.rand() * 2;
+    this.shade[i] = e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : e.kind === "spark" ? 2.4 : 0.75;
   }
 
   dispose(): void {

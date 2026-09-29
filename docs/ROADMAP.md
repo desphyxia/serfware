@@ -32,7 +32,7 @@ Each batch has a GitHub issue (#1–#28) with its detailed scope.
 | 6 | Economy 1: food, geology, mining, smelting, tools → professions | #6 |
 | 7 | Settlers: individuals, needs, households, skills, follow cam, Glow v1 | #7 |
 | 8 | Territory: lantern buildings, light borders, fog of war, AI builder v1 | #8 |
-| 9 | Combat and PvP skirmish | #9 |
+| 9 | Combat and PvP skirmish (follow-ups in #37) | #9 |
 | 10 | Living world 2: water, wind, weather, seasons, soil | #10 |
 | 11 | Living world 3: fire, ecology, succession, erosion, groundwater, wear | #11 |
 | 12 | Steam: Electron + steamworks.js, Steam networking, Deck | #12 |
