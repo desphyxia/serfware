@@ -19,6 +19,7 @@ const all = [
   { name: "settlement", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4500; i++) g.world.step(); g.setHour(10); g.setView(34, 0.6, 0.05); } },
   { name: "closeup", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 5200; i++) g.world.step(); g.setHour(16); g.setView(9, 2.2, 0.15); } },
   { name: "evening", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4500; i++) g.world.step(); g.setHour(20.6); g.setView(24, 0.9, 0.1); } },
+  { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
 const only = process.env.SHOTS?.split(",");
@@ -37,6 +38,7 @@ try {
       });
     }
     for (const k of shot.keys ?? []) await page.keyboard.press(k);
+    if (shot.after) await page.evaluate(shot.after);
     await page.waitForTimeout(shot.wait);
     await page.screenshot({ path: `${outDir}/${shot.name}.png` });
     console.log(`${outDir}/${shot.name}.png${errors.length ? ` (errors: ${errors.join("; ")})` : ""}`);

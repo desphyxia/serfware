@@ -15,6 +15,27 @@ npm run check        # lint, typecheck, tests, single-file build, headless smoke
 npm run shots        # progress screenshots into artifacts/shots
 ```
 
+## Multiplayer (WebRTC, development)
+
+Games run in deterministic lockstep: every machine simulates the same world and only commands
+travel over the network. Two co-op modes exist today: **shared keep** (everyone builds one
+economy) and **neighbours** (each player gets their own Hearthship and territory).
+
+```sh
+npm run signal       # signalling server on ws://localhost:8787 (only used to connect)
+npm run dev          # open two tabs, press M, Multiplayer: Host in one, Join the same room in the other
+npm run mp-test      # two headless browsers play over real WebRTC and must stay in sync
+```
+
+Without a server, the host can create an invite code and the guest answers with a reply code.
+The published single-file artifact runs in a sandbox that blocks network connections, so
+multiplayer needs `npm run dev` or the desktop build.
+
+## Saves
+
+Press M for the game menu. Saves are the seed plus every command; loading replays them.
+"Copy save" puts the save on the clipboard so it can be attached to bug reports.
+
 ## Keys
 
 | Key | Action |
@@ -23,6 +44,12 @@ npm run shots        # progress screenshots into artifacts/shots
 | F3 or ` | Debug dialog |
 | F8 | Report a bug (copyable report) |
 | Space | Pause / resume |
+| M | Game menu (saves, multiplayer) |
+| 1 / 2 | Flag / road tools |
+| 3–6 | Buildings |
+| X | Demolish |
+| G | Hex grid overlay |
+| WASD, Q/E, R/F | Move, turn, tilt the camera |
 
 ## Reporting bugs
 

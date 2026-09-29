@@ -19,6 +19,7 @@ const MAX_ROAD_TILES = 24;
 
 export interface Flag {
   id: number;
+  owner: number;
   tile: number;
   goods: number[];
   /** Slots promised to goods on their way here. */
@@ -30,6 +31,7 @@ export interface Flag {
 
 export interface Road {
   id: number;
+  owner: number;
   a: number;
   b: number;
   tiles: number[];
@@ -50,6 +52,7 @@ export interface Good {
 
 export interface Building {
   id: number;
+  owner: number;
   type: number;
   def: BuildingDef;
   tile: number;
@@ -77,6 +80,7 @@ export type Role = "carrier" | "builder" | "worker";
 
 export interface Settler {
   id: number;
+  owner: number;
   role: Role;
   building: number;
   road: number;
@@ -95,11 +99,13 @@ export interface Settler {
   alive: boolean;
 }
 
-export type Command =
+/** Player commands. `player` defaults to 0; in shared-keep co-op everyone acts as player 0. */
+export type Command = (
   | { t: "flag"; tile: number }
   | { t: "road"; tiles: number[] }
   | { t: "build"; type: string; tile: number; flagTile: number }
-  | { t: "demolish"; tile: number };
+  | { t: "demolish"; tile: number }
+) & { player?: number };
 
 export interface CommandResult {
   ok: boolean;
@@ -117,7 +123,8 @@ export class Economy {
   private graphVersion = 0;
   private readonly routeCache = new Map<number, { v: number; next: Int32Array; dist: Float64Array }>();
   private readonly growing: number[] = [];
-  keep = -1;
+  /** Keep (Hearthship) building id per player. */
+  readonly keeps: number[] = [];
   tick = 0;
   /** Messages for the player (the UI shows and clears them). */
   readonly notices: string[] = [];
@@ -126,14 +133,20 @@ export class Economy {
 
   // ------------------------------------------------------------------ setup
 
-  /** Choose a start site, place the keep, claim territory and make sure the start is playable. */
-  setupStart(rng: Rng): void {
+  /** Player 0's keep (single player and shared co-op). */
+  get keep(): number {
+    return this.keeps[0] ?? -1;
+  }
+
+  /** Choose a start site for `player`, place the keep, claim territory and make sure the start is playable. */
+  setupStart(rng: Rng, player = 0): void {
+    const others = this.keeps.map((k) => (this.buildings[k] as Building).tile);
     const land = this.land;
     const { grid, terrain } = land.planet;
     let best = -1;
     let bestScore = -Infinity;
     for (let t = 0; t < grid.count; t++) {
-      if (!land.isLand(t) || grid.degree(t) === 5) continue;
+      if (!land.isLand(t) || grid.degree(t) === 5 || land.territory[t] !== 0) continue;
       const e = terrain.elevation[t] as number;
       if (e < 0.4 || e > terrain.params.mountainHeight * 0.35) continue;
       const slope = land.slope(t);
@@ -150,7 +163,16 @@ export class Economy {
         } else water++;
       }
       const lat = Math.abs(grid.center[t * 3 + 1] as number);
+      // Other players' keeps: stay well clear, but not on the far side of the world either.
+      let spread = 0;
+      for (const o of others) {
+        const d = (grid.center[t * 3] as number) * (grid.center[o * 3] as number) + (grid.center[t * 3 + 1] as number) * (grid.center[o * 3 + 1] as number) + (grid.center[t * 3 + 2] as number) * (grid.center[o * 3 + 2] as number);
+        const ang = Math.sqrt(Math.max(0, 2 - 2 * d)); // chord length ~ angle
+        if (ang < land.spacing * (START.territoryRadius * 2 + 4)) spread -= 1000;
+        else spread -= Math.abs(ang - land.spacing * (START.territoryRadius * 2 + 10)) * 40;
+      }
       const score =
+        spread +
         flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3;
       if (score > bestScore) {
         bestScore = score;
@@ -186,44 +208,65 @@ export class Economy {
       }
     }
     land.featureVersion++;
-    land.claim(best, START.territoryRadius);
+    land.claim(best, START.territoryRadius, player);
 
-    const flagTile = land.bestFlagTile(best);
-    const flag = this.createFlag(flagTile);
-    const keep = this.createBuilding(buildingType("keep"), best, flag.id);
+    const flagTile = land.bestFlagTile(best, player);
+    const flag = this.createFlag(flagTile, player);
+    const keep = this.createBuilding(buildingType("keep"), best, flag.id, player);
     keep.built = true;
     keep.residents = START.settlers;
     keep.stock = goodsArray(START.stock);
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
-    this.keep = keep.id;
+    this.keeps[player] = keep.id;
   }
 
   // ------------------------------------------------------------------ commands
 
   apply(cmd: Command): CommandResult {
+    const p = cmd.player ?? 0;
+    if (this.keeps[p] === undefined) return { ok: false, reason: "Unknown player." };
     switch (cmd.t) {
       case "flag":
-        return this.cmdFlag(cmd.tile);
+        return this.cmdFlag(cmd.tile, p);
       case "road":
-        return this.cmdRoad(cmd.tiles);
+        return this.cmdRoad(cmd.tiles, p);
       case "build":
-        return this.cmdBuild(cmd.type, cmd.tile, cmd.flagTile);
+        return this.cmdBuild(cmd.type, cmd.tile, cmd.flagTile, p);
       case "demolish":
-        return this.cmdDemolish(cmd.tile);
+        return this.cmdDemolish(cmd.tile, p);
     }
   }
 
-  private cmdFlag(tile: number): CommandResult {
+  /** Check a command without changing anything (for instant feedback in multiplayer). */
+  check(cmd: Command): string | null {
+    const p = cmd.player ?? 0;
+    const land = this.land;
+    switch (cmd.t) {
+      case "flag":
+        return land.use[cmd.tile] === Use.Flag ? "There is already a flag here." : land.canPlaceFlag(cmd.tile, p) ? null : "A flag can't go here.";
+      case "road":
+        return this.checkRoad(cmd.tiles, p);
+      case "build":
+        return land.canBuild(cmd.tile, cmd.flagTile, !!BUILDINGS[buildingType(cmd.type)]?.large, p) ? null : "You can't build here.";
+      case "demolish":
+        return land.use[cmd.tile] === Use.Free || land.use[cmd.tile] === Use.Blocked ? "Nothing to demolish here." : null;
+    }
+  }
+
+  private cmdFlag(tile: number, p: number): CommandResult {
     const land = this.land;
     if (land.use[tile] === Use.Flag) return { ok: false, reason: "There is already a flag here." };
-    if (!land.canPlaceFlag(tile)) return { ok: false, reason: "A flag can't go here." };
-    if (land.use[tile] === Use.Road) return this.splitRoad(tile);
-    this.createFlag(tile);
+    if (!land.canPlaceFlag(tile, p)) return { ok: false, reason: "A flag can't go here." };
+    if (land.use[tile] === Use.Road) {
+      if ((this.roads[land.ref[tile] as number] as Road).owner !== p) return { ok: false, reason: "That road isn't yours." };
+      return this.splitRoad(tile);
+    }
+    this.createFlag(tile, p);
     return { ok: true };
   }
 
   /** Validate a road path (first tile must be a flag). Returns an error message or null. */
-  checkRoad(tiles: readonly number[]): string | null {
+  checkRoad(tiles: readonly number[], p = 0): string | null {
     const land = this.land;
     const grid = land.planet.grid;
     if (tiles.length < 3) return "Roads need at least one tile between flags.";
@@ -231,16 +274,17 @@ export class Economy {
     const first = tiles[0] as number;
     const last = tiles[tiles.length - 1] as number;
     if (land.use[first] !== Use.Flag) return "Roads start at a flag.";
+    if ((this.flags[land.ref[first] as number] as Flag).owner !== p) return "That flag isn't yours.";
     const seen = new Set<number>();
     for (let i = 0; i < tiles.length; i++) {
       const t = tiles[i] as number;
       if (seen.has(t)) return "A road can't cross itself.";
       seen.add(t);
       if (i > 0 && !grid.neighborsOf(tiles[i - 1] as number).includes(t)) return "Road tiles must be connected.";
-      if (i > 0 && i < tiles.length - 1 && !land.roadable(t)) return "Something is in the way.";
+      if (i > 0 && i < tiles.length - 1 && !land.roadable(t, p)) return "Something is in the way.";
     }
     if (last === first) return "A road needs two different flags.";
-    if (land.use[last] !== Use.Flag && !land.canPlaceFlag(last)) return "The road must end at a flag.";
+    if (land.use[last] === Use.Flag ? (this.flags[land.ref[last] as number] as Flag).owner !== p : !land.canPlaceFlag(last, p)) return "The road must end at one of your flags.";
     const fa = this.flagAt(first);
     const fb = this.flagAt(last);
     if (fa && fb) for (const r of fa.roads) {
@@ -250,45 +294,48 @@ export class Economy {
     return null;
   }
 
-  private cmdRoad(tiles: number[]): CommandResult {
-    const err = this.checkRoad(tiles);
+  private cmdRoad(tiles: number[], p: number): CommandResult {
+    const err = this.checkRoad(tiles, p);
     if (err) return { ok: false, reason: err };
     const last = tiles[tiles.length - 1] as number;
     if (this.land.use[last] === Use.Road) {
       const r = this.splitRoad(last);
       if (!r.ok) return r;
-    } else if (this.land.use[last] !== Use.Flag) this.createFlag(last);
+    } else if (this.land.use[last] !== Use.Flag) this.createFlag(last, p);
     const a = this.flagAt(tiles[0] as number) as Flag;
     const b = this.flagAt(last) as Flag;
-    this.createRoad(a.id, b.id, tiles);
+    this.createRoad(a.id, b.id, tiles, p);
     return { ok: true };
   }
 
-  private cmdBuild(typeId: string, tile: number, flagTile: number): CommandResult {
+  private cmdBuild(typeId: string, tile: number, flagTile: number, p: number): CommandResult {
     const type = buildingType(typeId);
     const def = BUILDINGS[type] as BuildingDef;
     if (def.buildable === false) return { ok: false, reason: `${def.name} can't be built.` };
     const land = this.land;
-    if (!land.canBuild(tile, flagTile, def.large)) return { ok: false, reason: "You can't build here." };
+    if (!land.canBuild(tile, flagTile, def.large, p)) return { ok: false, reason: "You can't build here." };
     const existing = this.flagAt(flagTile);
     if (existing && existing.building >= 0) return { ok: false, reason: "That flag already serves a building." };
     let flag = existing;
     if (!flag) {
-      const r = this.cmdFlag(flagTile);
+      const r = this.cmdFlag(flagTile, p);
       if (!r.ok) return r;
       flag = this.flagAt(flagTile) as Flag;
     }
-    this.createBuilding(type, tile, flag.id);
+    this.createBuilding(type, tile, flag.id, p);
     return { ok: true };
   }
 
-  private cmdDemolish(tile: number): CommandResult {
+  private cmdDemolish(tile: number, p: number): CommandResult {
     const land = this.land;
     const ref = land.ref[tile] as number;
+    const owner =
+      land.use[tile] === Use.Building ? this.buildings[ref]?.owner : land.use[tile] === Use.Road ? this.roads[ref]?.owner : land.use[tile] === Use.Flag ? this.flags[ref]?.owner : p;
+    if (owner !== p) return { ok: false, reason: "That isn't yours." };
     switch (land.use[tile]) {
       case Use.Building: {
         const b = this.buildings[ref] as Building;
-        if (b.id === this.keep) return { ok: false, reason: "The Hearthship can't be demolished." };
+        if (this.keeps.includes(b.id)) return { ok: false, reason: "The Hearthship can't be demolished." };
         this.removeBuilding(b);
         return { ok: true };
       }
@@ -297,7 +344,7 @@ export class Economy {
         return { ok: true };
       case Use.Flag: {
         const f = this.flags[ref] as Flag;
-        if (f.building === this.keep) return { ok: false, reason: "The Hearthship needs its flag." };
+        if (this.keeps.includes(f.building)) return { ok: false, reason: "The Hearthship needs its flag." };
         this.removeFlag(f);
         return { ok: true };
       }
@@ -316,8 +363,8 @@ export class Economy {
     return this.land.use[tile] === Use.Building ? (this.buildings[this.land.ref[tile] as number] as Building) : null;
   }
 
-  private createFlag(tile: number): Flag {
-    const f: Flag = { id: this.flags.length, tile, goods: [], reserved: 0, roads: [], building: -1, alive: true };
+  private createFlag(tile: number, owner: number): Flag {
+    const f: Flag = { id: this.flags.length, owner, tile, goods: [], reserved: 0, roads: [], building: -1, alive: true };
     this.flags.push(f);
     this.land.use[tile] = Use.Flag;
     this.land.ref[tile] = f.id;
@@ -327,8 +374,8 @@ export class Economy {
     return f;
   }
 
-  private createRoad(a: number, b: number, tiles: number[]): Road {
-    const r: Road = { id: this.roads.length, a, b, tiles: [...tiles], carrier: -1, alive: true };
+  private createRoad(a: number, b: number, tiles: number[], owner: number): Road {
+    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, alive: true };
     this.roads.push(r);
     (this.flags[a] as Flag).roads.push(r.id);
     (this.flags[b] as Flag).roads.push(r.id);
@@ -343,11 +390,12 @@ export class Economy {
     return r;
   }
 
-  private createBuilding(type: number, tile: number, flagId: number): Building {
+  private createBuilding(type: number, tile: number, flagId: number, owner: number): Building {
     const def = BUILDINGS[type] as BuildingDef;
     const cost = goodsArray(def.cost);
     const b: Building = {
       id: this.buildings.length,
+      owner,
       type,
       def,
       tile,
@@ -392,9 +440,9 @@ export class Economy {
     // Detach the old road without sending the carrier home; it keeps working on one half.
     road.alive = false;
     this.detachRoad(road);
-    const flag = this.createFlag(tile);
-    const r1 = this.createRoad(a, flag.id, left);
-    const r2 = this.createRoad(flag.id, b, right);
+    const flag = this.createFlag(tile, road.owner);
+    const r1 = this.createRoad(a, flag.id, left, road.owner);
+    const r2 = this.createRoad(flag.id, b, right, road.owner);
     if (carrier >= 0) {
       const s = this.settlers[carrier] as Settler;
       const onLeft = s.roadIdx <= i;
@@ -561,8 +609,9 @@ export class Economy {
   private assignDestination(g: Good): void {
     let best = -1;
     let bestD = Infinity;
+    const owner = (this.flags[g.flag] as Flag).owner;
     for (const b of this.buildings) {
-      if (!b.alive || this.need(b, g.type) <= 0) continue;
+      if (!b.alive || b.owner !== owner || this.need(b, g.type) <= 0) continue;
       const d = this.route(g.flag, b.flag).dist;
       if (d < bestD) {
         bestD = d;
@@ -571,7 +620,7 @@ export class Economy {
     }
     if (best < 0) {
       for (const b of this.buildings) {
-        if (!b.alive || !b.def.storage || !b.built) continue;
+        if (!b.alive || !b.def.storage || !b.built || b.owner !== owner) continue;
         const d = this.route(g.flag, b.flag).dist;
         if (d < bestD) {
           bestD = d;
@@ -602,7 +651,7 @@ export class Economy {
           let src: Building | null = null;
           let bestD = Infinity;
           for (const s of this.buildings) {
-            if (!s.alive || !s.def.storage || !s.built || (s.stock[type] as number) <= 0) continue;
+            if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || (s.stock[type] as number) <= 0) continue;
             const sf = this.flags[s.flag] as Flag;
             if (sf.goods.length + sf.reserved >= FLAG_CAPACITY) continue;
             const d = this.route(s.flag, b.flag).dist;
@@ -642,8 +691,9 @@ export class Economy {
   private homeFor(flagId: number): Building | null {
     let best: Building | null = null;
     let bestD = Infinity;
+    const owner = (this.flags[flagId] as Flag).owner;
     for (const s of this.buildings) {
-      if (!s.alive || !s.def.storage || !s.built || s.residents <= 0) continue;
+      if (!s.alive || !s.def.storage || !s.built || s.owner !== owner || s.residents <= 0) continue;
       const d = this.route(s.flag, flagId).dist;
       if (d < bestD) {
         bestD = d;
@@ -673,6 +723,7 @@ export class Economy {
     home.residents--;
     const s: Settler = {
       id: this.settlers.length,
+      owner: home.owner,
       role,
       building: -1,
       road: -1,
@@ -707,7 +758,7 @@ export class Economy {
     }
     s.road = -1;
     s.building = -1;
-    const home = this.buildings[this.keep] as Building;
+    const home = this.buildings[this.keeps[s.owner] as number] as Building;
     const path = this.land.findPath(here, home.tile, (t) => this.land.walkable(t) || t === home.tile, 20000);
     s.state = "home";
     s.path = path ?? [here, home.tile];
@@ -1121,7 +1172,7 @@ export class Economy {
     if (s.state === "home") {
       if (this.walk(s)) {
         s.alive = false;
-        (this.buildings[this.keep] as Building).residents++;
+        (this.buildings[this.keeps[s.owner] as number] as Building).residents++;
       }
       return;
     }
@@ -1192,16 +1243,16 @@ export class Economy {
 
   // ------------------------------------------------------------------ queries
 
-  storageTotals(): number[] {
+  storageTotals(owner = 0): number[] {
     const out = new Array<number>(GOODS.length).fill(0);
-    for (const b of this.buildings) if (b.alive && b.def.storage) b.stock.forEach((v, i) => (out[i] = (out[i] as number) + v));
+    for (const b of this.buildings) if (b.alive && b.def.storage && b.owner === owner) b.stock.forEach((v, i) => (out[i] = (out[i] as number) + v));
     return out;
   }
 
-  population(): { idle: number; working: number } {
+  population(owner = 0): { idle: number; working: number } {
     let idle = 0;
-    for (const b of this.buildings) if (b.alive) idle += b.residents;
-    const working = this.settlers.filter((s) => s.alive && s.state !== "home").length;
+    for (const b of this.buildings) if (b.alive && b.owner === owner) idle += b.residents;
+    const working = this.settlers.filter((s) => s.alive && s.owner === owner && s.state !== "home").length;
     return { idle, working };
   }
 

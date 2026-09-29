@@ -25,6 +25,8 @@ export default tseslint.config(
         history: "readonly",
         screen: "readonly",
         setTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
         clearTimeout: "readonly",
         requestAnimationFrame: "readonly",
         process: "readonly",

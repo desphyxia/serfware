@@ -1,4 +1,5 @@
-import { dayInfo, type DayInfo } from "./clock";
+import { dayInfo, START_FRACTION, ticksPerDay, type DayInfo } from "./clock";
+import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { LandUse } from "./econ/landuse";
 import { StateHasher } from "./hash";
@@ -9,6 +10,8 @@ import { Rng } from "./rng";
 export interface WorldOptions {
   /** Force a planet size (tests and benchmarks); otherwise the seed decides. */
   size?: GridSize;
+  /** Number of players with their own keep (neighbours co-op / PvP). Shared co-op uses 1. */
+  players?: number;
 }
 
 /**
@@ -20,6 +23,7 @@ export class World {
   readonly planet: Planet;
   readonly land: LandUse;
   readonly economy: Economy;
+  readonly players: number;
   tick = 0;
   private readonly rng: Rng;
 
@@ -30,7 +34,18 @@ export class World {
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
     this.economy = new Economy(this.land);
-    this.economy.setupStart(this.rng.fork("start"));
+    this.players = Math.max(1, Math.min(8, opts.players ?? 1));
+    for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
+    // Start the clock so it is early morning at the first Hearthship.
+    const keep = this.economy.buildings[this.economy.keeps[0] ?? -1];
+    if (keep) {
+      const c = this.planet.grid.centerOf(keep.tile);
+      const lonFrac = atan2(-c[2], c[0]) / TAU;
+      const perDay = ticksPerDay(this.planet.params.dayLengthHours);
+      let f = 7.25 / 24 - START_FRACTION - lonFrac;
+      f -= Math.floor(f);
+      this.tick = Math.round((f * perDay) / 10) * 10;
+    }
   }
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
