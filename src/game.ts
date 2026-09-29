@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Ambience, type WorkSound } from "./audio/ambience";
 import { BUILD } from "./build";
 import { crash } from "./core/crash";
 import { log } from "./core/log";
@@ -61,6 +62,9 @@ export class Game {
   private readonly info: InfoPanel;
   private readonly stock = new StockBar();
   readonly tools: Tools;
+  readonly audio: Ambience;
+  private audioTimer = 0;
+  private waterNear = 0;
   private uiTimer = 0;
   private downAt: { x: number; y: number; button: number } | null = null;
   private readonly loading: HTMLElement;
@@ -103,6 +107,7 @@ export class Game {
     this.sun.shadow.normalBias = 0.35;
 
     this.cam = this.makeCamera(canvas);
+    this.audio = new Ambience(settings.get().audio);
     this.view = new WorldView(this.world, settings.get().graphics, hashString(seed));
     this.scene.add(this.view.group);
     this.focusStart();
@@ -171,6 +176,7 @@ export class Game {
 
     this.applyUi();
     settings.subscribe((s) => {
+      this.audio.applySettings(s.audio);
       this.gfx.apply(s.graphics);
       this.applyShadowSettings();
       this.applyUi();
@@ -452,6 +458,11 @@ export class Game {
     this.tools.hoverTile(this.hoverTile);
     const eco = this.world.economy;
     while (eco.notices.length) this.toasts.show(eco.notices.shift() as string, "good");
+    this.audioTimer -= dt;
+    if (this.audioTimer <= 0) {
+      this.audioTimer = 100;
+      this.updateAudio();
+    }
     this.uiTimer -= dt;
     if (this.uiTimer <= 0) {
       this.uiTimer = 400;
@@ -526,7 +537,44 @@ export class Game {
       this.fog.near = 1e6;
       this.fog.far = 2e6;
     }
-    this.view.update({ time, dt, vegetation: this.settings.get().graphics.vegetation, sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness });
+    const gs = this.settings.get().graphics;
+    this.view.update({ time, dt, vegetation: gs.vegetation, particles: gs.particles, focus: this.cam.focus, pixelRatio: this.gfx.renderer.getPixelRatio(), sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness });
+  }
+
+  private updateAudio(): void {
+    if (!this.audio.running) return;
+    const R = this.world.planet.params.radius;
+    const land = this.world.land;
+    const focusTile = this.world.planet.grid.nearestTile([this.cam.focus.x, this.cam.focus.y, this.cam.focus.z], this.hoverTile >= 0 ? this.hoverTile : 0);
+    const ring = land.ring(focusTile, 6);
+    this.waterNear = ring.filter((t) => !land.isLand(t)).length / ring.length;
+    const ground = this.cam.groundPoint();
+    const work: WorkSound[] = [];
+    const eco = this.world.economy;
+    const v = new THREE.Vector3();
+    for (const s of eco.settlers) {
+      if (!s.alive) continue;
+      const b = s.building >= 0 ? eco.buildings[s.building] : undefined;
+      let kind: WorkSound["kind"] | null = null;
+      if (s.role === "worker" && s.state === "work") kind = b?.def.job === "fell" ? "chop" : b?.def.job === "quarry" ? "clink" : null;
+      else if (s.role === "builder" && s.state === "work" && b && b.delivered.reduce((a, x) => a + x, 0) > b.consumed) kind = "hammer";
+      else if (s.role === "worker" && s.state === "craft" && b?.def.id === "sawmill") kind = "saw";
+      if (!kind) continue;
+      this.view.frames.pos(s.path[s.pi] as number, 0, v);
+      const distance = v.distanceTo(ground) + this.cam.distance * 0.35;
+      const pan = v.clone().project(this.camera).x;
+      work.push({ kind, distance, pan, id: s.id });
+    }
+    this.audio.update(
+      {
+        daylight: this.daylight,
+        closeness: this.cam.closeness(),
+        water: this.waterNear,
+        altitude: THREE.MathUtils.smoothstep(this.camera.position.length(), R * 1.1, R * 2.5),
+        wind: 0.35,
+      },
+      work,
+    );
   }
 
   private updateHover(): void {

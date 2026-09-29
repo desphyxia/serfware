@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GOODS } from "../sim/econ/defs";
 import type { Economy, Settler } from "../sim/econ/economy";
 import { SurfaceFrames } from "./frames";
+import { patchWindows, type Emitter } from "./smoke";
 import {
   buildingGeometry,
   constructionSite,
@@ -46,12 +47,15 @@ export class EconView {
   private structure = -1;
   private readonly display = new Map<number, THREE.Vector3>();
   private readonly goodColors: THREE.Color[];
+  readonly night = { value: 0 };
+  private readonly emitterCache = new Map<string, Emitter>();
 
   constructor(
     private readonly eco: Economy,
     frames: SurfaceFrames,
   ) {
     this.frames = frames;
+    patchWindows(this.buildingMat, this.night);
     const propMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
     const flagMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide, emissive: "#3a2410" });
     const plain = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.8 });
@@ -288,6 +292,46 @@ export class EconView {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+  }
+
+  /** Chimney smoke, sawmill steam and dust where settlers work. */
+  emitters(): Emitter[] {
+    const out: Emitter[] = [];
+    const get = (key: string, kind: Emitter["kind"], rate: number) => {
+      let e = this.emitterCache.get(key);
+      if (!e) {
+        e = { pos: new THREE.Vector3(), rate, kind };
+        this.emitterCache.set(key, e);
+      }
+      e.rate = rate;
+      out.push(e);
+      return e;
+    };
+    const CHIMNEYS: Record<string, [number, number, number]> = {
+      keep: [-0.25, 3.15, -0.95],
+      woodcutter: [0.39, 1.42, -0.2],
+      forester: [0.33, 1.5, -0.2],
+    };
+    for (const b of this.eco.buildings) {
+      if (!b.alive || !b.built) continue;
+      const mesh = this.buildings.get(b.id)?.mesh;
+      if (!mesh) continue;
+      const c = CHIMNEYS[b.def.id];
+      const occupied = b.def.storage || b.worker >= 0;
+      if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.set(...c).applyMatrix4(mesh.matrixWorld);
+      if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
+        get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);
+    }
+    for (const s of this.eco.settlers) {
+      if (!s.alive || s.state !== "work") continue;
+      const d = this.display.get(s.id);
+      if (d) get(`w${s.id}`, "dust", s.role === "builder" ? 2 : 3).pos.copy(d);
+    }
+    if (this.emitterCache.size > out.length * 3 + 50) {
+      const keep = new Set(out);
+      for (const [k, e] of this.emitterCache) if (!keep.has(e)) this.emitterCache.delete(k);
+    }
+    return out;
   }
 
   dispose(): void {
