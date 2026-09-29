@@ -1,10 +1,11 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
 import { FLAG_CAPACITY, type Economy } from "../sim/econ/economy";
+import { fullName, title as skillTitle, tradeName } from "../sim/econ/people";
 import { GOOD_COLORS } from "../render/econView";
 import { h, Panel } from "./dom";
 
-export type Selection = { kind: "building" | "flag" | "road"; id: number } | null;
+export type Selection = { kind: "building" | "flag" | "road" | "person"; id: number } | null;
 
 const STATE_TEXT: Record<string, string> = {
   goto: "on the way",
@@ -39,7 +40,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -57,7 +58,40 @@ export class InfoPanel extends Panel {
     const eco = this.eco();
     const body: HTMLElement[] = [];
     const title = this.root.querySelector(".panel-head h2") as HTMLElement;
-    if (this.sel.kind === "building") {
+    if (this.sel.kind === "person") {
+      const p = eco.people[this.sel.id];
+      if (!p || !p.alive) return this.select(null);
+      title.textContent = fullName(p);
+      const s = p.settler >= 0 ? eco.settlers[p.settler] : null;
+      const work = s && s.building >= 0 ? eco.buildings[s.building] : null;
+      const where = s
+        ? s.role === "carrier"
+          ? `Carrying on the roads, ${STATE_TEXT[s.state] ?? s.state}.`
+          : `${s.role === "builder" ? "Building" : s.role === "geologist" ? "Surveying" : `Working at the ${work?.def.name.toLowerCase() ?? "workshop"}`}, ${STATE_TEXT[s.state] ?? s.state}.`
+        : p.stage === "child"
+          ? "Playing near home."
+          : p.house >= 0
+            ? "At home."
+            : "Resting in the Hearthship.";
+      body.push(h("p", { class: "lede" }, `${eco.ageDays(p)} days old · ${p.stage}${p.house >= 0 ? " · has a home" : ""}`));
+      body.push(h("p", { class: "status" }, where));
+      const skills = Object.entries(p.skills)
+        .filter(([, v]) => v > 0.02)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
+      if (skills.length) {
+        body.push(h("h3", { class: "sub" }, "Skills"));
+        for (const [trade, v] of skills) {
+          body.push(h("div", { class: "skill" }, h("span", {}, `${skillTitle(v)} ${tradeName(trade)}`), h("div", { class: "bar" }, h("i", { style: `width:${Math.round(v * 100)}%` }))));
+        }
+      }
+      if (p.journal.length) {
+        body.push(h("h3", { class: "sub" }, "Journal"));
+        body.push(h("ul", { class: "journal" }, ...p.journal.slice().reverse().map((j) => h("li", {}, j))));
+      }
+      const on = this.actions.following() === p.id;
+      body.push(h("div", { class: "btn-row" }, h("button", { class: on ? "btn small on" : "btn small", onclick: () => this.actions.follow(on ? -1 : p.id) }, on ? "Stop following" : "Follow")));
+    } else if (this.sel.kind === "building") {
       const b = eco.buildings[this.sel.id];
       if (!b || !b.alive) return this.select(null);
       title.textContent = b.built ? b.def.name : `${b.def.name} (site)`;
@@ -119,6 +153,7 @@ export class StockBar {
   update(eco: Economy, player = 0): void {
     const totals = eco.storageTotals(player);
     const pop = eco.population(player);
+    const glow = eco.glow[player] ?? 0;
     const idx = (id: string) => GOODS.findIndex((g) => g.id === id);
     const food = goodsFor("food").reduce((s, g) => s + (totals[g] ?? 0), 0);
     this.root.replaceChildren(
@@ -126,6 +161,7 @@ export class StockBar {
       h("span", { class: "chip-good" }, h("i", { style: "background:#d98f4e" }), `Food ${food}`),
       ...["coal", "iron", "gold"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
       h("span", { class: "chip-good pop", title: "Settlers resting / at work" }, `Settlers ${pop.idle} / ${pop.working}`),
+      h("span", { class: `chip-good glow${glow < 40 ? " low" : ""}`, title: "Glow: how content your people are. Content towns work faster and grow." }, h("i", { style: `background:hsl(${30 + glow * 0.2},90%,${45 + glow * 0.2}%)` }), `Glow ${glow}`),
     );
   }
 }

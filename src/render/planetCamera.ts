@@ -62,6 +62,11 @@ export class PlanetCamera {
     if (distance !== undefined) this.distance = this.tDistance = THREE.MathUtils.clamp(distance, this.minDistance, this.maxDistance);
   }
 
+  /** Glide the focus toward a direction without snapping (for following a settler). */
+  follow(dir: THREE.Vector3): void {
+    this.tFocus.copy(dir).normalize();
+  }
+
   snap(distance: number, heading: number, pitchOffset: number): void {
     this.distance = this.tDistance = THREE.MathUtils.clamp(distance, this.minDistance, this.maxDistance);
     this.heading = this.tHeading = heading;

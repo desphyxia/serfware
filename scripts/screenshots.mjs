@@ -20,6 +20,8 @@ const all = [
   { name: "closeup", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 5200; i++) g.world.step(); g.setHour(16); g.setView(9, 2.2, 0.15); } },
   { name: "evening", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4500; i++) g.world.step(); g.setHour(20.6); g.setView(24, 0.9, 0.1); } },
   { name: "farmland", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 16000; i++) g.world.step(); g.setHour(15); g.setView(40, 1.4, 0.05); } },
+  { name: "person", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(9.5); g.showPerson(true); g.setView(16, 0.7, 0.1); } },
+  { name: "people", wait: 2000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(16); g.setView(28, 1.1); g.economyTab("People"); } },
   { name: "economy", wait: 2000, keys: ["p"], setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 9000; i++) g.world.step(); g.setHour(11); g.setView(30, 0.4); } },
   { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },

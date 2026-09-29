@@ -59,6 +59,8 @@ export class EconView {
   private readonly crates: THREE.InstancedMesh;
   private structure = -1;
   private readonly display = new Map<number, THREE.Vector3>();
+  /** Settler id drawn at each body instance, for picking. */
+  readonly instanceSettler: number[] = [];
   private readonly goodColors: THREE.Color[];
   readonly night = { value: 0 };
   private readonly emitterCache = new Map<string, Emitter>();
@@ -308,6 +310,7 @@ export class EconView {
       m.compose(p, q, one);
       this.bodies.setMatrixAt(n, m);
       this.bodies.setColorAt(n, ROLE_COLORS[s.role]);
+      this.instanceSettler[n] = s.id;
       this.heads.setMatrixAt(n, m);
       n++;
       if (s.carrying >= 0 && c < MAX_SETTLERS) {
@@ -328,6 +331,32 @@ export class EconView {
     }
   }
 
+  /** Settler under a ray, or -1. */
+  pickSettler(ray: THREE.Raycaster, reach = 0.45): number {
+    // Settlers are small, so pick the visible one closest to the ray rather than needing an exact hit.
+    let best = -1;
+    let bestD = reach * reach;
+    const p = new THREE.Vector3();
+    for (let i = 0; i < this.bodies.count; i++) {
+      const id = this.instanceSettler[i] as number;
+      const d = this.display.get(id);
+      if (!d) continue;
+      p.copy(d).addScaledVector(d, 0.3 / d.length());
+      if (ray.ray.direction.dot(p.clone().sub(ray.ray.origin)) < 0) continue;
+      const dist = ray.ray.distanceSqToPoint(p);
+      if (dist < bestD) {
+        bestD = dist;
+        best = id;
+      }
+    }
+    return best;
+  }
+
+  /** Smoothed display position of a settler. */
+  settlerPosition(id: number): THREE.Vector3 | null {
+    return this.display.get(id) ?? null;
+  }
+
   /** Chimney smoke, sawmill steam and dust where settlers work. */
   emitters(): Emitter[] {
     const out: Emitter[] = [];
@@ -343,6 +372,7 @@ export class EconView {
     };
     const CHIMNEYS: Record<string, [number, number, number]> = {
       keep: [-0.25, 3.15, -0.95],
+      house: [0.33, 1.38, -0.19],
       woodcutter: [0.39, 1.42, -0.2],
       forester: [0.33, 1.5, -0.2],
       farm: [-0.45, 1.72, 0.1],
@@ -358,7 +388,7 @@ export class EconView {
       const mesh = this.buildings.get(b.id)?.mesh;
       if (!mesh) continue;
       const c = CHIMNEYS[b.def.id];
-      const occupied = b.def.storage || b.worker >= 0;
+      const occupied = b.def.storage || b.worker >= 0 || (b.def.id === "house" && this.eco.people.some((p) => p.alive && p.house === b.id));
       if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.set(...c).applyMatrix4(mesh.matrixWorld);
       if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);

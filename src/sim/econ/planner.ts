@@ -66,6 +66,9 @@ export function demoSettlement(w: World, player = 0): number {
     ["pasture", undefined],
     ["butcher", undefined],
     ["toolsmith", undefined],
+    ["house", undefined],
+    ["house", undefined],
+    ["house", undefined],
   ] as const) if (placeConnected(w, type, { minDist: 2, maxDist: 9, near, player })) n++;
   const keep = w.economy.buildings[w.economy.keeps[player] ?? -1];
   if (keep) w.command({ t: "geologist", flagTile: w.economy.flags[keep.flag]!.tile, player });

@@ -195,6 +195,20 @@ export function constructionSite(progress: number): THREE.BufferGeometry {
   return merge(parts);
 }
 
+function house(): THREE.BufferGeometry {
+  const parts: Part[] = [];
+  // Flower boxes under the windows and a little garden fence.
+  for (const x of [-0.32, 0.32]) {
+    parts.push([box(0.3, 0.07, 0.08, x, 0.34, 0.54), "#6e4b33"]);
+    parts.push([new THREE.IcosahedronGeometry(0.06, 0).translate(x - 0.08, 0.44, 0.55), "#e56b6f"]);
+    parts.push([new THREE.IcosahedronGeometry(0.06, 0).translate(x + 0.06, 0.44, 0.55), "#f4d35e"]);
+  }
+  for (let i = 0; i < 5; i++) parts.push([box(0.04, 0.22, 0.04, -0.9 + i * 0.2, 0, 0.85), "#d8cbb0"]);
+  parts.push([box(0.84, 0.03, 0.03, -0.5, 0.16, 0.85), "#d8cbb0"]);
+  parts.push([new THREE.IcosahedronGeometry(0.22, 0).translate(0.85, 0.2, 0.6), "#5f8f45"]);
+  return cottage(1.1, 0.95, 0.8, "#7a6a9a", parts);
+}
+
 function storehouse(): THREE.BufferGeometry {
   const parts: Part[] = [
     [box(2.6, 0.16, 2.0), STONE],
@@ -353,6 +367,7 @@ export function buildingGeometry(id: string): THREE.BufferGeometry {
     switch (id) {
       case "keep": g = hearthship(); break;
       case "storehouse": g = storehouse(); break;
+      case "house": g = house(); break;
       case "woodcutter": g = woodcutter(); break;
       case "forester": g = forester(); break;
       case "quarry": g = quarry(); break;

@@ -717,3 +717,51 @@ input.switch {
   right: auto;
   top: calc(64px * var(--ui-scale));
 }
+
+/* People */
+.skill {
+  display: grid;
+  grid-template-columns: 1fr 45%;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12.5px;
+}
+.skill .bar {
+  margin: 0;
+}
+.journal {
+  margin: 4px 0 8px;
+  padding-left: 16px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim, #c9cbd6);
+}
+.journal li + li {
+  margin-top: 2px;
+}
+.journal a {
+  color: inherit;
+  font-weight: 600;
+}
+.glow-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 10px;
+}
+.glow-head b {
+  font-size: 28px;
+  line-height: 1;
+  color: #ffc86b;
+  text-shadow: 0 0 14px rgba(255, 190, 90, 0.55);
+}
+.glow-head span {
+  font-size: 12.5px;
+}
+.chip-good.glow.low {
+  color: #ffb3a1;
+}
+.btn.on {
+  outline: 1px solid rgba(255, 210, 130, 0.7);
+}

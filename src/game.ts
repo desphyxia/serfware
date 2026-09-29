@@ -77,6 +77,8 @@ export class Game {
   private downAt: { x: number; y: number; button: number } | null = null;
   private readonly loading: HTMLElement;
   private readonly raycaster = new THREE.Raycaster();
+  /** Person the camera follows, or -1. */
+  private following = -1;
   private readonly pointer = new THREE.Vector2(9, 9);
   private pointerDirty = false;
   private hoverTile = -1;
@@ -169,11 +171,17 @@ export class Game {
       geologist: (flagTile) => {
         if (this.command({ t: "geologist", flagTile })) this.toasts.show("A geologist is on the way.", "good");
       },
+      follow: (person) => {
+        this.following = person;
+        this.info.refresh();
+      },
+      following: () => this.following,
     });
     this.economyPanel = new EconomyPanel(
       () => this.world.economy,
       () => this.session.player,
       (cmd) => void this.command(cmd),
+      (id) => this.info.select({ kind: "person", id }),
     );
     this.tools = new Tools({
       world: () => this.world,
@@ -305,6 +313,25 @@ export class Game {
   }
 
   /** Test and screenshot hook: set camera distance, heading and tilt instantly. */
+  /** Open the card of a working person (the most skilled one by default) and optionally follow them. */
+  showPerson(follow = true): number {
+    const eco = this.world.economy;
+    const pl = this.session.player;
+    const best = eco
+      .peopleOf(pl)
+      .filter((p) => p.settler >= 0)
+      .sort((a, b) => Math.max(0, ...Object.values(b.skills)) - Math.max(0, ...Object.values(a.skills)) || a.id - b.id)[0];
+    if (!best) return -1;
+    this.info.select({ kind: "person", id: best.id });
+    if (follow) this.following = best.id;
+    return best.id;
+  }
+
+  /** Open the economy panel on a tab (for screenshots and tests). */
+  economyTab(name: string): void {
+    this.economyPanel.openTab(name);
+  }
+
   setView(distance: number, heading = 0, pitchOffset = 0): void {
     this.cam.snap(distance, heading, pitchOffset);
   }
@@ -364,6 +391,7 @@ export class Game {
     this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
     this.info.select(null);
+    this.following = -1;
     this.tools.set("select");
     this.focusStart();
     session.onDesync = (detail) => {
@@ -508,8 +536,19 @@ export class Game {
     canvas.addEventListener("pointerup", (e) => {
       const d = this.downAt;
       this.downAt = null;
-      if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
-      if (d.button === 0) this.tools.click(this.hoverTile);
+      if (!d) return;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) {
+        // Dragging the view lets go of a followed settler.
+        if (d.button === 0 && this.following >= 0) {
+          this.following = -1;
+          this.info.refresh();
+        }
+        return;
+      }
+      if (d.button === 0) {
+        if (this.tools.tool === "select" && this.pickPerson()) return;
+        this.tools.click(this.hoverTile);
+      }
       else if (d.button === 2) this.tools.cancel();
     });
     canvas.addEventListener("dblclick", () => {
@@ -612,6 +651,7 @@ export class Game {
     if (this.frameTimes.length > 120) this.frameTimes.shift();
     this.fps = this.fps * 0.92 + (1000 / dt) * 0.08;
 
+    this.updateFollow();
     this.cam.update(dt / 1000);
     this.updateEnvironment(now, dt / 1000);
     this.updateHover();
@@ -736,6 +776,34 @@ export class Game {
       },
       work,
     );
+  }
+
+  /** Select the settler under the pointer, if any. */
+  private pickPerson(): boolean {
+    if (Math.abs(this.pointer.x) > 1) return false;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const id = this.view.econ.pickSettler(this.raycaster, Math.max(0.35, this.cam.distance * 0.012));
+    const s = id >= 0 ? this.world.economy.settlers[id] : undefined;
+    if (!s || s.person < 0) return false;
+    this.info.select({ kind: "person", id: s.person });
+    return true;
+  }
+
+  /** Keep the camera on the followed person: their walker outside, their home inside. */
+  private updateFollow(): void {
+    if (this.following < 0) return;
+    const eco = this.world.economy;
+    const p = eco.people[this.following];
+    if (!p || !p.alive) {
+      this.following = -1;
+      return;
+    }
+    const pos = p.settler >= 0 ? this.view.econ.settlerPosition(p.settler) : null;
+    if (pos) this.cam.follow(pos);
+    else {
+      const home = eco.buildings[p.house >= 0 ? p.house : (eco.keeps[p.owner] ?? -1)];
+      if (home) this.cam.follow(new THREE.Vector3(...this.world.planet.grid.centerOf(home.tile)));
+    }
   }
 
   private updateHover(): void {

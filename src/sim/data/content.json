@@ -1,29 +1,114 @@
 {
   "goods": [
-    { "id": "log", "name": "Log" },
-    { "id": "stone", "name": "Stone" },
-    { "id": "plank", "name": "Plank" },
-    { "id": "grain", "name": "Grain" },
-    { "id": "flour", "name": "Flour" },
-    { "id": "bread", "name": "Bread", "group": "food" },
-    { "id": "fish", "name": "Fish", "group": "food" },
-    { "id": "livestock", "name": "Livestock" },
-    { "id": "meat", "name": "Meat", "group": "food" },
-    { "id": "coal", "name": "Coal" },
-    { "id": "ironore", "name": "Iron ore" },
-    { "id": "iron", "name": "Iron" },
-    { "id": "goldore", "name": "Gold ore" },
-    { "id": "gold", "name": "Gold" },
-    { "id": "axe", "name": "Axe", "tool": true },
-    { "id": "saw", "name": "Saw", "tool": true },
-    { "id": "pick", "name": "Pick", "tool": true },
-    { "id": "hammer", "name": "Hammer", "tool": true },
-    { "id": "shovel", "name": "Shovel", "tool": true },
-    { "id": "scythe", "name": "Scythe", "tool": true },
-    { "id": "rod", "name": "Fishing rod", "tool": true },
-    { "id": "cleaver", "name": "Cleaver", "tool": true },
-    { "id": "crook", "name": "Crook", "tool": true },
-    { "id": "tongs", "name": "Tongs", "tool": true }
+    {
+      "id": "log",
+      "name": "Log"
+    },
+    {
+      "id": "stone",
+      "name": "Stone"
+    },
+    {
+      "id": "plank",
+      "name": "Plank"
+    },
+    {
+      "id": "grain",
+      "name": "Grain"
+    },
+    {
+      "id": "flour",
+      "name": "Flour"
+    },
+    {
+      "id": "bread",
+      "name": "Bread",
+      "group": "food"
+    },
+    {
+      "id": "fish",
+      "name": "Fish",
+      "group": "food"
+    },
+    {
+      "id": "livestock",
+      "name": "Livestock"
+    },
+    {
+      "id": "meat",
+      "name": "Meat",
+      "group": "food"
+    },
+    {
+      "id": "coal",
+      "name": "Coal"
+    },
+    {
+      "id": "ironore",
+      "name": "Iron ore"
+    },
+    {
+      "id": "iron",
+      "name": "Iron"
+    },
+    {
+      "id": "goldore",
+      "name": "Gold ore"
+    },
+    {
+      "id": "gold",
+      "name": "Gold"
+    },
+    {
+      "id": "axe",
+      "name": "Axe",
+      "tool": true
+    },
+    {
+      "id": "saw",
+      "name": "Saw",
+      "tool": true
+    },
+    {
+      "id": "pick",
+      "name": "Pick",
+      "tool": true
+    },
+    {
+      "id": "hammer",
+      "name": "Hammer",
+      "tool": true
+    },
+    {
+      "id": "shovel",
+      "name": "Shovel",
+      "tool": true
+    },
+    {
+      "id": "scythe",
+      "name": "Scythe",
+      "tool": true
+    },
+    {
+      "id": "rod",
+      "name": "Fishing rod",
+      "tool": true
+    },
+    {
+      "id": "cleaver",
+      "name": "Cleaver",
+      "tool": true
+    },
+    {
+      "id": "crook",
+      "name": "Crook",
+      "tool": true
+    },
+    {
+      "id": "tongs",
+      "name": "Tongs",
+      "tool": true
+    }
   ],
   "buildings": [
     {
@@ -37,20 +122,35 @@
       "buildable": false
     },
     {
+      "id": "house",
+      "name": "House",
+      "category": "storage",
+      "description": "A home for up to four people. Households raise Glow, and children are born in homes.",
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      }
+    },
+    {
       "id": "storehouse",
       "name": "Storehouse",
       "category": "storage",
       "description": "Extra storage closer to where goods are made, so carriers walk less.",
       "large": true,
       "storage": true,
-      "cost": { "plank": 4, "stone": 3 }
+      "cost": {
+        "plank": 4,
+        "stone": 3
+      }
     },
     {
       "id": "woodcutter",
       "name": "Woodcutter",
       "category": "materials",
       "description": "Fells mature trees nearby and brings back logs.",
-      "cost": { "plank": 2 },
+      "cost": {
+        "plank": 2
+      },
       "job": "fell",
       "tool": "axe",
       "radius": 6,
@@ -63,7 +163,9 @@
       "name": "Forester",
       "category": "materials",
       "description": "Plants saplings on open ground nearby. Trees take a few days to grow.",
-      "cost": { "plank": 2 },
+      "cost": {
+        "plank": 2
+      },
       "job": "plant",
       "tool": "shovel",
       "radius": 5,
@@ -75,7 +177,9 @@
       "name": "Quarry",
       "category": "materials",
       "description": "Breaks stone from rocks nearby.",
-      "cost": { "plank": 2 },
+      "cost": {
+        "plank": 2
+      },
       "job": "quarry",
       "tool": "pick",
       "radius": 6,
@@ -88,10 +192,15 @@
       "name": "Sawmill",
       "category": "materials",
       "description": "Saws logs into planks.",
-      "cost": { "plank": 2, "stone": 2 },
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
       "job": "craft",
       "tool": "saw",
-      "inputs": { "log": 1 },
+      "inputs": {
+        "log": 1
+      },
       "inputStock": 4,
       "workTicks": 70,
       "restTicks": 10,
@@ -103,7 +212,10 @@
       "category": "food",
       "description": "Sows and harvests fields of grain around the farmhouse.",
       "large": true,
-      "cost": { "plank": 3, "stone": 1 },
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
       "job": "farm",
       "tool": "scythe",
       "radius": 3,
@@ -116,9 +228,14 @@
       "name": "Windmill",
       "category": "food",
       "description": "Grinds grain into flour.",
-      "cost": { "plank": 2, "stone": 2 },
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
       "job": "craft",
-      "inputs": { "grain": 1 },
+      "inputs": {
+        "grain": 1
+      },
       "inputStock": 4,
       "workTicks": 60,
       "restTicks": 10,
@@ -129,9 +246,14 @@
       "name": "Bakery",
       "category": "food",
       "description": "Bakes bread from flour. Bread feeds miners.",
-      "cost": { "plank": 2, "stone": 2 },
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
       "job": "craft",
-      "inputs": { "flour": 1 },
+      "inputs": {
+        "flour": 1
+      },
       "inputStock": 4,
       "workTicks": 60,
       "restTicks": 10,
@@ -142,7 +264,9 @@
       "name": "Fisher",
       "category": "food",
       "description": "Fishes from the shore nearby. Build it near water.",
-      "cost": { "plank": 2 },
+      "cost": {
+        "plank": 2
+      },
       "job": "fish",
       "tool": "rod",
       "terrain": "coast",
@@ -156,10 +280,14 @@
       "name": "Pasture",
       "category": "food",
       "description": "Raises livestock on grain.",
-      "cost": { "plank": 3 },
+      "cost": {
+        "plank": 3
+      },
       "job": "craft",
       "tool": "crook",
-      "inputs": { "grain": 1 },
+      "inputs": {
+        "grain": 1
+      },
       "inputStock": 4,
       "workTicks": 120,
       "restTicks": 20,
@@ -170,10 +298,15 @@
       "name": "Butcher",
       "category": "food",
       "description": "Turns livestock into meat.",
-      "cost": { "plank": 2, "stone": 1 },
+      "cost": {
+        "plank": 2,
+        "stone": 1
+      },
       "job": "craft",
       "tool": "cleaver",
-      "inputs": { "livestock": 1 },
+      "inputs": {
+        "livestock": 1
+      },
       "inputStock": 3,
       "workTicks": 60,
       "restTicks": 10,
@@ -184,13 +317,18 @@
       "name": "Coal mine",
       "category": "metal",
       "description": "Digs coal from the mountain. Miners need food.",
-      "cost": { "plank": 3, "stone": 1 },
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
       "job": "mine",
       "tool": "pick",
       "terrain": "mountain",
       "resource": "coal",
       "radius": 2,
-      "inputs": { "food": 1 },
+      "inputs": {
+        "food": 1
+      },
       "inputStock": 4,
       "foodPer": 2,
       "workTicks": 90,
@@ -202,13 +340,18 @@
       "name": "Iron mine",
       "category": "metal",
       "description": "Digs iron ore from the mountain. Miners need food.",
-      "cost": { "plank": 3, "stone": 1 },
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
       "job": "mine",
       "tool": "pick",
       "terrain": "mountain",
       "resource": "iron",
       "radius": 2,
-      "inputs": { "food": 1 },
+      "inputs": {
+        "food": 1
+      },
       "inputStock": 4,
       "foodPer": 2,
       "workTicks": 100,
@@ -220,13 +363,18 @@
       "name": "Gold mine",
       "category": "metal",
       "description": "Digs gold ore from the mountain. Miners need food.",
-      "cost": { "plank": 3, "stone": 1 },
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
       "job": "mine",
       "tool": "pick",
       "terrain": "mountain",
       "resource": "gold",
       "radius": 2,
-      "inputs": { "food": 1 },
+      "inputs": {
+        "food": 1
+      },
       "inputStock": 4,
       "foodPer": 1,
       "workTicks": 120,
@@ -238,13 +386,17 @@
       "name": "Granite mine",
       "category": "metal",
       "description": "Cuts stone from the mountain when surface rocks run out.",
-      "cost": { "plank": 3 },
+      "cost": {
+        "plank": 3
+      },
       "job": "mine",
       "tool": "pick",
       "terrain": "mountain",
       "resource": "granite",
       "radius": 2,
-      "inputs": { "food": 1 },
+      "inputs": {
+        "food": 1
+      },
       "inputStock": 4,
       "foodPer": 3,
       "workTicks": 80,
@@ -256,10 +408,16 @@
       "name": "Smelter",
       "category": "metal",
       "description": "Smelts iron ore with coal into iron.",
-      "cost": { "plank": 2, "stone": 3 },
+      "cost": {
+        "plank": 2,
+        "stone": 3
+      },
       "job": "craft",
       "tool": "tongs",
-      "inputs": { "ironore": 1, "coal": 1 },
+      "inputs": {
+        "ironore": 1,
+        "coal": 1
+      },
       "inputStock": 3,
       "workTicks": 90,
       "restTicks": 10,
@@ -270,10 +428,16 @@
       "name": "Goldsmith",
       "category": "metal",
       "description": "Refines gold ore with coal. Gold in storage raises morale later on.",
-      "cost": { "plank": 2, "stone": 3 },
+      "cost": {
+        "plank": 2,
+        "stone": 3
+      },
       "job": "craft",
       "tool": "tongs",
-      "inputs": { "goldore": 1, "coal": 1 },
+      "inputs": {
+        "goldore": 1,
+        "coal": 1
+      },
       "inputStock": 3,
       "workTicks": 100,
       "restTicks": 10,
@@ -284,10 +448,16 @@
       "name": "Toolsmith",
       "category": "metal",
       "description": "Makes tools from iron and planks. Tools decide who can take up which trade.",
-      "cost": { "plank": 3, "stone": 2 },
+      "cost": {
+        "plank": 3,
+        "stone": 2
+      },
       "job": "craft",
       "tool": "hammer",
-      "inputs": { "iron": 1, "plank": 1 },
+      "inputs": {
+        "iron": 1,
+        "plank": 1
+      },
       "inputStock": 3,
       "workTicks": 80,
       "restTicks": 10,
@@ -295,13 +465,41 @@
     }
   ],
   "distribution": {
-    "food": { "coalmine": 1, "ironmine": 1, "goldmine": 0.5, "granitemine": 0.4 },
-    "coal": { "smelter": 1, "goldsmith": 0.5 },
-    "grain": { "mill": 1, "pasture": 0.6 },
-    "plank": { "site": 1, "toolsmith": 0.5, "sawmill": 0 },
-    "iron": { "toolsmith": 1 }
+    "food": {
+      "coalmine": 1,
+      "ironmine": 1,
+      "goldmine": 0.5,
+      "granitemine": 0.4
+    },
+    "coal": {
+      "smelter": 1,
+      "goldsmith": 0.5
+    },
+    "grain": {
+      "mill": 1,
+      "pasture": 0.6
+    },
+    "plank": {
+      "site": 1,
+      "toolsmith": 0.5,
+      "sawmill": 0
+    },
+    "iron": {
+      "toolsmith": 1
+    }
   },
-  "toolPriority": { "axe": 0.6, "saw": 0.5, "pick": 0.6, "hammer": 0.7, "shovel": 0.4, "scythe": 0.5, "rod": 0.4, "cleaver": 0.3, "crook": 0.3, "tongs": 0.4 },
+  "toolPriority": {
+    "axe": 0.6,
+    "saw": 0.5,
+    "pick": 0.6,
+    "hammer": 0.7,
+    "shovel": 0.4,
+    "scythe": 0.5,
+    "rod": 0.4,
+    "cleaver": 0.3,
+    "crook": 0.3,
+    "tongs": 0.4
+  },
   "start": {
     "settlers": 36,
     "stock": {
