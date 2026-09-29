@@ -12,6 +12,22 @@ export interface Pad {
   radius: number;
 }
 
+/** Half-width of a road's surface, in world units. */
+export const ROAD_HALF = 0.34;
+
+/** A point on a smoothed river course. */
+export interface RiverPoint {
+  /** Unit direction. */
+  d: THREE.Vector3;
+  /** Tile nearest the point. */
+  tile: number;
+  /** Bed half-width (tile spacings) and depth (world units). */
+  width: number;
+  depth: number;
+  /** In the sea or a lake (the river's mouth). */
+  wet: boolean;
+}
+
 export interface FieldSample {
   /** Height above the planet radius (world units). */
   h: number;
@@ -44,6 +60,13 @@ export class TerrainField {
   private readonly baseH: Float32Array;
   private readonly tileCol: THREE.Color[];
   private pads = new Map<number, number>();
+  /** Road edges (tile pairs) by tile, stored under both ends. */
+  private roadEdges = new Map<number, [number, number][]>();
+  /** Smoothed river courses, shared by the carved bed and the water surface. */
+  readonly rivers: RiverPoint[][] = [];
+  /** River segments: ax, ay, az, bx, by, bz, width, depth per segment. */
+  private riverSeg: Float32Array = new Float32Array(0);
+  private readonly tileRiverSegs = new Map<number, number[]>();
   /** Bumped when pads change; chunks near changed pads rebuild. */
   padVersion = 0;
   private hint = 0;
@@ -67,6 +90,7 @@ export class TerrainField {
       const e = terrain.elevation[t] as number;
       this.baseH[t] = land.hydro.lake[t] ? (land.hydro.lakeLevel[t] as number) - 0.7 : e;
     }
+    this.buildRivers();
     this.tileCol = [];
     const wet = (t: number) => !land.isLand(t) || land.hydro.lake[t] === 1;
     for (let t = 0; t < grid.count; t++) {
@@ -78,6 +102,180 @@ export class TerrainField {
       c.offsetHSL(0, 0, (0.5 - (terrain.moisture[t] as number)) * 0.05);
       this.tileCol.push(c);
     }
+  }
+
+  /**
+   * River courses from each source (a river tile nothing flows into) down to the sea, a lake or
+   * the river it joins; smoothed once (Chaikin) and sampled finely. The bed is carved along these
+   * exact points, and the water surface is drawn on them.
+   */
+  private buildRivers(): void {
+    const land = this.land;
+    const { hydro } = land;
+    const { grid } = this.planet;
+    const n = grid.count;
+    const fed = new Uint8Array(n);
+    for (let t = 0; t < n; t++) if (land.isRiver(t) && (hydro.flowTo[t] as number) >= 0) fed[hydro.flowTo[t] as number] = 1;
+    const used = new Uint8Array(n);
+    const courses: number[][] = [];
+    for (let t = 0; t < n; t++) {
+      if (!land.isRiver(t) || fed[t]) continue;
+      const course = [t];
+      let c = t;
+      used[c] = 1;
+      for (;;) {
+        const to = hydro.flowTo[c] as number;
+        if (to < 0) break;
+        course.push(to);
+        if (!land.isRiver(to) || used[to]) break;
+        used[to] = 1;
+        c = to;
+      }
+      if (course.length > 1) courses.push(course);
+    }
+    for (let t = 0; t < n; t++) if (land.isRiver(t) && !used[t] && (hydro.flowTo[t] as number) >= 0) courses.push([t, hydro.flowTo[t] as number]);
+    const dir = (t: number) => new THREE.Vector3(...grid.centerOf(t));
+    const segs: number[] = [];
+    let hint = 0;
+    for (const course of courses) {
+      let ctrl = course.map((t) => ({ d: dir(t), t }));
+      const sm: typeof ctrl = [ctrl[0]!];
+      for (let i = 0; i < ctrl.length - 1; i++) {
+        const a = ctrl[i]!;
+        const b = ctrl[i + 1]!;
+        if (i > 0) sm.push({ d: a.d.clone().lerp(b.d, 0.25).normalize(), t: a.t });
+        if (i < ctrl.length - 2) sm.push({ d: a.d.clone().lerp(b.d, 0.75).normalize(), t: b.t });
+      }
+      sm.push(ctrl[ctrl.length - 1]!);
+      ctrl = sm;
+      const pts: RiverPoint[] = [];
+      const lastRiver = course.filter((t) => land.isRiver(t)).pop() ?? course[0]!;
+      for (let i = 0; i < ctrl.length; i++) {
+        const a = ctrl[i]!;
+        const b = ctrl[Math.min(i + 1, ctrl.length - 1)]!;
+        const steps = i === ctrl.length - 1 ? 1 : 4;
+        for (let k = 0; k < steps; k++) {
+          const d = a.d.clone().lerp(b.d, k / 4).normalize();
+          const tile = grid.nearestTile([d.x, d.y, d.z], hint);
+          hint = tile;
+          const src = land.isRiver(tile) ? tile : land.isRiver(a.t) ? a.t : lastRiver;
+          const prof = this.riverProfile(src);
+          const wet = !land.isLand(tile) || hydro.lake[tile] === 1;
+          pts.push({ d, tile, width: prof.width, depth: prof.depth, wet });
+        }
+      }
+      this.rivers.push(pts);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i]!;
+        const b = pts[i + 1]!;
+        const id = segs.length / 8;
+        segs.push(a.d.x, a.d.y, a.d.z, b.d.x, b.d.y, b.d.z, (a.width + b.width) / 2, (a.depth + b.depth) / 2);
+        for (const t of new Set([a.tile, b.tile])) {
+          for (const x of [t, ...grid.neighborsOf(t)]) {
+            let l = this.tileRiverSegs.get(x);
+            if (!l) this.tileRiverSegs.set(x, (l = []));
+            if (l[l.length - 1] !== id) l.push(id);
+          }
+        }
+      }
+    }
+    this.riverSeg = new Float32Array(segs);
+  }
+
+  /** Closest river segment to a point: distance (tile spacings) and its bed shape, or null. */
+  private nearestRiver(x: number, y: number, z: number, t: number): { d: number; width: number; depth: number } | null {
+    const ids = this.tileRiverSegs.get(t);
+    if (!ids) return null;
+    const S = this.riverSeg;
+    let best: { d: number; width: number; depth: number } | null = null;
+    for (const id of ids) {
+      const o = id * 8;
+      const ax = S[o] as number;
+      const ay = S[o + 1] as number;
+      const az = S[o + 2] as number;
+      const vx = (S[o + 3] as number) - ax;
+      const vy = (S[o + 4] as number) - ay;
+      const vz = (S[o + 5] as number) - az;
+      const len2 = vx * vx + vy * vy + vz * vz || 1e-12;
+      const k = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / len2));
+      const dx = x - (ax + vx * k);
+      const dy = y - (ay + vy * k);
+      const dz = z - (az + vz * k);
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / this.spacing;
+      const width = S[o + 6] as number;
+      // Rank by distance relative to the bed width, so a wide river wins where beds meet.
+      if (!best || d / width < best.d / best.width) best = { d, width, depth: S[o + 7] as number };
+    }
+    return best;
+  }
+
+  /**
+   * Distance (world units) from a point to the edge of the river water: negative in the water,
+   * positive on the bank; a large value away from rivers.
+   */
+  riverEdge(x: number, y: number, z: number, hint?: number): number {
+    const t = this.tileAt(x, y, z, hint);
+    const r = this.nearestRiver(x, y, z, t);
+    if (!r) return 99;
+    return (r.d - r.width * RIVER_SURFACE) * this.spacing * this.R;
+  }
+
+  /** Replace the set of roads (pairs of neighbouring tiles). Returns tiles whose ground changes. */
+  setRoads(edges: readonly [number, number][]): number[] {
+    const next = new Map<number, [number, number][]>();
+    const key = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+    const nextKeys = new Set<string>();
+    for (const [a, b] of edges) {
+      const k = key(a, b);
+      if (nextKeys.has(k)) continue;
+      nextKeys.add(k);
+      for (const t of [a, b]) {
+        let l = next.get(t);
+        if (!l) next.set(t, (l = []));
+        l.push([a, b]);
+      }
+    }
+    const oldKeys = new Set<string>();
+    for (const l of this.roadEdges.values()) for (const [a, b] of l) oldKeys.add(key(a, b));
+    const changed = new Set<number>();
+    for (const k of nextKeys) if (!oldKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
+    for (const k of oldKeys) if (!nextKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
+    if (changed.size) this.roadEdges = next;
+    return [...changed];
+  }
+
+  /** Nearest road centreline to a point: distance (world units) and the closest centreline point. */
+  roadAt(x: number, y: number, z: number, hint?: number): { d: number; cx: number; cy: number; cz: number } | null {
+    if (this.roadEdges.size === 0) return null;
+    const t = this.tileAt(x, y, z, hint);
+    const c = this.planet.grid.center;
+    let best: { d: number; cx: number; cy: number; cz: number } | null = null;
+    const test = (list: [number, number][] | undefined) => {
+      if (!list) return;
+      for (const [a, b] of list) {
+        const ax = c[a * 3] as number;
+        const ay = c[a * 3 + 1] as number;
+        const az = c[a * 3 + 2] as number;
+        const vx = (c[b * 3] as number) - ax;
+        const vy = (c[b * 3 + 1] as number) - ay;
+        const vz = (c[b * 3 + 2] as number) - az;
+        const len2 = vx * vx + vy * vy + vz * vz;
+        const k = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / len2));
+        const px = ax + vx * k;
+        const py = ay + vy * k;
+        const pz = az + vz * k;
+        const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2 + (z - pz) ** 2) * this.R;
+        if (!best || d < best.d) best = { d, cx: px, cy: py, cz: pz };
+      }
+    };
+    test(this.roadEdges.get(t));
+    for (const n of this.planet.grid.neighborsOf(t)) test(this.roadEdges.get(n));
+    return best;
+  }
+
+  /** Distance (world units) from a point to the nearest road centreline; large away from roads. */
+  roadDistance(x: number, y: number, z: number, hint?: number): number {
+    return this.roadAt(x, y, z, hint)?.d ?? 99;
   }
 
   /** Replace the set of levelled pads (buildings and flags). */
@@ -132,10 +330,9 @@ export class TerrainField {
   }
 
   /** Height above the planet radius at a unit direction. */
-  height(x: number, y: number, z: number, hint?: number, col: THREE.Color | null = null, withPads = true): FieldSample {
+  height(x: number, y: number, z: number, hint?: number, col: THREE.Color | null = null, withPads = true, withRoads = true): FieldSample {
     const t = this.tileAt(x, y, z, hint);
     let h = this.blend(x, y, z, t, col);
-    const land = this.land;
     // Sculpting: gentle rolling ground; ridged rock in the mountains; calm near the shore.
     const f = 1 / this.spacing;
     const m = Math.max(0, Math.min(1, h / this.peak));
@@ -176,35 +373,20 @@ export class TerrainField {
         h += (cliff - h) * smooth(0.35, 0.65, m) * 0.85;
       }
     }
-    // Riverbeds along each river segment near this point.
-    const hydro = land.hydro;
+    // Riverbed: a flat bottom and gentle, rounded banks along the smoothed course.
+    const river = this.nearestRiver(x, y, z, t);
+    if (river && river.d < river.width * RIVER_BANK) h -= river.depth * smooth(river.width * RIVER_BANK, river.width * 0.6, river.d);
+    // Road beds: level across the road, following the ground along it, pressed in a little.
+    if (withRoads) {
+      const road = this.roadAt(x, y, z, t);
+      if (road && road.d < ROAD_HALF * 3) {
+        const l = Math.hypot(road.cx, road.cy, road.cz);
+        const centre = this.height(road.cx / l, road.cy / l, road.cz / l, t, null, false, false).h;
+        h += (centre - 0.03 - h) * smooth(ROAD_HALF * 3, ROAD_HALF * 1.1, road.d);
+      }
+    }
     const { grid } = this.planet;
     const c = grid.center;
-    const carve = (a: number) => {
-      if (!land.isRiver(a)) return;
-      const b = hydro.flowTo[a] as number;
-      if (b < 0) return;
-      const ax = c[a * 3] as number;
-      const ay = c[a * 3 + 1] as number;
-      const az = c[a * 3 + 2] as number;
-      const bx = c[b * 3] as number;
-      const by = c[b * 3 + 1] as number;
-      const bz = c[b * 3 + 2] as number;
-      const vx = bx - ax;
-      const vy = by - ay;
-      const vz = bz - az;
-      const len2 = vx * vx + vy * vy + vz * vz;
-      const s = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / len2));
-      const dx = x - (ax + vx * s);
-      const dy = y - (ay + vy * s);
-      const dz = z - (az + vz * s);
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / this.spacing;
-      const { width, depth } = this.riverProfile(a);
-      if (d > width * 2.2) return;
-      h -= depth * smooth(width * 2.2, width * 0.5, d);
-    };
-    carve(t);
-    for (const n of grid.neighborsOf(t)) carve(n);
     // Levelled pads under buildings and flags.
     const pad = (p: number) => {
       const r = this.pads.get(p);
@@ -228,7 +410,7 @@ export class TerrainField {
   riverProfile(t: number): { width: number; depth: number } {
     const hydro = this.land.hydro;
     const strength = Math.min(1, Math.sqrt((hydro.flow[t] as number) / hydro.riverFlow) * 0.35 + 0.35);
-    return { width: 0.16 + 0.12 * strength, depth: 0.35 + 0.45 * strength };
+    return { width: 0.11 + 0.1 * strength, depth: 0.35 + 0.4 * strength };
   }
 
   /** Height of the levelled pad at a tile centre: the smooth blend, without detail. */
@@ -248,6 +430,10 @@ export class TerrainField {
     return this.R + Math.max(0, this.height(c[t * 3] as number, c[t * 3 + 1] as number, c[t * 3 + 2] as number, t).h);
   }
 }
+
+/** Outer edge of a riverbank and of the water surface, in bed half-widths. */
+const RIVER_BANK = 2.8;
+export const RIVER_SURFACE = 1.75;
 
 function smooth(e0: number, e1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));

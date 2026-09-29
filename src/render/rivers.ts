@@ -3,6 +3,7 @@ import { abs, attribute, dot, float, min, mix, positionWorld, pow, sin, smoothst
 import { rgb } from "./painterly";
 import type { LandUse } from "../sim/econ/landuse";
 import type { SurfaceFrames } from "./frames";
+import { RIVER_SURFACE } from "./terrain/field";
 
 /**
  * Rivers as flowing ribbons that widen downstream, and lakes as flat water at their spill
@@ -61,73 +62,25 @@ export class RiverView {
     const R = field.R;
     const unit = field.spacing * R;
     const { hydro } = land;
-    const n = land.soil.length;
-    // Rivers as continuous courses: from each source (a river tile nothing flows into) down to
-    // the sea, a lake, or the river it joins.
-    const fed = new Uint8Array(n);
-    for (let t = 0; t < n; t++) if (land.isRiver(t) && (hydro.flowTo[t] as number) >= 0) fed[hydro.flowTo[t] as number] = 1;
-    const used = new Uint8Array(n);
-    const courses: number[][] = [];
-    for (let t = 0; t < n; t++) {
-      if (!land.isRiver(t) || fed[t]) continue;
-      const course = [t];
-      let c = t;
-      used[c] = 1;
-      for (;;) {
-        const to = hydro.flowTo[c] as number;
-        if (to < 0) break;
-        course.push(to);
-        if (!land.isRiver(to) || used[to]) break;
-        used[to] = 1;
-        c = to;
-      }
-      if (course.length > 1) courses.push(course);
-    }
-    // Loops or unreached pieces (should be rare): take what is left one segment at a time.
-    for (let t = 0; t < n; t++) if (land.isRiver(t) && !used[t] && (hydro.flowTo[t] as number) >= 0) courses.push([t, hydro.flowTo[t] as number]);
-
-    const dirOf = (t: number) => frames.dir(t);
     const pt = new THREE.Vector3();
-    const up = new THREE.Vector3();
     const side = new THREE.Vector3();
     const fwd = new THREE.Vector3();
     let alongBase = 0;
-    for (const course of courses) {
-      // Control points at tile centres, smoothed once (Chaikin), then sampled finely.
-      let ctrl = course.map((t) => ({ d: dirOf(t), t }));
-      const smoothed: typeof ctrl = [ctrl[0]!];
-      for (let i = 0; i < ctrl.length - 1; i++) {
-        const a = ctrl[i]!;
-        const b = ctrl[i + 1]!;
-        if (i > 0) smoothed.push({ d: a.d.clone().lerp(b.d, 0.25).normalize(), t: a.t });
-        if (i < ctrl.length - 2) smoothed.push({ d: a.d.clone().lerp(b.d, 0.75).normalize(), t: b.t });
-      }
-      smoothed.push(ctrl[ctrl.length - 1]!);
-      ctrl = smoothed;
-      const samples: { d: THREE.Vector3; t: number }[] = [];
-      for (let i = 0; i < ctrl.length - 1; i++) {
-        const a = ctrl[i]!;
-        const b = ctrl[i + 1]!;
-        const steps = 4;
-        for (let k = 0; k < steps; k++) samples.push({ d: a.d.clone().lerp(b.d, k / steps).normalize(), t: k < steps / 2 ? a.t : b.t });
-      }
-      samples.push(ctrl[ctrl.length - 1]!);
+    // The same smoothed courses the terrain carves its beds along.
+    for (const samples of field.rivers) {
       const base = pos.length / 3;
       samples.forEach((smp, i) => {
-        const tile = smp.t;
-        const wet = !land.isLand(tile) || hydro.lake[tile] === 1;
-        const prof = field.riverProfile(land.isRiver(tile) ? tile : course[Math.max(0, course.length - 2)]!);
-        // The surface follows the carved bed (ignoring building pads) plus the water depth; at the
+        const tile = smp.tile;
+        // Water level: the carved bed (ignoring pads and roads) plus the water depth; at the
         // mouth it settles to sea or lake level.
-        const bed = field.height(smp.d.x, smp.d.y, smp.d.z, tile, null, false).h;
-        const level = wet ? Math.max(0, hydro.lake[tile] ? (hydro.lakeLevel[tile] as number) : 0) + 0.05 : Math.max(0.03, bed + prof.depth * 0.55);
+        const bed = field.height(smp.d.x, smp.d.y, smp.d.z, tile, null, false, false).h;
+        const level = smp.wet ? Math.max(0, hydro.lake[tile] ? (hydro.lakeLevel[tile] as number) : 0) + 0.05 : Math.max(0.03, bed + smp.depth * 0.5);
         pt.copy(smp.d).multiplyScalar(R + level);
         const prev = samples[Math.max(0, i - 1)]!.d;
         const next = samples[Math.min(samples.length - 1, i + 1)]!.d;
         fwd.copy(next).sub(prev);
-        up.copy(smp.d);
-        side.crossVectors(fwd, up).normalize();
-        const w = prof.width * 1.15 * unit * (wet ? 1.5 : 1);
+        side.crossVectors(fwd, smp.d).normalize();
+        const w = smp.width * RIVER_SURFACE * unit * (smp.wet ? 1.4 : 1);
         for (const sg of [-1, 1]) {
           const v = pt.clone().addScaledVector(side, sg * w);
           pos.push(v.x, v.y, v.z);

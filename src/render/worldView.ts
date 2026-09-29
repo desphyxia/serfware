@@ -98,7 +98,7 @@ export class WorldView {
     this.frames = new SurfaceFrames(planet, this.field);
     this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask, (t) => this.seasonAt(t));
     this.rivers = new RiverView(world.land, this.frames);
-    this.econ = new EconView(world.economy, this.frames, this.tileData);
+    this.econ = new EconView(world.economy, this.frames);
     this.overlays = new Overlays(world.land, this.frames);
     this.grass = new GrassPatch(world.land, this.frames, this.mask, (t) => this.seasonAt(t).autumn);
     this.undergrowth = new Undergrowth(world.land, this.frames, this.mask);
@@ -258,7 +258,7 @@ export class WorldView {
     this.tileData.commit("a");
   }
 
-  /** Level the ground under buildings and flags; rebuild the chunks whose pads changed. */
+  /** Level the ground under buildings, flags and roads; rebuild the chunks where it changed. */
   private updatePads(): void {
     const eco = this.world.economy;
     if (eco.structureVersion === this.padKey) return;
@@ -266,7 +266,10 @@ export class WorldView {
     const pads: Pad[] = [];
     for (const b of eco.buildings) if (b.alive) pads.push({ tile: b.tile, radius: b.def.large ? 0.55 : 0.42 });
     for (const f of eco.flags) if (f.alive) pads.push({ tile: f.tile, radius: 0.2 });
-    const changed = this.field.setPads(pads);
+    const edges: [number, number][] = [];
+    for (const r of eco.roads) if (r.alive) for (let i = 0; i < r.tiles.length - 1; i++) edges.push([r.tiles[i] as number, r.tiles[i + 1] as number]);
+    // Roads are part of the ground: a levelled bed, painted by the ground material.
+    const changed = [...this.field.setPads(pads), ...this.field.setRoads(edges)];
     if (changed.length) {
       this.terrain.invalidate(changed);
       this.frames.invalidate();
