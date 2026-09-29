@@ -1,0 +1,43 @@
+// Headless smoke test: the built game starts, renders, opens its dialogs, and reports no errors.
+import { mkdirSync } from "node:fs";
+import { launch, openGame } from "./browser.mjs";
+
+const browser = await launch();
+let failed = false;
+try {
+  const { page, errors } = await openGame(browser, { seed: "smoke-test-1" });
+  await page.waitForTimeout(2500);
+
+  const bugLine = await page.locator(".bugline").textContent();
+  if (!bugLine?.includes("seed smoke-test-1") || !bugLine.includes("build ") || !bugLine.includes("Day ")) {
+    throw new Error(`Bug line incomplete: ${bugLine}`);
+  }
+
+  await page.keyboard.press("Escape");
+  await page.locator("#settings").waitFor({ state: "visible" });
+  for (const preset of ["Low", "High", "Medium"]) {
+    await page.locator("#settings .seg-b", { hasText: preset }).click();
+    await page.waitForTimeout(300);
+  }
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("F3");
+  await page.locator("#debug").waitFor({ state: "visible" });
+  await page.waitForTimeout(600);
+
+  const tick = await page.evaluate(() => window.__seedfall.game.world.tick);
+  if (!(tick > 5)) throw new Error(`Simulation did not advance (tick ${tick})`);
+
+  const reportErrors = await page.evaluate(() => window.__seedfall.errors());
+  mkdirSync("artifacts", { recursive: true });
+  await page.screenshot({ path: "artifacts/smoke.png" });
+  if (errors.length || reportErrors) {
+    throw new Error(`Errors during smoke test:\n${errors.join("\n")}\ncrash reporter errors: ${reportErrors}`);
+  }
+  console.log(`Smoke test passed. tick=${tick} bugline="${bugLine}"`);
+} catch (err) {
+  failed = true;
+  console.error(err);
+} finally {
+  await browser.close();
+}
+process.exit(failed ? 1 : 0);

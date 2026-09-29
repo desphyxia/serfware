@@ -1,0 +1,37 @@
+{
+  "name": "seedfall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A cosy settlement game in the spirit of Serf City, on small procedurally generated planets.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:single": "vite build --mode single && node scripts/make-artifact.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "smoke": "node scripts/smoke.mjs",
+    "shots": "node scripts/screenshots.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build:single && npm run smoke"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.4",
+    "@types/three": "0.186.0",
+    "eslint": "^10.11.0",
+    "playwright": "1.56.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.1",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
