@@ -16,6 +16,18 @@ export interface PlanetParams {
   locked: boolean;
 }
 
+/** Parameters forced on a generated planet (the other planets of a star system). */
+export interface PlanetOverrides {
+  size?: GridSize;
+  dayLengthHours?: number;
+  axialTilt?: number;
+  gravity?: number;
+  locked?: boolean;
+  warmth?: number;
+  wetness?: number;
+  landFraction?: number;
+}
+
 /** A generated planet: parameters, tile grid and terrain. Fully determined by its seed. */
 export class Planet {
   constructor(
@@ -24,9 +36,9 @@ export class Planet {
     readonly terrain: Terrain,
   ) {}
 
-  static generate(rng: Rng, size?: GridSize): Planet {
+  static generate(rng: Rng, size?: GridSize, overrides: PlanetOverrides = {}): Planet {
     const pr = rng.fork("planet-params");
-    const chosen: GridSize = size ?? pr.pick(["small", "medium", "medium", "large"] as const);
+    const chosen: GridSize = size ?? overrides.size ?? pr.pick(["small", "medium", "medium", "large"] as const);
     const freq = GRID_SIZES[chosen];
     const tiles = 10 * freq * freq + 2;
     const params: PlanetParams = {
@@ -39,8 +51,13 @@ export class Planet {
     };
     // Decided from the parameters already drawn (not a new draw), so other worlds are unchanged.
     params.locked = mix32(tiles, Math.round(params.dayLengthHours * 7919 + params.axialTilt * 1e6)) % 7 === 0;
+    // Another planet of the system: its own physics and climate (see sim/system).
+    if (overrides.dayLengthHours !== undefined) params.dayLengthHours = overrides.dayLengthHours;
+    if (overrides.axialTilt !== undefined) params.axialTilt = overrides.axialTilt;
+    if (overrides.gravity !== undefined) params.gravity = overrides.gravity;
+    if (overrides.locked !== undefined) params.locked = overrides.locked;
     const grid = buildPlanetGrid(freq, rng.fork("grid"));
-    const terrain = generateTerrain(grid, rng.fork("terrain"), params.radius);
+    const terrain = generateTerrain(grid, rng.fork("terrain"), params.radius, { ...(overrides.warmth !== undefined && { warmth: overrides.warmth }), ...(overrides.wetness !== undefined && { wetness: overrides.wetness }), ...(overrides.landFraction !== undefined && { landFraction: overrides.landFraction }) });
     return new Planet(params, grid, terrain);
   }
 

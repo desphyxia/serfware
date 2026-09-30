@@ -68,6 +68,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 17b: a molten world's lava look, gas giants you can orbit (their moons as landing
+  sites), multiplayer: seeing the system shared (survey views are local for now), a 3D orrery
+  instead of the flat map, carrier load (how much one carries) by gravity, and system-wide
+  summary sim for colonies once batch 18 lets people live on other planets.
 - Batch 16b: a stronger day/night terminator on locked planets from orbit (the view fill evens
   it out); skiffs as real carriers between islands and ropeways; ballast for heavy goods
   on low-gravity worlds; gliders as a carrier layer over the Skyreef (with the Canopy gliders);

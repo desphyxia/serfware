@@ -291,6 +291,8 @@ export class EconView {
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
       mesh.position.copy(p);
       this.frames.orient(p, flagPos, mesh.quaternion);
+      // Towers stand taller on light worlds and squatter on heavy ones.
+      if (b.def.slots || b.def.id === "ropeway") mesh.scale.y = Math.min(1.3, Math.max(0.85, Math.pow(1 / this.eco.land.planet.params.gravity, 0.45)));
       if (stilts) {
         this.stiltGeo ??= stiltsGeometry();
         const legs = new THREE.Mesh(this.stiltGeo, this.buildingMat);

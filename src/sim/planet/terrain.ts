@@ -45,14 +45,16 @@ export interface Terrain {
   params: TerrainParams;
 }
 
-export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number): Terrain {
+export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number, overrides: Partial<TerrainParams> = {}): Terrain {
   const N = grid.count;
+  // Drawn first and then overridden, so a planet with overrides keeps the same random stream.
   const params: TerrainParams = {
     landFraction: rng.range(0.36, 0.56),
     mountainHeight: radius * rng.range(0.055, 0.085),
     warmth: rng.range(0.35, 0.7),
     wetness: rng.range(0.35, 0.75),
   };
+  Object.assign(params, overrides);
   const nContinents = new SimNoise(rng.nextU32());
   const nWarp = new SimNoise(rng.nextU32());
   const nRidge = new SimNoise(rng.nextU32());

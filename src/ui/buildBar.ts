@@ -16,6 +16,7 @@ export const ICONS: Record<string, string> = {
   metal: svg(`<path d="M4 18h16M6 18l2-6h8l2 6M9 12V8h6v4M12 8V4" ${STROKE}/>`),
   storage: svg(`<path d="M3 10l9-6 9 6v10H3zM9 20v-6h6v6" ${STROKE}/>`),
   lantern: svg(`<path d="M12 2v3M8 7h8l-1 9H9zM9 16l-1 5h8l-1-5M12 10v3" ${STROKE}/>`),
+  system: svg(`<circle cx="12" cy="12" r="2.5" ${STROKE}/><ellipse cx="12" cy="12" rx="10" ry="4.5" ${STROKE}/><circle cx="20" cy="10" r="1.3" fill="currentColor"/>`),
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
 
@@ -67,6 +68,7 @@ export class BuildBar {
   constructor(
     private readonly onPick: (id: ToolId) => void,
     private readonly onEconomy: () => void,
+    private readonly onSystem: () => void = () => {},
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
@@ -81,6 +83,7 @@ export class BuildBar {
     for (const c of CATEGORIES) add(c.id, c.label, c.key, ICONS[c.id]!, `${c.label} buildings`, () => this.toggleCategory(c.id));
     add("demolish", "Demolish", "X", ICONS.demolish!, "Remove a building, flag or road. Click twice to confirm.", () => this.pick("demolish"));
     add("economy", "Economy", "P", ICONS.economy!, "Stock, distribution and tool priorities.", () => this.onEconomy());
+    add("system", "System", "O", ICONS.system!, "The star system: planets, orbits and launch windows.", () => this.onSystem());
     this.popover = h("div", { class: "bb-pop", hidden: true, role: "menu" });
     this.root = h("div", { class: "buildbar-wrap" }, this.popover, bar);
   }

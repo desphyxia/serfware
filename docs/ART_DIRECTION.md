@@ -334,3 +334,14 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
   - the glowcap farm: a turf hut on a boardwalk with glowing beds
   - the peat cutter: a hut with stacks of drying peat
   - the ropeway station
+
+### Star systems (batch 17)
+
+- The system map (O) is a flat orrery. The star is a glowing disc in its class colour. Orbits
+  are drawn on a log scale; gas giants' orbits are dashed. The habitable zone is a faint green
+  band. Planets are drawn in kind colours (temperate green, arid ochre, frozen ice-white, ocean
+  blue, molten orange, gas tan), with a gold ring on the planet in view. Labels have a dark halo.
+- Travelling fades through a deep-blue radial "warp" veil, then the camera descends from high
+  orbit to the surface.
+- Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
+  gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.

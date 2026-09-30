@@ -856,3 +856,13 @@ input.switch {
   font-size: calc(18px * var(--ui-scale));
   color: var(--ink);
 }
+
+/* Star system map (O) and planet visits. */
+.panel.system svg { width: 100%; height: auto; display: block; color: var(--fg, #e8e6da); }
+.panel.system .system-planet { cursor: pointer; }
+.panel.system .system-planet:focus-visible circle:last-of-type { stroke: #f0d08a; stroke-width: 2; }
+.panel.system .system-facts { margin-top: 8px; }
+.warp { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.45s ease; z-index: 50;
+  background: radial-gradient(circle at 50% 50%, #1a2240 0%, #05070f 70%); }
+.warp.on { opacity: 1; }
+body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"]) { display: none; }
