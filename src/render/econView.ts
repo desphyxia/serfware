@@ -48,7 +48,7 @@ const MAX_GOODS_EACH = 2500;
 export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
-  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8 });
+  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8, snowy: true });
   /** Stranded buildings: greyed and dim, like something left behind. */
   private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, color: "#7d7a74", brush: 1.2 });
   private readonly buildings = new Map<number, { mesh: THREE.Mesh; key: string }>();

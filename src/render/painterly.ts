@@ -15,6 +15,7 @@ import {
   mix,
   mx_noise_float,
   normalView,
+  normalWorld,
   positionGeometry,
   positionLocal,
   cross,
@@ -27,6 +28,7 @@ import {
   step,
   uniform,
   vec3,
+  vec4,
   vertexColor,
 } from "three/tsl";
 
@@ -50,6 +52,8 @@ export const PAINT = {
   rimStrength: uniform(0.28),
   /** Night factor 0..1 for window glow. */
   night: uniform(0),
+  /** Snow lying where the view is, 0..1: settles on roofs and other upward faces. */
+  snow: uniform(0),
 };
 
 /** Shared wind, animated by the world view. */
@@ -105,6 +109,8 @@ export interface PainterlyOptions {
   wind?: number;
   /** Warm window glow at night on vertex colours matching the window colour. */
   windows?: boolean;
+  /** Snow settles on upward faces (roofs) as PAINT.snow rises. */
+  snowy?: boolean;
   emissive?: THREE.ColorRepresentation;
   transparent?: boolean;
   opacity?: number;
@@ -132,6 +138,16 @@ export class PainterlyMaterial extends THREE.MeshStandardNodeMaterial {
       const fine = mx_noise_float(p.mul(2.7));
       const n = big.mul(0.6).add(fine.mul(0.4));
       this.colorNode = materialColor.mul(float(1).add(n.mul(0.09 * brush)));
+    }
+    if (o.snowy) {
+      // Fold the vertex colour in here (so the material doesn't multiply it again), then lay
+      // snow on faces that look up, patchy at the edges.
+      const base = vec3((this.colorNode ?? materialColor) as THREE.Node<"vec3">).mul(o.vertexColors ? vec3(vertexColor()) : vec3(1, 1, 1));
+      const upness = dot(normalize(normalWorld), normalize(positionWorld));
+      const patch = mx_noise_float(positionWorld.mul(3.1)).mul(0.25);
+      const cover = smoothstep(0.5, 0.8, upness.add(patch)).mul(smoothstep(0.05, 0.6, PAINT.snow.add(patch.mul(0.5))));
+      this.colorNode = vec4(mix(base, vec3(0.9, 0.93, 0.97), cover), 1);
+      this.vertexColors = false;
     }
     if (o.wind) {
       // positionNode runs after the instance transform, so positions here are in the planet's

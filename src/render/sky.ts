@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { clamp, dot, exp, float, max, mix, mrt, normalize, positionLocal, pow, smoothstep, uniform, vec3, vec4 } from "three/tsl";
+import { atan, clamp, cross, dot, exp, float, max, mix, mrt, mx_noise_float, normalize, positionLocal, pow, smoothstep, time, uniform, vec3, vec4 } from "three/tsl";
 import { SpriteBatch } from "./sprites";
 
 /**
@@ -46,6 +46,13 @@ export class SkyDome {
     const halo = pow(max(mu, 0), 12).mul(dusk.add(0.35));
     col = col.add(vec3(1.0, 0.7, 0.45).mul(halo).mul(day.mul(0.6).add(0.4)).mul(u.quality));
     col = col.add(vec3(1.0, 0.95, 0.85).mul(smoothstep(0.9993, 0.9997, mu)).mul(6));
+    // Light shafts at dawn and dusk: soft bright and dark rays fanning out from the sun.
+    const ax = normalize(cross(L, u.up).add(vec3(1e-4, 0, 0)));
+    const ay = cross(ax, L);
+    const az = atan(dot(d, ay), dot(d, ax));
+    const bands = mx_noise_float(vec3(az.mul(7), time.mul(0.03), 0)).mul(0.5).add(0.5);
+    const rays = pow(bands, 3).sub(0.12).mul(pow(max(mu, 0), 3)).mul(dusk).mul(smoothstep(-0.05, 0.1, e)).mul(float(1).sub(smoothstep(0.1, 0.6, e)));
+    col = col.add(vec3(1.0, 0.72, 0.45).mul(rays).mul(0.5).mul(u.quality));
     // Below the horizon: darker haze.
     col = mix(col, horizon.mul(0.55), smoothstep(0, -0.25, e));
     col = mix(vec3(0.004, 0.006, 0.016), col, u.air);

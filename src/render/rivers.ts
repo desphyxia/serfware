@@ -1,6 +1,6 @@
 import * as THREE from "three/webgpu";
-import { abs, attribute, dot, float, min, mix, positionWorld, pow, sin, smoothstep, time, uniform, vec3 } from "three/tsl";
-import { rgb } from "./painterly";
+import { abs, attribute, float, mrt, smoothstep, vec4 } from "three/tsl";
+import { waterNodes, type WaterUniforms } from "./waterShade";
 import type { LandUse } from "../sim/econ/landuse";
 import type { SurfaceFrames } from "./frames";
 import { RIVER_SURFACE } from "./terrain/field";
@@ -13,37 +13,32 @@ export class RiverView {
   readonly group = new THREE.Group();
   private readonly riverMat: THREE.MeshBasicNodeMaterial;
   private readonly lakeMat: THREE.MeshBasicNodeMaterial;
-  private readonly u = { day: uniform(1), sky: uniform(new THREE.Color("#8fb6d8")) };
-
-  constructor(land: LandUse, frames: SurfaceFrames) {
-    const u = this.u;
+  constructor(
+    land: LandUse,
+    frames: SurfaceFrames,
+    u: WaterUniforms,
+  ) {
+    // Rivers: small ripples drifting downstream, foam at bends and mouths, soft outer edge.
     this.riverMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
     this.riverMat.polygonOffset = true;
     this.riverMat.polygonOffsetFactor = -3;
     this.riverMat.polygonOffsetUnits = -8;
-    const along = attribute("aAlong", "float");
     const across = attribute("aAcross", "float");
-    const width = attribute("aWidth", "float");
-    const fogR = attribute("aFog", "float");
-    const edge = float(1).sub(abs(across));
-    const ripple = sin(along.mul(7).sub(time.mul(2.4)).add(across.mul(2))).mul(0.5).add(0.5);
-    const ripple2 = sin(along.mul(13).sub(time.mul(3.7)).sub(across.mul(3))).mul(0.5).add(0.5);
-    let rc = mix(vec3(0.35, 0.62, 0.62), vec3(0.12, 0.34, 0.45), smoothstep(0, 0.8, edge).mul(min(width, 1)));
-    rc = rc.add(vec3(0.9, 0.95, 1.0).mul(pow(ripple.mul(ripple2), 6)).mul(0.35));
-    rc = mix(rc, rgb(u.sky), 0.18).mul(mix(0.3, 1, u.day));
-    rc = mix(rc, rc.mul(0.15), smoothstep(0.55, 1, fogR));
-    this.riverMat.colorNode = rc;
-    this.riverMat.opacityNode = smoothstep(0, 0.35, edge).mul(0.9);
-
+    const river = waterNodes(u, {
+      flow: attribute("aFlow", "vec3"),
+      speed: float(1),
+      fog: attribute("aFog", "float"),
+      foam: attribute("aFoam", "float").mul(smoothstep(0.3, 1, abs(across)).mul(0.6).add(0.4)),
+      scale: 2.2,
+    });
+    this.riverMat.colorNode = river.color;
+    this.riverMat.opacityNode = smoothstep(0, 0.08, float(1).sub(abs(across)));
+    this.riverMat.mrtNode = mrt({ emissive: vec4(river.glint.mul(0.6), 1) });
+    // Lakes: still water.
     this.lakeMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-    const fogL = attribute("aFog", "float");
-    const w = positionWorld;
-    const r = sin(dot(w, vec3(1.3, 0.7, 1.1)).mul(2.2).add(time.mul(0.9))).mul(sin(dot(w, vec3(-0.6, 1.2, 0.8)).mul(3.1).sub(time.mul(0.7))));
-    let lc = mix(vec3(0.16, 0.38, 0.46), rgb(u.sky), 0.25).add(vec3(r.mul(0.03)));
-    lc = lc.mul(mix(0.3, 1, u.day));
-    lc = mix(lc, lc.mul(0.15), smoothstep(0.55, 1, fogL));
-    this.lakeMat.colorNode = lc;
-    this.lakeMat.opacityNode = float(0.88);
+    const lake = waterNodes(u, { fog: attribute("aFog", "float"), scale: 1.6 });
+    this.lakeMat.colorNode = lake.color;
+    this.lakeMat.mrtNode = mrt({ emissive: vec4(lake.glint.mul(0.6), 1) });
     this.group.add(this.buildRivers(land, frames), this.buildLakes(land));
     this.group.name = "rivers";
   }
@@ -57,6 +52,8 @@ export class RiverView {
     const along: number[] = [];
     const across: number[] = [];
     const width: number[] = [];
+    const flowDir: number[] = [];
+    const foam: number[] = [];
     const idx: number[] = [];
     const field = frames.field;
     const R = field.R;
@@ -67,8 +64,16 @@ export class RiverView {
     const fwd = new THREE.Vector3();
     let alongBase = 0;
     // The same smoothed courses the terrain carves its beds along.
-    for (const samples of field.rivers) {
+    for (const course of field.rivers) {
+      // Stop at the first point in the sea or a lake: that water draws itself, and a second
+      // layer over it would show as a lighter patch.
+      const firstWet = course.findIndex((p) => p.wet);
+      const samples = firstWet >= 0 ? course.slice(0, firstWet + 1) : course;
+      if (samples.length < 2) continue;
       const base = pos.length / 3;
+      // Last vertex placed on each side: an edge never steps backward along the flow (on the
+      // inside of a tight bend it waits in place instead of folding the ribbon over itself).
+      const lastEdge: (THREE.Vector3 | null)[] = [null, null];
       samples.forEach((smp, i) => {
         const tile = smp.tile;
         // Water level: the carved bed (ignoring pads and roads) plus the water depth; at the
@@ -80,13 +85,32 @@ export class RiverView {
         const next = samples[Math.min(samples.length - 1, i + 1)]!.d;
         fwd.copy(next).sub(prev);
         side.crossVectors(fwd, smp.d).normalize();
+        fwd.normalize();
+        // Foam where the river meets the sea or a lake.
+        const mouth = smp.wet || samples[Math.min(samples.length - 1, i + 2)]!.wet ? 0.55 : 0;
         const w = smp.width * RIVER_SURFACE * unit * (smp.wet ? 1.4 : 1);
+        // On the inside of a bend the ribbon must not fold back on itself: limit that side to the
+        // bend's radius (the water leaves a small dry bar there, as real rivers do).
+        const a0 = smp.d.clone().sub(prev);
+        const a1 = next.clone().sub(smp.d);
+        const len = (a0.length() + a1.length()) * 0.5 * R;
+        const turn = a1.normalize().sub(a0.normalize());
+        const curvature = i > 0 && i < samples.length - 1 && len > 1e-6 ? turn.length() / len : 0;
+        const inner = Math.sign(turn.dot(side));
+        const limit = curvature > 1e-6 ? 0.8 / curvature : Infinity;
         for (const sg of [-1, 1]) {
-          const v = pt.clone().addScaledVector(side, sg * w);
+          const ws = sg === inner ? Math.min(w, limit) : w;
+          let v = pt.clone().addScaledVector(side, sg * ws);
+          const k = sg < 0 ? 0 : 1;
+          const last = lastEdge[k];
+          if (last && v.clone().sub(last).dot(fwd) < 0.02) v = last.clone();
+          lastEdge[k] = v;
           pos.push(v.x, v.y, v.z);
           along.push(alongBase + i * 0.15);
           across.push(sg);
           width.push(w);
+          flowDir.push(fwd.x, fwd.y, fwd.z);
+          foam.push(mouth);
           this.riverTiles.push(tile);
         }
         if (i > 0) {
@@ -102,6 +126,8 @@ export class RiverView {
     g.setAttribute("aAlong", new THREE.Float32BufferAttribute(along, 1));
     g.setAttribute("aAcross", new THREE.Float32BufferAttribute(across, 1));
     g.setAttribute("aWidth", new THREE.Float32BufferAttribute(width, 1));
+    g.setAttribute("aFlow", new THREE.Float32BufferAttribute(flowDir, 3));
+    g.setAttribute("aFoam", new THREE.Float32BufferAttribute(foam, 1));
     g.setAttribute("aFog", new THREE.Float32BufferAttribute(new Float32Array(width.length), 1));
     g.setIndex(idx);
     const mesh = new THREE.Mesh(g, this.riverMat);
@@ -157,11 +183,6 @@ export class RiverView {
     mesh.renderOrder = 1;
     mesh.frustumCulled = false;
     return mesh;
-  }
-
-  update(_time: number, daylight: number, sky: THREE.Color): void {
-    this.u.day.value = daylight;
-    this.u.sky.value.copy(sky);
   }
 
   /** Fog of war: per-tile values (0 seen, 0.5 remembered, 1 unknown). */

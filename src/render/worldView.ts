@@ -23,6 +23,7 @@ import { StarWellMarkers } from "./starWells";
 import { buildSurface } from "./terrainMesh";
 import { TileHighlight } from "./tileHighlight";
 import { makeWaterMaterial } from "./water";
+import { makeWaterUniforms, type WaterUniforms } from "./waterShade";
 
 /** Everything drawn for one planet. Created per world and disposed when the world changes. */
 export class WorldView {
@@ -47,6 +48,8 @@ export class WorldView {
   readonly fauna: Fauna;
   readonly particles = new Particles();
   readonly rivers: RiverView;
+  /** Uniforms shared by the sea, lakes and rivers. */
+  readonly waterU: WaterUniforms;
   readonly weather = new WeatherFx();
   private climateVersion = -1;
   private climateTimer = 0;
@@ -88,7 +91,8 @@ export class WorldView {
     this.groundMat = makeGroundMaterial(this.tileData, R);
     this.terrain = new ChunkedTerrain(planet, this.field, this.groundMat, graphics.terrainDetail);
 
-    this.water = new THREE.Mesh(surface.water, makeWaterMaterial());
+    this.waterU = makeWaterUniforms();
+    this.water = new THREE.Mesh(surface.water, makeWaterMaterial(this.waterU));
     this.water.renderOrder = 1;
     this.water.name = "water";
 
@@ -97,7 +101,7 @@ export class WorldView {
     this.wells = new StarWellMarkers(planet);
     this.frames = new SurfaceFrames(planet, this.field);
     this.nature = new NatureView(world.land, this.frames, planet.grid.count, this.mask, (t) => this.seasonAt(t));
-    this.rivers = new RiverView(world.land, this.frames);
+    this.rivers = new RiverView(world.land, this.frames, this.waterU);
     this.econ = new EconView(world.economy, this.frames);
     this.overlays = new Overlays(world.land, this.frames);
     this.grass = new GrassPatch(world.land, this.frames, this.mask, (t) => this.seasonAt(t).autumn);
@@ -131,7 +135,8 @@ export class WorldView {
   }
 
   /** Autumn colour, bare branches and snow per tile, for trees. */
-  private seasonAt(t: number): { autumn: number; bare: number; snow: number } {
+  /** Autumn colour, bare branches and snow at a tile (also drives the seasonal grade). */
+  seasonAt(t: number): { autumn: number; bare: number; snow: number } {
     const w = this.world;
     const y = w.planet.grid.center[t * 3 + 1] as number;
     let ph = w.climate.yearPhase(w.tick);
@@ -145,14 +150,19 @@ export class WorldView {
   private updateClimate(p: { dt: number; time: number; daylight: number; sky: THREE.Color; closeness: number; ground?: THREE.Vector3; distance?: number; focus: THREE.Vector3 }): void {
     const w = this.world;
     this.clouds.setFronts(w.climate.fronts);
-    this.rivers.update(p.time, p.daylight, p.sky);
     // Rain or snow where the view is, when close enough to the ground to see it.
     if (p.ground && p.closeness > 0.25) {
       const t = w.planet.grid.nearestTile([p.focus.x, p.focus.y, p.focus.z], 0);
       const amount = (w.climate.rain[t] as number) * THREE.MathUtils.smoothstep(p.closeness, 0.25, 0.6);
       const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.4);
-      this.weather.update(p.dt, p.ground, amount, (w.climate.temp[t] as number) < 0.5, Math.max(8, (p.distance ?? 20) * 0.9), wind);
-    } else this.weather.update(p.dt, p.focus, 0, false, 1, p.focus);
+      const snowing = (w.climate.temp[t] as number) < 0.5;
+      this.weather.update(p.dt, p.ground, amount, snowing, Math.max(8, (p.distance ?? 20) * 0.9), wind);
+      // Raindrops ring the water.
+      this.waterU.rain.value += ((snowing ? 0 : Math.min(1, amount * 1.5)) - this.waterU.rain.value) * Math.min(1, p.dt * 2);
+    } else {
+      this.weather.update(p.dt, p.focus, 0, false, 1, p.focus);
+      this.waterU.rain.value *= 0.95;
+    }
     this.climateTimer -= p.dt;
     if (this.climateTimer > 0 || w.climate.version === this.climateVersion) return;
     this.climateTimer = 1;
