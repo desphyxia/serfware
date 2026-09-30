@@ -8,6 +8,13 @@ try {
   const { page, errors } = await openGame(browser, { seed: "smoke-test-1" });
   const tick0 = await page.evaluate(() => window.__seedfall.game.world.tick);
   await page.waitForTimeout(2500);
+  // Software rendering on CI can take several seconds to compile and draw the first frames:
+  // wait (bounded) for the simulation to move, and show any page errors if it never does.
+  try {
+    await page.waitForFunction((t0) => window.__seedfall.game.world.tick > t0, tick0, { timeout: 30000, polling: 250 });
+  } catch {
+    throw new Error(`Simulation did not advance from tick ${tick0} within 30 s. Page errors: ${JSON.stringify(errors.slice(0, 5))}`);
+  }
 
   const bugLine = await page.locator(".bugline").textContent();
   if (!bugLine?.includes("seed smoke-test-1") || !bugLine.includes("build ") || !bugLine.includes("Day ")) {
