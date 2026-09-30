@@ -1,7 +1,7 @@
 # Seedfall
 
 A cosy settlement game in the spirit of Serf City (The Settlers, 1993), on small procedurally
-generated planets. Built with three.js; Steam build via Electron later (appid 480 in development).
+generated planets. Built with three.js; a Steam build via Electron lives in `desktop/` (appid 480 in development, see docs/STEAM.md).
 
 - Design proposal: `proposal/seedfall.html`
 - Roadmap and batch plan: `docs/ROADMAP.md` (one GitHub issue per batch)
@@ -29,7 +29,7 @@ npm run mp-test      # two headless browsers play over real WebRTC and must stay
 
 Without a server, the host can create an invite code and the guest answers with a reply code.
 The published single-file artifact runs in a sandbox that blocks network connections, so
-multiplayer needs `npm run dev` or the desktop build.
+multiplayer needs `npm run dev` or the desktop build (which plays through Steam lobbies).
 
 ## Saves
 

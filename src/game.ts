@@ -7,6 +7,10 @@ import { describeLeak, MemoryMonitor, type MemSample } from "./core/memory";
 import type { SettingsStore } from "./core/settings";
 import { PlanetCamera } from "./render/planetCamera";
 import { GameRenderer, GRADE } from "./render/renderer";
+import { PlatformServices } from "./platform/services";
+import { GamepadInput, padActive, type PadAction, type PadState } from "./ui/gamepad";
+import { RadialMenu } from "./ui/radialMenu";
+import { desktop } from "./platform/bridge";
 import { PAINT } from "./render/painterly";
 import { FOG, makeFogNode } from "./render/fog";
 import { SkyDome } from "./render/sky";
@@ -48,6 +52,15 @@ export class Game {
   view: WorldView;
   session: Session;
   private readonly menu: GameMenu;
+  /** Achievements, Steam rich presence, Steam Cloud saves and invites (no-ops on the web). */
+  readonly platform: PlatformServices;
+  private readonly pad = new GamepadInput();
+  /** Radial build menu (controller X, or the mouse). */
+  readonly radial: RadialMenu;
+  /** Centre reticle shown while playing with a controller: actions apply to the tile under it. */
+  private readonly reticle: HTMLElement;
+  private padMode = false;
+  private padHinted = false;
   private autosaveTimer = 120000;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
@@ -234,6 +247,22 @@ export class Game {
       joined: (lobby) => this.watchJoin(lobby),
       notify: (text, kind) => this.toasts.show(text, kind),
     });
+    this.radial = new RadialMenu((id) => this.tools.set(id));
+    this.reticle = document.createElement("div");
+    this.reticle.className = "reticle";
+    this.reticle.hidden = true;
+    this.platform = new PlatformServices({
+      world: () => this.world,
+      player: () => this.session.player,
+      toast: (text) => this.toasts.show(text, "good"),
+      joinSteamLobby: (id) => {
+        this.menu.show();
+        void this.menu.openSteamJoin(id);
+      },
+    });
+    void this.platform.cloud?.pull().then((n) => {
+      if (n) this.toasts.show(`${n} save${n === 1 ? "" : "s"} brought in from Steam Cloud.`, "good");
+    });
     this.buildBar.setActive("select");
     container.append(
       this.hud.root,
@@ -247,7 +276,10 @@ export class Game {
       this.debug.root,
       this.settingsPanel.root,
       this.report.root,
+      this.radial.root,
+      this.reticle,
     );
+    this.detectDeck();
 
     this.applyUi();
     settings.subscribe((s) => {
@@ -707,6 +739,7 @@ export class Game {
       list.push(meta);
       localStorage.setItem("seedfall.saves", JSON.stringify(list));
       log.info(`Saved ${id} at tick ${save.tick} (${save.commands.length} commands)`);
+      void this.platform?.cloud?.push(id);
       return meta;
     } catch (e) {
       this.toasts.show(`Could not save here: ${(e as Error).message}. Use Copy save instead.`, "warn");
@@ -718,6 +751,7 @@ export class Game {
     try {
       localStorage.removeItem(`seedfall.save.${id}`);
       localStorage.setItem("seedfall.saves", JSON.stringify(this.readSaves().filter((m) => m.id !== id)));
+      void this.platform.cloud?.remove(id);
     } catch {
       // Nothing to remove when storage is unavailable.
     }
@@ -778,6 +812,11 @@ export class Game {
 
   private bindInput(canvas: HTMLCanvasElement): void {
     canvas.addEventListener("pointermove", (e) => {
+      // Back on the mouse: hide the controller reticle.
+      if (this.padMode && (Math.abs(e.movementX) + Math.abs(e.movementY) > 2)) {
+        this.padMode = false;
+        this.reticle.hidden = true;
+      }
       const r = canvas.getBoundingClientRect();
       this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       this.pointerDirty = true;
@@ -820,11 +859,7 @@ export class Game {
         e.preventDefault();
         this.report.show();
       } else if (e.key === "Escape") {
-        if (this.report.visible) this.report.hide();
-        else if (this.buildBar.closePopover()) return;
-        else if (this.tools.cancel()) return;
-        else if (this.info.visible) this.info.hide();
-        else this.settingsPanel.toggle();
+        this.escape();
       } else if (e.key === " ") {
         e.preventDefault();
         this.speed = this.speed === 0 ? 1 : 0;
@@ -838,6 +873,121 @@ export class Game {
       e.preventDefault();
       crash.capture({ kind: "context-lost", message: "WebGL context lost" });
     });
+  }
+
+  /** Escape (or B on a controller): close the innermost thing, else open the settings. */
+  private escape(): void {
+    if (this.radial.open) this.radial.back();
+    else if (this.report.visible) this.report.hide();
+    else if (this.buildBar.closePopover()) return;
+    else if (this.tools.cancel()) return;
+    else if (this.info.visible) this.info.hide();
+    else if (this.menu.visible) this.menu.hide();
+    else if (this.economyPanel.visible) this.economyPanel.hide();
+    else this.settingsPanel.toggle();
+  }
+
+  /** Steam Deck (the desktop build reports it; SteamOS's browser says so too): its preset on first run. */
+  private detectDeck(): void {
+    const apply = () => {
+      try {
+        if (localStorage.getItem("seedfall.deckPreset")) return;
+        localStorage.setItem("seedfall.deckPreset", "1");
+      } catch {
+        // No storage: apply every time, which is harmless.
+      }
+      this.settings.applyPreset("deck");
+      this.toasts.show("Steam Deck detected: using the Deck preset (Settings to change).", "good");
+    };
+    if (new URLSearchParams(location.search).get("deck") === "1" || /Steam Deck|SteamOS/i.test(navigator.userAgent)) apply();
+    else void desktop()?.steamUser().then((u) => u?.deck && apply());
+  }
+
+  /** Screenshot hook: show the controller reticle as if a pad were in use. */
+  controllerPreview(on = true): void {
+    this.padMode = on;
+    this.reticle.hidden = !on;
+    if (on) {
+      this.pointer.set(0, 0);
+      this.pointerDirty = true;
+    }
+  }
+
+  /** Controller: camera on the sticks and triggers, actions on the tile under the reticle. */
+  private pollPad(dt: number): void {
+    const p = this.pad.poll();
+    if (!p) return;
+    const { state: s, actions } = p;
+    if (padActive(s) && !this.padMode) {
+      this.padMode = true;
+      this.reticle.hidden = false;
+      if (!this.padHinted) {
+        this.padHinted = true;
+        this.toasts.show("Controller: left stick moves, right stick turns, triggers zoom. A acts on the ring, X builds, B goes back, Y economy.", "info");
+      }
+    }
+    if (!this.padMode) return;
+    if (this.radial.open) {
+      this.radial.aim(s.lx, s.ly);
+      for (const a of actions) {
+        if (a === "confirm") this.radial.confirm();
+        else if (a === "back" || a === "radial") this.radial.back();
+      }
+      return;
+    }
+    this.padCamera(s, dt);
+    this.pointer.set(0, 0);
+    this.pointerDirty = true;
+    for (const a of actions) this.padAction(a);
+  }
+
+  private padCamera(s: PadState, dt: number): void {
+    const sec = dt / 1000;
+    const speed = 900 * sec;
+    if (s.lx || s.ly) {
+      this.cam.pan(s.lx * speed, -s.ly * speed, 900);
+      if (this.following >= 0) this.following = -1;
+    }
+    if (s.rx) this.cam.rotate(-s.rx * 1.8 * sec);
+    if (s.ry) this.cam.tilt(-s.ry * 0.9 * sec);
+    if (s.lt > 0.05 || s.rt > 0.05) this.cam.zoomBy(Math.exp((s.lt - s.rt) * 1.8 * sec));
+  }
+
+  private padAction(a: PadAction): void {
+    switch (a) {
+      case "confirm":
+        if (this.tools.tool === "select" && this.pickPerson()) return;
+        this.tools.click(this.hoverTile);
+        return;
+      case "back":
+        this.escape();
+        return;
+      case "radial":
+        this.radial.show();
+        return;
+      case "economy":
+        this.economyPanel.toggle();
+        return;
+      case "menu":
+        this.menu.toggle();
+        return;
+      case "settings":
+        this.settingsPanel.toggle();
+        return;
+      case "road":
+      case "flag":
+        this.tools.set(a);
+        return;
+      case "pause":
+        this.speed = this.speed === 0 ? 1 : 0;
+        return;
+      case "grid":
+        this.view.setGrid(!this.view.grid);
+        return;
+      case "centre":
+        this.focusStart();
+        return;
+    }
   }
 
   private registerReportContext(): void {
@@ -889,6 +1039,8 @@ export class Game {
     this.lastRender = now;
 
     const steps = this.session.advance(dt);
+    this.platform.update(dt / 1000);
+    this.pollPad(dt);
     this.tickCounter.ticks += steps;
     this.hud.setBanner(this.session.status() ?? this.victoryText());
     if (this.session.info.mode === "solo") {

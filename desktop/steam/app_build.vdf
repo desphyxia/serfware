@@ -1,0 +1,13 @@
+"AppBuild"
+{
+	"AppID" "480"
+	"Desc" "Seedfall build"
+	"BuildOutput" "../dist/output/"
+	"ContentRoot" "../dist/"
+	"SetLive" ""
+	"Depots"
+	{
+		"481" "depot_build_linux.vdf"
+		"482" "depot_build_windows.vdf"
+	}
+}

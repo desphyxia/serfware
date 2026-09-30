@@ -1,0 +1,8 @@
+"lang"
+{
+	"Language" "english"
+	"Tokens"
+	{
+		"#Status" "Day %day% on %seed% · %people% settlers"
+	}
+}

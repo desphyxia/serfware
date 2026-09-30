@@ -1,0 +1,11 @@
+"DepotBuild"
+{
+	"DepotID" "482"
+	"FileMapping"
+	{
+		"LocalPath" "depot-win32/*"
+		"DepotPath" "."
+		"Recursive" "1"
+	}
+	"FileExclusion" "steam_appid.txt"
+}

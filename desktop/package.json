@@ -1,0 +1,19 @@
+{
+  "name": "seedfall-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Seedfall for Steam: the web game in an Electron shell with Steamworks.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build": "node scripts/build-depot.mjs",
+    "smoke": "SEEDFALL_SMOKE=1 electron . --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist"
+  },
+  "dependencies": {
+    "steamworks.js": "0.4.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.5.1"
+  }
+}

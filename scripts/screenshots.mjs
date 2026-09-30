@@ -36,8 +36,11 @@ const all = [
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
 // The art shot list (docs/ART_DIRECTION.md § How we check it): rendered after every art batch.
-const ART = ["wildfire", "burnt", "regrowth", "kit-well", "kit-hunter", "weathered", "hearthship", "grove-birch", "grove-pine", "grove-palm", "poses", "pasture", "gallery-1", "gallery-2", "gallery-3", "construction", "snow-roofs", "horizon-dusk", "winter-hamlet", "autumn-close", "forest-edge", "figures", "kit-house", "kit-sawmill", "kit-fisher", "hamlet-dawn", "hamlet-noon", "hamlet-dusk", "hamlet-night", "closeup-art", "region-art", "river", "battle", "orbit"];
+const ART = ["radial", "radial-food", "deck", "wildfire", "burnt", "regrowth", "kit-well", "kit-hunter", "weathered", "hearthship", "grove-birch", "grove-pine", "grove-palm", "poses", "pasture", "gallery-1", "gallery-2", "gallery-3", "construction", "snow-roofs", "horizon-dusk", "winter-hamlet", "autumn-close", "forest-edge", "figures", "kit-house", "kit-sawmill", "kit-fisher", "hamlet-dawn", "hamlet-noon", "hamlet-dusk", "hamlet-night", "closeup-art", "region-art", "river", "battle", "orbit"];
 all.push(
+  { name: "radial", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 28); g.clearWeather(); g.setHour(11); g.setView(28, 0.6); g.controllerPreview(); g.radial.show(); g.radial.aim(0.72, -0.7); } },
+  { name: "radial-food", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 28); g.clearWeather(); g.setHour(11); g.setView(28, 0.6); g.controllerPreview(); g.radial.show(); g.radial.aim(0.34, 0.94); g.radial.confirm(); g.radial.aim(0.2, -0.98); } },
+  { name: "deck", width: 1280, height: 800, wait: 3500, setup: () => { const g = window.__seedfall.game; g.settings.applyPreset("deck"); window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 22); g.clearWeather(); g.setHour(15); g.setView(22, 1.2); g.controllerPreview(); } },
   { name: "wildfire", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 20); g.clearWeather(); g.setFog(false); g.startFire(150, 15); g.setHour(19.9); g.setView(15, 1.3, 0.12); } },
   { name: "burnt", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 20); g.clearWeather(); g.setFog(false); g.startFire(2400, 16); g.setHour(11); g.setView(16, 1.3, 0.1); } },
   { name: "regrowth", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 6000; i++) g.world.step(); g.focusPlayer(0, 20); g.clearWeather(); g.setFog(false); g.startFire(4000, 16); for (let i = 0; i < 7200 * 4; i++) g.world.step(); g.clearWeather(); g.setHour(10.5); g.setView(16, 1.3, 0.1); } },
@@ -76,7 +79,7 @@ const shots = only ? all.filter((s) => only.includes(s.name)) : all;
 const browser = await launch();
 try {
   for (const shot of shots) {
-    const { page, errors } = await openGame(browser, { seed: shot.seed ?? seed, width: 1440, height: 900 });
+    const { page, errors } = await openGame(browser, { seed: shot.seed ?? seed, width: shot.width ?? 1440, height: shot.height ?? 900 });
     if (shot.setup) {
       await page.evaluate(shot.setup);
       await page.evaluate(() => {
