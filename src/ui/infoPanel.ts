@@ -222,6 +222,23 @@ export class InfoPanel extends Panel {
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));
         if (b.output > 0) body.push(h("p", { class: "hint" }, `${b.output} finished, waiting to go out.`));
       }
+      if (b.burn > 0) body.push(h("p", { class: "status warn" }, "On fire! A well within five steps would put it out."));
+      if (b.built) {
+        const mend = GOODS[eco.upkeepGood(b)]?.name.toLowerCase() ?? "plank";
+        const cond =
+          b.wear > 0.85 ? `Badly worn: works at two-thirds speed until a ${mend} arrives to mend it.` : b.wear >= 0.5 ? `Weathered: asking for a ${mend} to mend it.` : b.wear > 0.25 ? "Showing its age." : "In good repair.";
+        body.push(h("p", { class: b.wear >= 0.5 ? "hint warn" : "hint" }, cond));
+      }
+      if (b.def.well) {
+        const water = Math.round((eco.ecology.table[b.tile] ?? 0) * 100);
+        body.push(h("p", { class: "hint" }, `Groundwater ${water} %. Bucket lines guard everything within five steps against fire.`));
+      }
+      if (b.def.job === "hunt") {
+        const land = eco.land;
+        const reach = land.ring(b.tile, b.def.radius ?? 7).filter((t) => land.isLand(t));
+        const mean = reach.reduce((sum, t) => sum + (eco.ecology.game[t] as number), 0) / Math.max(1, reach.length);
+        body.push(h("p", { class: "hint" }, mean > 60 ? "Deer are plentiful in reach." : mean > 30 ? "The herds nearby are thinning." : "Game is scarce here. Let the herds recover, or hunt elsewhere."));
+      }
       if (!eco.keeps.includes(b.id)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(b.tile) }, "Demolish")));
     } else if (this.sel.kind === "flag") {
       const f = eco.flags[this.sel.id];

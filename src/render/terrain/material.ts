@@ -47,6 +47,8 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const autumn = A.w;
   const mud = B.x;
   const shore = B.z;
+  const soil = B.y;
+  const scorch = B.w;
 
   const p = positionWorld;
   const up = normalize(p);
@@ -115,6 +117,12 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const luma = dot(c, vec3(0.3, 0.59, 0.11));
   c = mix(c, vec3(0.62, 0.48, 0.22).mul(luma.mul(1.9).add(0.1)), autumn.mul(green).mul(0.9));
   c = c.mul(float(1).sub(mud.mul(0.28)));
+  // Washed-out, thin soil on eroded slopes: pale and stony in patches.
+  const thin = smoothstep(0.3, 0.1, soil).mul(step(0.01, soil)).mul(smoothstep(0.35, 0.6, mid.add(fine.mul(0.3)).add(0.3)));
+  c = mix(c, vec3(0.62, 0.55, 0.44).mul(fine.mul(0.15).add(0.95)), thin.mul(0.55).mul(green.add(0.3).min(1)));
+  // Burnt ground: charcoal black in patches, greening again from the edges as scorch fades.
+  const charred = smoothstep(0.2, 0.55, scorch.add(mid.mul(0.3)).add(fine.mul(0.15)));
+  c = mix(c, vec3(0.035, 0.032, 0.03).add(vec3(0.09, 0.08, 0.07).mul(smoothstep(0.3, 0.8, fine))), charred.mul(0.94));
   // Snow drifts: patchy edges, deeper in hollows, sliding off steep ground.
   const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08)))
     .mul(float(1).sub(smoothstep(0.35, 0.6, slope)))

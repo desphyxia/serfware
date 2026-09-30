@@ -410,6 +410,48 @@ function beacon(b: Build): void {
   b.meta.flame = new THREE.Vector3(0, 3.41, 0);
 }
 
+/** The well: a round stone curb under a little shingled roof, with a windlass and bucket. */
+function well(b: Build): void {
+  const { rng } = b;
+  // A ring of flagstones around the curb.
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    b.add([kit.box(0.24, 0.04, 0.2, Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55, -a), kit.jitter(kit.C.stone, rng, 2)]);
+  }
+  b.add(...kit.roundTower(0.36, 0.42, 0.06, rng, "#b8ad96", 1));
+  b.add([kit.cyl(0.3, 0.3, 0.02, 12, 0, 0.47), "#2d3a44"], [kit.cyl(0.4, 0.4, 0.06, 12, 0, 0.46), kit.C.stone]);
+  for (const x of [-0.36, 0.36]) b.add([kit.box(0.07, 0.95, 0.07, x, 0.48), kit.C.timber]);
+  b.add([kit.cyl(0.05, 0.05, 0.78, 8).rotateZ(Math.PI / 2).translate(0, 1.18, 0), kit.C.timberLight]);
+  b.add([kit.box(0.02, 0.18, 0.02, 0.43, 1.1, 0.05), kit.C.timber], [kit.box(0.02, 0.02, 0.14, 0.43, 1.02, 0.12), kit.C.timber]);
+  b.add([kit.box(0.01, 0.34, 0.01, 0.08, 0.84, 0), "#a89a7a"], [kit.cyl(0.08, 0.065, 0.13, 8, 0.08, 0.72, 0), "#7a5a3a"], [kit.cyl(0.082, 0.082, 0.02, 8, 0.08, 0.82, 0), "#4a4a4a"]);
+  b.add(...kit.shingleRoof(0.95, 0.7, 0.34, 1.35, kit.jitter(ROOF.brown, rng, 0.5), rng, { overhang: 0.08 }));
+  b.add(...kit.barrel(0.55, 0.45, rng, 0.22));
+  for (let i = 0; i < 3; i++) b.add([kit.cyl(0.07, 0.055, 0.12, 8, -0.5 + i * 0.16, 0.06, 0.5), "#7a5a3a"]);
+}
+
+/** The hunter's lodge: a log cabin with antlers over the door, a hide rack and a spear stand. */
+function hunter(b: Build): void {
+  const { rng } = b;
+  const c = cottage(rng, 1.05, 0.9, 0.74, { logs: true, roof: ROOF.moss });
+  b.add(...c.parts);
+  b.meta.chimney = c.chimney;
+  // Antlers over the door.
+  const ax = -1.05 * 0.24;
+  const ay = 0.2 + 0.74 + 0.06;
+  for (const s of [-1, 1]) {
+    b.add([kit.cyl(0.012, 0.018, 0.22, 5).rotateZ(s * 0.7).translate(ax + s * 0.08, ay + 0.06, 0.47), "#e2d6bc"]);
+    b.add([kit.cyl(0.01, 0.012, 0.1, 5).rotateZ(-s * 0.3).translate(ax + s * 0.16, ay + 0.16, 0.47), "#e2d6bc"]);
+  }
+  // A drying rack with two hides.
+  const rx = 0.95;
+  for (const z of [-0.35, 0.35]) b.add([kit.box(0.04, 0.8, 0.04, rx, 0, z), kit.C.timber]);
+  b.add([kit.box(0.03, 0.03, 0.82, rx, 0.78, 0), kit.C.timber]);
+  for (const [z, col] of [[-0.17, "#9a6a44"], [0.18, "#b48a5c"]] as const) b.add([kit.box(0.02, 0.44, 0.3, rx, 0.32, z), kit.jitter(col, rng, 2)]);
+  // Spears leaning on the wall, and a chopping stump.
+  for (let i = 0; i < 3; i++) b.add([kit.cyl(0.012, 0.012, 0.9, 4).rotateX(0.18).translate(-0.45 + i * 0.1, 0.02, -0.55), kit.C.timberLight], [new THREE.ConeGeometry(0.025, 0.09, 4).translate(-0.45 + i * 0.1, 0.94, -0.39), "#b8bec8"]);
+  b.add([kit.cyl(0.15, 0.18, 0.24, 9, -0.85, 0, 0.6), "#9b6b45"], ...kit.pennant(0.6, 0, 0.75, 0.9));
+}
+
 /** The Hearthship: a landed ship turned keep, with a cabin, lantern tower, mast and banners. */
 function keep(b: Build): void {
   const { rng } = b;
@@ -485,6 +527,8 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   mill: windmill,
   bakery,
   fisher,
+  hunter,
+  well,
   pasture,
   butcher,
   coalmine: (b) => mine(b, "coal"),

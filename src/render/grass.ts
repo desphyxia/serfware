@@ -20,6 +20,8 @@ export class GrassPatch {
   private readonly leaves: THREE.InstancedMesh;
   private centerTile = -1;
   private key = "";
+  /** Ground cover (0..255) from the ecology: burnt ground is bare until it regrows. */
+  cover: { cover: Uint8Array; groundVersion: number } | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -104,7 +106,7 @@ export class GrassPatch {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${Math.round(this.autumnAt(t) * 4)}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${Math.round(this.autumnAt(t) * 4)}:${this.cover?.groundVersion ?? 0}`;
     if (this.centerTile >= 0 && key === this.key) {
       // Only rebuild once the focus has moved a few tiles.
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
@@ -151,7 +153,7 @@ export class GrassPatch {
       }
       if (land.use[t] === Use.Road || land.use[t] === Use.Flag) per = Math.floor(per / 4);
       if (land.feature[t] === Feature.Rock) per = Math.floor(per / 2);
-      per = Math.round(per * density);
+      per = Math.round(per * density * (this.cover ? Math.min(1, 0.1 + (this.cover.cover[t] as number) / 230) : 1));
       const up = this.frames.dir(t);
       const tA = new THREE.Vector3(0, 1, 0).cross(up);
       if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
@@ -194,7 +196,7 @@ export class GrassPatch {
       const b = terrain.biome[t] as Biome;
       let per = land.feature[t] === Feature.Rock ? 10 : b === Biome.Steppe || b === Biome.Beach || b === Biome.Tundra ? 5 : 2;
       if (land.use[t] === Use.Road) per += 3;
-      per = Math.round(per * density);
+      per = Math.round(per * density * (this.cover ? Math.min(1, 0.1 + (this.cover.cover[t] as number) / 230) : 1));
       const up = this.frames.dir(t);
       const tA = new THREE.Vector3(0, 1, 0).cross(up);
       if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);

@@ -11,6 +11,7 @@ import { Fauna } from "./fauna";
 import { GrassPatch } from "./grass";
 import { Undergrowth } from "./undergrowth";
 import { AmbientFx } from "./ambientFx";
+import { FireView } from "./fireView";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -53,6 +54,7 @@ export class WorldView {
   readonly waterU: WaterUniforms;
   readonly weather = new WeatherFx();
   readonly ambient = new AmbientFx();
+  readonly fire: FireView;
   private climateVersion = -1;
   private climateTimer = 0;
   private wearVersion = -1;
@@ -109,12 +111,18 @@ export class WorldView {
     this.grass = new GrassPatch(world.land, this.frames, this.mask, (t) => this.seasonAt(t).autumn);
     this.undergrowth = new Undergrowth(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
+    this.fire = new FireView(world.economy, this.frames, this.mask);
+    this.nature.ecology = world.economy.ecology;
+    this.grass.cover = world.economy.ecology;
+    this.undergrowth.cover = world.economy.ecology;
     this.group.add(
       this.terrain.group,
       this.water,
       this.rivers.group,
       this.weather.group,
       this.ambient.group,
+      this.fire.flames.mesh,
+      this.fire.light,
       this.nature.group,
       this.econ.group,
       this.overlays.group,
@@ -176,6 +184,15 @@ export class WorldView {
       td.set(t, "autumn", this.seasonAt(t).autumn);
       td.set(t, "mud", w.land.mud[t] as number);
       td.set(t, "soil", w.land.soil[t] as number);
+      // Blurred with the neighbours, so burnt ground has soft, ragged edges rather than hexagons.
+      const sc = w.economy.ecology.scorch;
+      let sum = (sc[t] as number) * 2;
+      let k = 2;
+      for (const m of w.planet.grid.neighborsOf(t)) {
+        sum += sc[m] as number;
+        k++;
+      }
+      td.set(t, "scorch", sum / k / 255);
     }
     td.commit();
     // Trees follow a few times a day.
@@ -243,7 +260,8 @@ export class WorldView {
     this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
-    this.particles.update(p.dt, p.closeness > 0.2 ? this.econ.emitters() : [], wind, light, p.pixelRatio, p.particles);
+    const fires = this.fire.update(p.time, p.focus);
+    this.particles.update(p.dt, p.closeness > 0.2 ? [...this.econ.emitters(), ...fires] : fires, wind, light, p.pixelRatio, p.particles);
     {
       // Motes in warm, dry daylight, most of all when the sun is low.
       const t = this.world.planet.grid.nearestTile([p.focus.x, p.focus.y, p.focus.z], 0);
@@ -330,6 +348,7 @@ export class WorldView {
     this.undergrowth.dispose();
     this.fauna.dispose();
     this.particles.dispose();
+    this.fire.dispose();
     this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();

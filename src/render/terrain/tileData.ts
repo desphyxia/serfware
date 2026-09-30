@@ -5,7 +5,7 @@ type N = THREE.Node<"vec4">;
 
 /**
  * Per-tile shading data shared by every terrain chunk and the sea: one texel per tile.
- * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, 0).
+ * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, scorch).
  * Shaders look it up by tile index in the vertex stage and interpolate across tiles.
  */
 export class TileData {
@@ -31,7 +31,7 @@ export class TileData {
     this.b = mk(this.db);
   }
 
-  set(t: number, channel: "wear" | "fog" | "snow" | "autumn" | "mud" | "soil" | "shore", v: number): void {
+  set(t: number, channel: "wear" | "fog" | "snow" | "autumn" | "mud" | "soil" | "shore" | "scorch", v: number): void {
     const i = t * 4;
     switch (channel) {
       case "wear":
@@ -54,6 +54,9 @@ export class TileData {
         break;
       case "shore":
         this.db[i + 2] = v;
+        break;
+      case "scorch":
+        this.db[i + 3] = v;
         break;
     }
   }
