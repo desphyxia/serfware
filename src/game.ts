@@ -414,6 +414,18 @@ export class Game {
     this.toasts.show(`Hamlet: ${n} buildings placed.`, "good");
   }
 
+  /** Screenshot hook: a row of settlers in every work pose near the camera focus. */
+  showPoses(distance = 6): void {
+    const R = this.world.planet.params.radius;
+    const f = this.cam.focus.clone().normalize();
+    const east = new THREE.Vector3(0, 1, 0).cross(f).normalize();
+    const north = f.clone().cross(east).normalize();
+    const c = f.clone().multiplyScalar(R).addScaledVector(north, 6);
+    const start = c.clone().addScaledVector(east, -3.9);
+    this.view.econ.showPoses(start, start.clone().add(east), this.session.player);
+    this.cam.lookAt(c.clone().normalize().multiplyScalar(R), distance);
+  }
+
   /** Screenshot hook: a row of building models near the camera focus (see EconView.showcase). */
   showcase(ids: string[], distance = 12, progress?: number[]): void {
     const R = this.world.planet.params.radius;

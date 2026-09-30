@@ -5,6 +5,7 @@ import { Biome } from "../sim/planet/terrain";
 import { SurfaceFrames } from "./frames";
 import { PainterlyMaterial } from "./painterly";
 import { SpriteBatch } from "./sprites";
+import { AnimalBatch, Pose } from "./animals";
 
 /**
  * Ambient wildlife around the camera: bird flocks, grazing deer, butterflies by day and
@@ -35,6 +36,36 @@ interface Flock {
   sea: boolean;
 }
 
+interface Grazer {
+  species: "sheep" | "cow";
+  pen: THREE.Vector3; // pasture centre (world)
+  pos: THREE.Vector3;
+  target: THREE.Vector3;
+  heading: THREE.Vector3;
+  timer: number;
+  phase: number;
+  scale: number;
+}
+
+interface Jumper {
+  at: THREE.Vector3; // unit direction over water
+  dir: THREE.Vector3;
+  clock: number;
+  period: number;
+}
+
+function fishGeometry(): THREE.BufferGeometry {
+  const g = new THREE.SphereGeometry(0.05, 7, 5).scale(0.55, 0.7, 2.2);
+  const tail = new THREE.ConeGeometry(0.045, 0.07, 4).rotateX(-Math.PI / 2).scale(0.3, 1, 1).translate(0, 0, -0.13);
+  const merged = new THREE.BufferGeometry();
+  const a = g.toNonIndexed();
+  const b = tail.toNonIndexed();
+  const pos = new Float32Array([...(a.getAttribute("position").array as Float32Array), ...(b.getAttribute("position").array as Float32Array)]);
+  merged.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  merged.computeVertexNormals();
+  return merged;
+}
+
 interface Deer {
   tile: number;
   pos: THREE.Vector3;
@@ -54,32 +85,6 @@ function birdGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-function deerGeometry(): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  const body = new THREE.BoxGeometry(0.22, 0.2, 0.52).translate(0, 0.42, 0);
-  const neck = new THREE.BoxGeometry(0.09, 0.26, 0.09).rotateX(-0.5).translate(0, 0.6, 0.27);
-  const head = new THREE.BoxGeometry(0.1, 0.1, 0.18).translate(0, 0.72, 0.38);
-  const tail = new THREE.BoxGeometry(0.06, 0.08, 0.05).translate(0, 0.48, -0.27);
-  parts.push(body, neck, head, tail);
-  for (const [x, z] of [
-    [0.08, 0.2],
-    [-0.08, 0.2],
-    [0.08, -0.2],
-    [-0.08, -0.2],
-  ] as const) parts.push(new THREE.BoxGeometry(0.05, 0.34, 0.05).translate(x, 0.17, z));
-  const ear1 = new THREE.BoxGeometry(0.03, 0.08, 0.02).translate(0.05, 0.8, 0.33);
-  const ear2 = new THREE.BoxGeometry(0.03, 0.08, 0.02).translate(-0.05, 0.8, 0.33);
-  parts.push(ear1, ear2);
-  const merged = new THREE.BufferGeometry();
-  const pos: number[] = [];
-  for (const p of parts) {
-    const ni = p.toNonIndexed();
-    pos.push(...(ni.getAttribute("position").array as Float32Array));
-  }
-  merged.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  merged.computeVertexNormals();
-  return merged;
-}
 
 /** Small glowing or coloured motes (butterflies, fireflies) drawn as camera-facing sprites. */
 class SpriteCloud {
@@ -118,13 +123,19 @@ export class Fauna {
   private readonly birds: THREE.InstancedMesh;
   private readonly birdData: Bird[] = [];
   private readonly flocks: Flock[] = [];
-  private readonly deerMesh: THREE.InstancedMesh;
+  private readonly deerBatch = new AnimalBatch("deer", 16);
   private readonly deer: Deer[] = [];
+  private readonly sheepBatch = new AnimalBatch("sheep", 48);
+  private readonly cowBatch = new AnimalBatch("cow", 24);
+  private readonly grazers: Grazer[] = [];
+  private readonly fish: THREE.InstancedMesh;
+  private readonly jumpers: Jumper[] = [];
   private readonly butterflies = new SpriteCloud(70, false);
   private readonly fireflies = new SpriteCloud(160, true);
   private readonly bfState: { home: THREE.Vector3; phase: number; color: THREE.Color }[] = [];
   private readonly ffState: { home: THREE.Vector3; phase: number }[] = [];
   private homeTile = -1;
+  private structureKey = -1;
   private readonly r = rnd(1234);
 
   constructor(
@@ -136,11 +147,10 @@ export class Fauna {
     this.birds = new THREE.InstancedMesh(birdGeometry(), birdMat, 60);
     this.birds.frustumCulled = false;
     this.birds.count = 0;
-    this.deerMesh = new THREE.InstancedMesh(deerGeometry(), new PainterlyMaterial({ color: "#9a6a44", flatShading: true, brush: 0.5 }), 12);
-    this.deerMesh.frustumCulled = false;
-    this.deerMesh.castShadow = true;
-    this.deerMesh.count = 0;
-    this.group.add(this.birds, this.deerMesh, this.butterflies.points, this.fireflies.points);
+    this.fish = new THREE.InstancedMesh(fishGeometry(), new PainterlyMaterial({ color: "#b8c8d0", brush: 0 }), 12);
+    this.fish.frustumCulled = false;
+    this.fish.count = 0;
+    this.group.add(this.birds, this.deerBatch.mesh, this.sheepBatch.mesh, this.cowBatch.mesh, this.fish, this.butterflies.points, this.fireflies.points);
   }
 
   private repopulate(center: number): void {
@@ -176,6 +186,30 @@ export class Fauna {
       const p = this.frames.pos(t);
       this.deer.push({ tile: t, pos: p.clone(), target: p.clone(), heading: new THREE.Vector3(1, 0, 0), graze: r(), timer: r() * 5, scale: 0.85 + r() * 0.4 });
     }
+    // Sheep and cows in the pastures nearby.
+    this.grazers.length = 0;
+    const near = new Set(around);
+    near.add(center);
+    for (const b of this.eco.buildings) {
+      if (!b.alive || !b.built || b.def.id !== "pasture" || !near.has(b.tile)) continue;
+      const pen = this.frames.pos(b.tile);
+      const cows = b.id % 3 === 0;
+      const n = cows ? 2 : 4;
+      for (let i = 0; i < n; i++) {
+        const p = this.penPoint(pen);
+        this.grazers.push({ species: cows ? "cow" : "sheep", pen, pos: p.clone(), target: p.clone(), heading: new THREE.Vector3(1, 0, 0), timer: r() * 4, phase: r() * 10, scale: 0.9 + r() * 0.2 });
+      }
+    }
+    // Fish leaping from the water near the shore.
+    this.jumpers.length = 0;
+    const water = coast.filter((t) => land.planet.grid.neighborsOf(t).some((n) => land.isLand(n)));
+    for (let i = 0; i < Math.min(8, water.length); i++) {
+      const t = water[Math.floor(r() * water.length)] as number;
+      const d = this.frames.dir(t);
+      const tA = new THREE.Vector3(0, 1, 0).cross(d).normalize();
+      const a = r() * Math.PI * 2;
+      this.jumpers.push({ at: d.clone().addScaledVector(tA, (r() - 0.5) * 0.01).normalize(), dir: tA.applyAxisAngle(d, a), clock: r() * 6, period: 4 + r() * 6 });
+    }
     // Butterflies over flowery meadows, fireflies around woods.
     this.bfState.length = 0;
     const meadows = landTiles.filter((t) => terrain.biome[t] === Biome.Meadow || terrain.biome[t] === Biome.Steppe);
@@ -199,12 +233,16 @@ export class Fauna {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.homeTile >= 0 ? this.homeTile : 0);
-    if (this.homeTile < 0 || this.frames.dir(t).dot(this.frames.dir(this.homeTile)) < Math.cos(this.land.spacing * 8)) {
+    // Re-place wildlife when the view moves on, and herds when pastures are built or removed.
+    if (this.homeTile < 0 || this.eco.structureVersion !== this.structureKey || this.frames.dir(t).dot(this.frames.dir(this.homeTile)) < Math.cos(this.land.spacing * 8)) {
       this.homeTile = t;
+      this.structureKey = this.eco.structureVersion;
       this.repopulate(t);
     }
     this.updateBirds(time, daylight, amount);
     this.updateDeer(time, dt, amount);
+    this.updateGrazers(time, dt, amount);
+    this.updateFish(dt, daylight, amount);
     this.updateSprites(time, daylight, pixelRatio, amount);
   }
 
@@ -242,9 +280,7 @@ export class Fauna {
   }
 
   private updateDeer(time: number, dt: number, amount: number): void {
-    const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
-    const s = new THREE.Vector3();
     const land = this.land;
     let n = 0;
     const settlers = this.eco.settlers.filter((x) => x.alive).map((x) => x.path[x.pi] as number);
@@ -269,16 +305,82 @@ export class Fauna {
         d.pos.addScaledVector(d.heading, Math.min(dist, speed * dt));
       }
       const grazing = dist < 0.1;
-      const bob = grazing ? 0 : Math.abs(Math.sin(time * (scared ? 16 : 7) + i)) * 0.05;
-      const p = d.pos.clone().addScaledVector(d.pos.clone().normalize(), bob);
+      const p = this.onGround(d.pos, d.tile);
       this.frames.orient(p, p.clone().add(d.heading), q);
-      if (grazing) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.25 + Math.sin(time + i) * 0.05));
-      s.setScalar(d.scale);
-      m.compose(p, q, s);
-      this.deerMesh.setMatrixAt(n++, m);
+      const pose = grazing ? (d.graze > 0.35 ? Pose.Graze : Pose.Idle) : scared ? Pose.Run : Pose.Walk;
+      this.deerBatch.set(n++, p, q, pose, i * 1.7, d.scale);
     }
-    this.deerMesh.count = n;
-    this.deerMesh.instanceMatrix.needsUpdate = true;
+    this.deerBatch.flush(n, time);
+  }
+
+  /** A point on the ground (the detailed field) under a world position. */
+  private onGround(p: THREE.Vector3, hint: number): THREE.Vector3 {
+    const d = p.clone().normalize();
+    return d.multiplyScalar(this.frames.groundAt(d, hint));
+  }
+
+  /** A random point inside a pasture's fence. */
+  private penPoint(pen: THREE.Vector3): THREE.Vector3 {
+    const up = pen.clone().normalize();
+    const tA = new THREE.Vector3(0, 1, 0).cross(up).normalize();
+    const tB = up.clone().cross(tA);
+    const a = this.r() * Math.PI * 2;
+    const rr = Math.sqrt(this.r()) * 0.8;
+    return pen.clone().addScaledVector(tA, Math.cos(a) * rr).addScaledVector(tB, Math.sin(a) * rr * 0.8);
+  }
+
+  private updateGrazers(time: number, dt: number, amount: number): void {
+    const q = new THREE.Quaternion();
+    let ns = 0;
+    let nc = 0;
+    const shown = Math.ceil(this.grazers.length * amount);
+    for (let i = 0; i < shown; i++) {
+      const g = this.grazers[i] as Grazer;
+      g.timer -= dt;
+      if (g.timer <= 0) {
+        g.timer = 3 + this.r() * 7;
+        if (this.r() < 0.5) g.target = this.penPoint(g.pen);
+      }
+      const to = g.target.clone().sub(g.pos);
+      const dist = to.length();
+      const moving = dist > 0.04;
+      if (moving) {
+        g.heading.copy(to).normalize();
+        g.pos.addScaledVector(g.heading, Math.min(dist, (g.species === "cow" ? 0.25 : 0.35) * dt));
+      }
+      const p = this.onGround(g.pos, 0);
+      this.frames.orient(p, p.clone().add(g.heading), q);
+      const pose = moving ? Pose.Walk : Math.sin(time * 0.2 + g.phase) > -0.3 ? Pose.Graze : Pose.Idle;
+      if (g.species === "cow") this.cowBatch.set(nc++, p, q, pose, g.phase, g.scale);
+      else this.sheepBatch.set(ns++, p, q, pose, g.phase, g.scale);
+    }
+    this.sheepBatch.flush(ns, time);
+    this.cowBatch.flush(nc, time);
+  }
+
+  /** Fish leap out of the water now and then in a short arc. */
+  private updateFish(dt: number, daylight: number, amount: number): void {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    const R = this.frames.field.R;
+    let n = 0;
+    const shown = daylight > 0.15 ? Math.ceil(this.jumpers.length * amount) : 0;
+    for (let i = 0; i < shown; i++) {
+      const j = this.jumpers[i] as Jumper;
+      j.clock += dt;
+      const t = (j.clock % j.period) / 0.7;
+      if (t > 1) continue;
+      const up = j.at.clone();
+      const p = up.clone().multiplyScalar(R + 0.02 + Math.sin(t * Math.PI) * 0.35).addScaledVector(j.dir, (t - 0.5) * 0.5);
+      const fwd = j.dir.clone().multiplyScalar(0.5).addScaledVector(up, Math.cos(t * Math.PI) * 0.6);
+      this.frames.orient(p, p.clone().add(j.dir), q);
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.atan2(fwd.dot(up), 0.5)));
+      m.compose(p, q, one);
+      this.fish.setMatrixAt(n++, m);
+    }
+    this.fish.count = n;
+    this.fish.instanceMatrix.needsUpdate = true;
   }
 
   private updateSprites(time: number, daylight: number, pixelRatio: number, amount: number): void {
@@ -325,9 +427,12 @@ export class Fauna {
     this.birds.geometry.dispose();
     (this.birds.material as THREE.Material).dispose();
     this.birds.dispose();
-    this.deerMesh.geometry.dispose();
-    (this.deerMesh.material as THREE.Material).dispose();
-    this.deerMesh.dispose();
+    this.deerBatch.dispose();
+    this.sheepBatch.dispose();
+    this.cowBatch.dispose();
+    this.fish.geometry.dispose();
+    (this.fish.material as THREE.Material).dispose();
+    this.fish.dispose();
     this.butterflies.dispose();
     this.fireflies.dispose();
   }
