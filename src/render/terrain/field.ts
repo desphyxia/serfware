@@ -139,23 +139,26 @@ export class TerrainField {
     let hint = 0;
     for (const course of courses) {
       let ctrl = course.map((t) => ({ d: dir(t), t }));
-      const sm: typeof ctrl = [ctrl[0]!];
-      for (let i = 0; i < ctrl.length - 1; i++) {
-        const a = ctrl[i]!;
-        const b = ctrl[i + 1]!;
-        if (i > 0) sm.push({ d: a.d.clone().lerp(b.d, 0.25).normalize(), t: a.t });
-        if (i < ctrl.length - 2) sm.push({ d: a.d.clone().lerp(b.d, 0.75).normalize(), t: b.t });
+      // Two rounds of corner cutting: bends get a radius wider than the river.
+      for (let round = 0; round < 2; round++) {
+        const sm: typeof ctrl = [ctrl[0]!];
+        for (let i = 0; i < ctrl.length - 1; i++) {
+          const a = ctrl[i]!;
+          const b = ctrl[i + 1]!;
+          if (i > 0) sm.push({ d: a.d.clone().lerp(b.d, 0.25).normalize(), t: a.t });
+          if (i < ctrl.length - 2) sm.push({ d: a.d.clone().lerp(b.d, 0.75).normalize(), t: b.t });
+        }
+        sm.push(ctrl[ctrl.length - 1]!);
+        ctrl = sm;
       }
-      sm.push(ctrl[ctrl.length - 1]!);
-      ctrl = sm;
       const pts: RiverPoint[] = [];
       const lastRiver = course.filter((t) => land.isRiver(t)).pop() ?? course[0]!;
       for (let i = 0; i < ctrl.length; i++) {
         const a = ctrl[i]!;
         const b = ctrl[Math.min(i + 1, ctrl.length - 1)]!;
-        const steps = i === ctrl.length - 1 ? 1 : 4;
+        const steps = i === ctrl.length - 1 ? 1 : 2;
         for (let k = 0; k < steps; k++) {
-          const d = a.d.clone().lerp(b.d, k / 4).normalize();
+          const d = a.d.clone().lerp(b.d, k / steps).normalize();
           const tile = grid.nearestTile([d.x, d.y, d.z], hint);
           hint = tile;
           const src = land.isRiver(tile) ? tile : land.isRiver(a.t) ? a.t : lastRiver;

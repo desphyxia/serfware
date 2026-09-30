@@ -8,6 +8,7 @@ import type { SettingsStore } from "./core/settings";
 import { PlanetCamera } from "./render/planetCamera";
 import { GameRenderer, GRADE } from "./render/renderer";
 import { PAINT } from "./render/painterly";
+import { FOG, makeFogNode } from "./render/fog";
 import { SkyDome } from "./render/sky";
 import { WorldView } from "./render/worldView";
 import { formatDay, ticksPerDay } from "./sim/clock";
@@ -123,7 +124,8 @@ export class Game {
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
     this.sky = new SkyDome(hashString(seed));
     this.scene.add(this.sky.group, this.sun, this.sun.target, this.moon, this.moon.target, this.skyFill, this.skyFill.target, this.viewFill, this.viewFill.target, this.ambient);
-    this.scene.fog = this.fog;
+    // Aerial perspective and valley mist (values driven from `this.fog` each frame).
+    this.scene.fogNode = makeFogNode();
     this.sun.castShadow = true;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.35;
@@ -864,14 +866,23 @@ export class Game {
     const night = 1 - day;
     const dusk = Math.exp(-Math.pow(elevation * 4, 2)) * THREE.MathUtils.smoothstep(elevation, -0.25, 0.05) + Math.exp(-Math.pow(elevation * 4, 2)) * 0.4;
     const mix3 = (a: [number, number, number], b: [number, number, number], t: number): [number, number, number] => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    // Seasons shift the grade: autumn warmer and richer, winter cooler and brighter.
+    const f = this.cam.focus;
+    const ft = this.world.planet.grid.nearestTile([f.x, f.y, f.z], 0);
+    const season = this.view.seasonAt(ft);
+    const autumn = season.autumn;
+    const winter = Math.min(1, season.snow * 1.5);
     let hi = mix3([1.05, 1.02, 0.95], [1.14, 1.0, 0.82], Math.min(1, dusk));
+    hi = mix3(hi, [1.12, 1.01, 0.86], autumn * 0.5);
+    hi = mix3(hi, [1.0, 1.02, 1.06], winter * 0.6);
     hi = mix3(hi, [0.9, 0.96, 1.1], night);
     let lo = mix3([0.94, 0.96, 1.07], [0.92, 0.88, 1.16], Math.min(1, dusk));
+    lo = mix3(lo, [0.9, 0.93, 1.16], winter * 0.6);
     lo = mix3(lo, [0.84, 0.93, 1.22], night);
     GRADE.highlightTint.value.setRGB(...hi);
     GRADE.shadowTint.value.setRGB(...lo);
-    GRADE.exposure.value = 1.0 + night * 0.3;
-    GRADE.saturation.value = 1.08 + Math.min(1, dusk) * 0.1 - night * 0.3;
+    GRADE.exposure.value = 1.0 + night * 0.3 + winter * 0.06;
+    GRADE.saturation.value = 1.08 + Math.min(1, dusk) * 0.1 - night * 0.3 + autumn * 0.08 - winter * 0.12;
     let rim = mix3([1.0, 0.86, 0.66], [1.0, 0.68, 0.42], Math.min(1, dusk));
     rim = mix3(rim, [0.7, 0.8, 1.0], night);
     PAINT.rimColor.value.setRGB(...rim);
@@ -887,8 +898,8 @@ export class Game {
     const f = this.world.day().fraction;
     // The subsolar point moves west as the planet turns east, so local noon is at lon = -theta.
     const theta = -(f - 0.5) * Math.PI * 2;
-    // Fixed mid-season declination until seasons arrive in batch 10.
-    const dec = p.axialTilt * 0.5;
+    // The sun climbs and sinks with the seasons (northern summer at year phase 0.375).
+    const dec = p.axialTilt * Math.sin((this.world.climate.yearPhase(this.world.tick) - 0.125) * Math.PI * 2);
     this.sunDir.set(Math.cos(dec) * Math.cos(theta), Math.sin(dec), -Math.cos(dec) * Math.sin(theta)).normalize();
 
     const R = p.radius;
@@ -938,6 +949,24 @@ export class Game {
     } else {
       this.fog.near = 1e6;
       this.fog.far = 2e6;
+    }
+    FOG.near.value = this.fog.near;
+    FOG.far.value = this.fog.far;
+    FOG.color.value.copy(this.fog.color);
+    FOG.radius.value = R;
+    // Valley mist around dawn (and a little after rain), fading as the sun climbs.
+    {
+      const w = this.world;
+      const t = w.planet.grid.nearestTile([local.x, local.y, local.z], 0);
+      const damp = Math.min(1, 0.45 + (w.land.soil[t] as number) * 0.3 + (w.climate.rain[t] as number) * 0.8);
+      const morning = f < 0.5 ? 1 : 0.2;
+      const dawn = THREE.MathUtils.smoothstep(elevation, -0.12, 0.02) * (1 - THREE.MathUtils.smoothstep(elevation, 0.12, 0.38));
+      const target = dawn * morning * damp * air;
+      FOG.valley.value += (target - FOG.valley.value) * Math.min(1, dt * 0.8);
+      FOG.valleyColor.value.copy(this.sky.horizon).lerp(new THREE.Color(0.92, 0.9, 0.9), 0.55).multiplyScalar(0.4 + 0.6 * this.daylight);
+      // Snow lying at the focus settles on roofs.
+      const snow = w.land.snowCover[t] as number;
+      PAINT.snow.value += (snow - PAINT.snow.value) * Math.min(1, dt * 0.5);
     }
     const gs = this.settings.get().graphics;
     this.view.update({ time, dt, vegetation: gs.vegetation, particles: gs.particles, focus: this.cam.focus, pixelRatio: this.gfx.renderer.getPixelRatio(), sunDir: this.sunDir, sky: this.sky.horizon, daylight: this.daylight, orbit: 1 - air, fog: air > 0.02 ? this.fog : null, closeness, ground: this.cam.groundPoint(), distance: this.cam.distance });
