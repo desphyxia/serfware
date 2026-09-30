@@ -8,12 +8,10 @@ import { SpriteBatch } from "./sprites";
 import { mrt, output, vec4 } from "three/tsl";
 import { playerColor } from "./players";
 import { Anim, FigureBatch, Hat, Tool } from "./figures";
+import { siteGeometry, type BuildingMeta } from "./buildings";
 import {
-  LANTERN_FLAME,
-  WINDMILL_HUB,
   windmillRotor,
   buildingGeometry,
-  constructionSite,
   goodGeometry,
   flagGeometry,
   pennantGeometry,
@@ -48,9 +46,11 @@ const MAX_GOODS_EACH = 2500;
 export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
-  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8, snowy: true });
+  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8, snowy: true, playerTint: true });
   /** Stranded buildings: greyed and dim, like something left behind. */
-  private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, color: "#7d7a74", brush: 1.2 });
+  private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 1.2, overgrown: true, playerTint: true });
+  /** Buildings under construction: the finished model, cut off at the height built so far. */
+  private readonly siteMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 0.8, playerTint: true, clip: true, side: THREE.DoubleSide });
   private readonly buildings = new Map<number, { mesh: THREE.Mesh; key: string }>();
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
@@ -138,7 +138,7 @@ export class EconView {
     for (const b of this.eco.buildings) {
       if (!b.alive || !b.built || !b.lit || !b.def.light || n >= 1024) continue;
       const v = this.buildings.get(b.id);
-      const at = LANTERN_FLAME[b.def.id];
+      const at = (v?.mesh.userData.meta as BuildingMeta | undefined)?.flame;
       if (!v || !at) continue;
       v.mesh.updateMatrix();
       p.copy(at).applyMatrix4(v.mesh.matrix);
@@ -215,25 +215,42 @@ export class EconView {
     for (const b of this.eco.buildings) {
       if (!b.alive || !this.seen(b.tile, b.owner)) continue;
       seen.add(b.id);
-      const stage = b.built ? "built" : `site${Math.min(4, Math.floor((b.consumed / Math.max(1, b.costTotal)) * 5))}`;
-      const key = `${b.def.id}:${stage}:${b.stranded >= 0 ? "x" : ""}`;
+      const progress = b.built ? 1 : Math.min(1, b.consumed / Math.max(1, b.costTotal));
+      // Construction: marked-out ground first, then the building rises inside scaffolding.
+      const stage = b.built ? "built" : progress < 0.06 ? "marked" : "rising";
+      const key = `${b.def.id}:${stage}:${b.stranded >= 0 ? "x" : ""}:${b.owner}`;
       const cur = this.buildings.get(b.id);
-      if (cur && cur.key === key) continue;
+      if (cur && cur.key === key) {
+        if (stage === "rising") this.setClip(cur.mesh, progress);
+        continue;
+      }
       if (cur) this.group.remove(cur.mesh);
-      const geo = b.built ? buildingGeometry(b.def.id, b.id) : constructionSite(b.consumed / Math.max(1, b.costTotal));
-      const mesh = new THREE.Mesh(geo, b.stranded >= 0 ? this.strandedMat : this.buildingMat);
+      const geo = buildingGeometry(b.def.id, b.id);
+      const meta = geo.userData.meta as BuildingMeta;
+      const mat = b.stranded >= 0 ? this.strandedMat : stage === "built" ? this.buildingMat : this.siteMat;
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.userData.tint = playerColor(b.owner);
+      mesh.userData.meta = meta;
       const p = this.frames.pos(b.tile, -0.05);
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
       mesh.position.copy(p);
       this.frames.orient(p, flagPos, mesh.quaternion);
       mesh.userData.building = b.id;
       mesh.userData.site = !b.built;
-      if (b.built && b.def.id === "mill") {
+      if (stage !== "built") {
+        const extra = new THREE.Mesh(siteGeometry(meta.size, stage === "marked" ? "marked" : "scaffold"), this.buildingMat);
+        extra.castShadow = true;
+        extra.name = "site";
+        mesh.add(extra);
+        if (stage === "marked") mesh.userData.clip = -1;
+        else this.setClip(mesh, progress);
+      }
+      if (b.built && meta.hub) {
         this.rotorGeo ??= windmillRotor();
         const rotor = new THREE.Mesh(this.rotorGeo, this.buildingMat);
-        rotor.position.copy(WINDMILL_HUB);
+        rotor.position.copy(meta.hub);
         rotor.name = "rotor";
         rotor.castShadow = true;
         mesh.add(rotor);
@@ -244,9 +261,57 @@ export class EconView {
     for (const [id, v] of this.buildings) {
       if (seen.has(id)) continue;
       this.group.remove(v.mesh);
-      if (v.mesh.userData.site) v.mesh.geometry.dispose();
+      const site = v.mesh.getObjectByName("site") as THREE.Mesh | undefined;
+      site?.geometry.dispose();
       this.buildings.delete(id);
     }
+  }
+
+  /**
+   * Debug and screenshots: a row of building models (not in the simulation) standing on the
+   * ground from `from` toward `to`, with an optional construction stage for each.
+   */
+  showcase(ids: string[], from: THREE.Vector3, to: THREE.Vector3, owner = 0, spacing = 3.2, progress?: number[]): void {
+    this.group.getObjectByName("showcase")?.removeFromParent();
+    const row = new THREE.Group();
+    row.name = "showcase";
+    const dir = to.clone().sub(from).normalize();
+    ids.forEach((id, i) => {
+      const geo = buildingGeometry(id, i);
+      const meta = geo.userData.meta as BuildingMeta;
+      const pr = progress?.[i] ?? 1;
+      // A negative progress shows the building stranded (left behind, overgrown).
+      const mesh = new THREE.Mesh(geo, pr < 0 ? this.strandedMat : pr >= 1 ? this.buildingMat : this.siteMat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData.tint = playerColor(owner);
+      mesh.userData.meta = meta;
+      const d = from.clone().addScaledVector(dir, i * spacing).normalize();
+      const p = d.multiplyScalar(this.frames.groundAt(d));
+      mesh.position.copy(p);
+      this.frames.orient(p, p.clone().add(dir.clone().cross(p).normalize().negate()), mesh.quaternion);
+      if (pr >= 0 && pr < 1) {
+        const extra = new THREE.Mesh(siteGeometry(meta.size, pr < 0.06 ? "marked" : "scaffold"), this.buildingMat);
+        mesh.add(extra);
+        if (pr < 0.06) mesh.userData.clip = -1;
+        else this.setClip(mesh, pr);
+      }
+      if (pr >= 1 && meta.hub) {
+        this.rotorGeo ??= windmillRotor();
+        const rotor = new THREE.Mesh(this.rotorGeo, this.buildingMat);
+        rotor.position.copy(meta.hub);
+        mesh.add(rotor);
+      }
+      row.add(mesh);
+    });
+    this.group.add(row);
+  }
+
+  /** The building rises from its plinth as materials arrive; the roof goes on last. */
+  private setClip(mesh: THREE.Mesh, progress: number): void {
+    const meta = mesh.userData.meta as BuildingMeta;
+    const t = (progress - 0.06) / 0.94;
+    mesh.userData.clip = 0.22 + t * t * 0.3 + t * (meta.size.y - 0.2);
   }
 
   private addGood(type: number, m: THREE.Matrix4): void {
@@ -423,26 +488,13 @@ export class EconView {
       out.push(e);
       return e;
     };
-    const CHIMNEYS: Record<string, [number, number, number]> = {
-      keep: [-0.25, 3.15, -0.95],
-      house: [0.33, 1.38, -0.19],
-      woodcutter: [0.39, 1.42, -0.2],
-      forester: [0.33, 1.5, -0.2],
-      farm: [-0.45, 1.72, 0.1],
-      bakery: [0.95, 0.95, -0.3],
-      butcher: [0.33, 1.4, -0.2],
-      fisher: [0.3, 1.3, -0.18],
-      toolsmith: [0.39, 1.5, -0.2],
-      smelter: [0.65, 2.7, -0.1],
-      goldsmith: [0.65, 2.7, -0.1],
-    };
     for (const b of this.eco.buildings) {
       if (!b.alive || !b.built) continue;
       const mesh = this.buildings.get(b.id)?.mesh;
       if (!mesh) continue;
-      const c = CHIMNEYS[b.def.id];
+      const c = (mesh.userData.meta as BuildingMeta | undefined)?.chimney;
       const occupied = b.def.storage || b.worker >= 0 || (b.def.id === "house" && this.eco.people.some((p) => p.alive && p.house === b.id));
-      if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.set(...c).applyMatrix4(mesh.matrixWorld);
+      if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
       if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);
     }
