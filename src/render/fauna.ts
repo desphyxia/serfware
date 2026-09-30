@@ -1,6 +1,6 @@
 import * as THREE from "three/webgpu";
 import type { Economy } from "../sim/econ/economy";
-import { Feature, type LandUse } from "../sim/econ/landuse";
+import { Feature, ORCHARD, type LandUse } from "../sim/econ/landuse";
 import { Biome } from "../sim/planet/terrain";
 import { SurfaceFrames } from "./frames";
 import { PainterlyMaterial } from "./painterly";
@@ -133,6 +133,9 @@ export class Fauna {
   private readonly butterflies = new SpriteCloud(70, false);
   private readonly fireflies = new SpriteCloud(160, true);
   private readonly bfState: { home: THREE.Vector3; phase: number; color: THREE.Color }[] = [];
+  /** Bees buzzing around apiaries and orchard trees. */
+  private readonly bees = new SpriteCloud(90, false);
+  private readonly beeState: { home: THREE.Vector3; phase: number }[] = [];
   private readonly ffState: { home: THREE.Vector3; phase: number }[] = [];
   private homeTile = -1;
   private structureKey = -1;
@@ -150,7 +153,7 @@ export class Fauna {
     this.fish = new THREE.InstancedMesh(fishGeometry(), new PainterlyMaterial({ color: "#b8c8d0", brush: 0 }), 12);
     this.fish.frustumCulled = false;
     this.fish.count = 0;
-    this.group.add(this.birds, this.deerBatch.mesh, this.sheepBatch.mesh, this.cowBatch.mesh, this.fish, this.butterflies.points, this.fireflies.points);
+    this.group.add(this.birds, this.deerBatch.mesh, this.sheepBatch.mesh, this.cowBatch.mesh, this.fish, this.butterflies.points, this.fireflies.points, this.bees.points);
   }
 
   private repopulate(center: number): void {
@@ -221,6 +224,15 @@ export class Fauna {
     for (let i = 0; i < this.butterflies.count; i++) {
       const t = (meadows.length ? meadows : landTiles)[Math.floor(r() * Math.max(1, (meadows.length ? meadows : landTiles).length))];
       this.bfState.push({ home: t !== undefined ? this.frames.pos(t, 0.4) : new THREE.Vector3(), phase: r() * 100, color: colors[i % colors.length] as THREE.Color });
+    }
+    // Bees: around the skeps of apiaries and among orchard trees.
+    this.beeState.length = 0;
+    const hives: number[] = [];
+    for (const b of this.eco.buildings) if (b.alive && b.built && b.def.job === "bees" && near.has(b.tile)) hives.push(b.tile, b.tile, b.tile);
+    for (const t of landTiles) if (land.feature[t] === Feature.Tree && land.variety[t] === ORCHARD) hives.push(t);
+    for (let i = 0; i < this.bees.count && hives.length; i++) {
+      const t = hives[Math.floor(r() * hives.length)] as number;
+      this.beeState.push({ home: this.frames.pos(t, 0.35), phase: r() * 100 });
     }
     this.ffState.length = 0;
     const woods = landTiles.filter((t) => land.feature[t] === Feature.Tree || terrain.biome[t] === Biome.Marsh);
@@ -406,6 +418,30 @@ export class Fauna {
       bf.alpha[i] = i < bf.count * amount ? Math.max(0, daylight * 1.3 - 0.3) : 0;
     });
     bf.flush();
+    // Bees: quick darting loops close to home, only on warm, light days.
+    const bz = this.bees;
+    for (let i = 0; i < bz.count; i++) {
+      const b = this.beeState[i];
+      if (!b) {
+        bz.alpha[i] = 0;
+        continue;
+      }
+      const t = time * 1.7 + b.phase;
+      const up = b.home.clone().normalize();
+      const tA = new THREE.Vector3(0, 1, 0).cross(up).normalize();
+      const tB = up.clone().cross(tA);
+      const p = b.home
+        .clone()
+        .addScaledVector(tA, Math.sin(t * 1.3) * 0.45 + Math.sin(t * 4.1) * 0.08)
+        .addScaledVector(tB, Math.cos(t * 1.1) * 0.45 + Math.cos(t * 3.7) * 0.08)
+        .addScaledVector(up, 0.1 + Math.abs(Math.sin(t * 2.3)) * 0.3);
+      bz.pos.set([p.x, p.y, p.z], i * 3);
+      const stripe = Math.sin(time * 40 + i) > 0;
+      bz.color.set(stripe ? [0.95, 0.75, 0.15] : [0.2, 0.16, 0.08], i * 3);
+      bz.size[i] = 0.9;
+      bz.alpha[i] = i < bz.count * amount ? Math.max(0, daylight * 1.4 - 0.4) : 0;
+    }
+    bz.flush();
     const ff = this.fireflies;
     const night = Math.max(0, 1 - daylight * 1.6);
     this.ffState.forEach((f, i) => {
@@ -438,6 +474,7 @@ export class Fauna {
     (this.fish.material as THREE.Material).dispose();
     this.fish.dispose();
     this.butterflies.dispose();
+    this.bees.dispose();
     this.fireflies.dispose();
   }
 }

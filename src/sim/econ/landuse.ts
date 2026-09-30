@@ -5,6 +5,7 @@ import type { Rng } from "../rng";
 import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
 import { computeHydrology, type Hydrology } from "../planet/hydrology";
+import { Region, REGIONS, regionFor, type RegionDef } from "../biomes/regions";
 
 /** What stands on a tile. */
 export enum Use {
@@ -25,6 +26,21 @@ export enum Feature {
   Field = 4,
   /** Scrub and young woody growth on an old clearing (succession); cleared by any building. */
   Shrub = 5,
+  /** A planted hedgerow: shelters fields, feeds pollinators; blocks roads and buildings. */
+  Hedge = 6,
+  /** An ancient giant (Canopy Deeps). Amount: logs left; variety 1 = marked for felling. */
+  Giant = 7,
+}
+
+/** Tree varieties: 0..3 are wild or planted timber; these are special and never felled. */
+export const MEMORIAL = 7;
+export const ORCHARD = 8;
+/** Logs in an ancient giant. */
+export const GIANT_LOGS = 10;
+
+/** A mature timber tree a woodcutter may fell. */
+export function fellable(land: { feature: Uint8Array; amount: Uint8Array; variety: Uint8Array }, t: number): boolean {
+  return land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && (land.variety[t] as number) <= 3;
 }
 
 /** Underground deposits found by geologists and dug by mines. */
@@ -90,6 +106,8 @@ export class LandUse {
   /** Weather on the ground, kept up to date by the climate: mud (0..1) and snow cover (0..1). */
   readonly mud: Float32Array;
   readonly snowCover: Float32Array;
+  /** Region (game biome) of each tile; 0 for water. */
+  readonly region: Uint8Array;
 
   constructor(readonly planet: Planet) {
     const n = planet.grid.count;
@@ -110,8 +128,16 @@ export class LandUse {
     this.mud = new Float32Array(n);
     this.snowCover = new Float32Array(n);
     this.hydro = computeHydrology(planet);
+    this.region = new Uint8Array(n);
+    const { biome, temperature, moisture } = planet.terrain;
+    for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t));
     this.soil = new Float32Array(n);
     for (let t = 0; t < n; t++) this.soil[t] = Math.min(1, 0.35 + 0.5 * (planet.terrain.moisture[t] as number) + (this.isRiver(t) ? 0.15 : 0));
+  }
+
+  /** The region (game biome) a tile belongs to. */
+  regionOf(t: number): RegionDef {
+    return REGIONS[(this.region[t] ?? 0) as Region];
   }
 
   /** A river runs through this tile. */
@@ -150,6 +176,13 @@ export class LandUse {
         this.feature[t] = Feature.Tree;
         this.amount[t] = TREE_MATURE;
         this.variety[t] = rng.int(0, 3);
+        // In the Canopy Deeps some trees are ancient giants, never two side by side.
+        const giants = this.regionOf(t).rules.giants;
+        if (giants > 0 && rng.next() < giants && !grid.neighborsOf(t).some((m) => this.feature[m] === Feature.Giant)) {
+          this.feature[t] = Feature.Giant;
+          this.amount[t] = GIANT_LOGS;
+          this.variety[t] = 0;
+        }
       } else if (r < tree + rock) {
         this.feature[t] = Feature.Rock;
         this.amount[t] = rng.int(4, 9);
@@ -211,6 +244,8 @@ export class LandUse {
     }
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
     if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
+    // Treehouses go up an ancient giant (which stays standing).
+    if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
     return this.canBuild(t, flagTile, !!def.large, owner);
   }
 
@@ -229,7 +264,7 @@ export class LandUse {
 
   /** Settlers can walk here (land, not a building, no rock, not too steep). */
   walkable(t: number): boolean {
-    return this.isLand(t) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock;
+    return this.isLand(t) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock && this.feature[t] !== Feature.Giant;
   }
 
   /** A flag or road of `owner` may go here. */
@@ -240,6 +275,8 @@ export class LandUse {
       (this.use[t] === Use.Free || this.use[t] === Use.Blocked) &&
       this.feature[t] !== Feature.Tree &&
       this.feature[t] !== Feature.Rock &&
+      this.feature[t] !== Feature.Hedge &&
+      this.feature[t] !== Feature.Giant &&
       this.feature[t] !== Feature.Field &&
       this.slope(t) < 2.2
     );
@@ -254,10 +291,11 @@ export class LandUse {
   }
 
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
-  canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3): boolean {
+  canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3, onGiant = false): boolean {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
-    if (this.use[t] !== Use.Free || this.feature[t] === Feature.Tree || this.feature[t] === Feature.Rock || this.feature[t] === Feature.Field) return false;
+    const f = this.feature[t];
+    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;

@@ -107,7 +107,7 @@ export function starterChain(w: World, player = 0): number {
   return n;
 }
 
-/** A fuller demo settlement: materials, food chain, a fisher, a toolsmith, a well and a hunter. */
+/** A fuller demo settlement: materials, food chain, a fisher, a toolsmith, a well, a hunter, an orchard, bees and hedgerows. */
 export function demoSettlement(w: World, player = 0): number {
   let n = starterChain(w, player);
   for (const [type, near] of [
@@ -123,7 +123,18 @@ export function demoSettlement(w: World, player = 0): number {
     ["house", undefined],
     ["well", undefined],
     ["hunter", Feature.Tree],
+    ["orchard", undefined],
+    ["apiary", undefined],
   ] as const) if (placeConnected(w, type, { minDist: 2, maxDist: 9, near, player })) n++;
+  // A hedgerow along the farm's edge.
+  const farm = w.economy.buildings.find((b) => b.alive && b.owner === player && b.def.id === "farm");
+  if (farm) {
+    let hedges = 0;
+    for (const t of w.land.ring(farm.tile, 4)) {
+      if (hedges >= 6 || w.land.ring(farm.tile, 2).includes(t)) continue;
+      if (w.command({ t: "hedge", tile: t, player }).ok) hedges++;
+    }
+  }
   const keep = w.economy.buildings[w.economy.keeps[player] ?? -1];
   if (keep) w.command({ t: "geologist", flagTile: w.economy.flags[keep.flag]!.tile, player });
   for (const type of ["beacon", "lamphouse", "lantern"]) if (placeOn(w, type, frontierTiles(w, player).slice(0, 30), player, true, 10) >= 0) n++;

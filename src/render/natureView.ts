@@ -1,9 +1,10 @@
 import * as THREE from "three/webgpu";
 import { MEMORIAL } from "../sim/econ/economy";
-import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
+import { Feature, FIELD_RIPE, ORCHARD, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
+import { Region } from "../sim/biomes/regions";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { birchGeometry, broadleafGeometry, coniferGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
+import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
 import { PainterlyMaterial } from "./painterly";
 import { bushGeometry } from "./undergrowth";
 import type { Ecology } from "../sim/econ/ecology";
@@ -23,8 +24,10 @@ export enum Species {
  * temperate belt, pine on dry warm ground and palms on hot coasts and in deserts. Memorial trees
  * are always oaks.
  */
-export function speciesAt(temperature: number, moisture: number, biome: Biome, variety: number, memorial: boolean): Species {
+export function speciesAt(temperature: number, moisture: number, biome: Biome, variety: number, memorial: boolean, region = 0): Species {
   if (memorial) return Species.Oak;
+  // The Canopy Deeps are broadleaf all the way down, with palms where it's hottest.
+  if (region === Region.CanopyDeeps) return temperature >= 22 && variety === 3 ? Species.Palm : variety === 2 ? Species.Birch : Species.Oak;
   if (temperature < 5) return variety === 2 ? Species.Birch : Species.Spruce;
   if (temperature < 14) return variety < 2 ? Species.Spruce : variety === 2 ? Species.Birch : Species.Pine;
   if (temperature >= 22 && (biome === Biome.Beach || biome === Biome.Desert || variety === 3)) return Species.Palm;
@@ -45,6 +48,10 @@ export class NatureView {
   private readonly treeGeo: { full: THREE.BufferGeometry; lite: THREE.BufferGeometry }[];
   private readonly rocks: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
+  /** Canopy Deeps giants, orchard trees and hedgerow segments. */
+  private readonly giants: THREE.InstancedMesh;
+  private readonly fruit: THREE.InstancedMesh;
+  private readonly hedges: THREE.InstancedMesh;
   /** Scrub on old clearings (succession), a few bushes per tile. */
   private readonly shrubs: THREE.InstancedMesh;
   /** The ecology, for charred stumps on burnt ground (set by the world view). */
@@ -96,6 +103,12 @@ export class NatureView {
     this.rocks = make(rockGeometry(), capacity);
     this.stumps = make(stumpGeometry(), capacity);
     this.stumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+    this.giants = make(giantTreeGeometry(), Math.max(64, Math.ceil(capacity / 6)), treeMat);
+    this.giants.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.giants.instanceMatrix.count * 3).fill(1), 3);
+    this.fruit = make(fruitTreeGeometry(), Math.max(64, Math.ceil(capacity / 4)), treeMat);
+    this.fruit.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(this.fruit.instanceMatrix.count * 3).fill(1), 3);
+    this.hedges = make(hedgeGeometry(), capacity, new PainterlyMaterial({ vertexColors: true, wind: 0.8, brush: 1.2 }));
+    this.hedges.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.shrubs = make(bushGeometry(), capacity * 3, new PainterlyMaterial({ vertexColors: true, wind: 0.6, brush: 1.2 }));
     this.shrubs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 9).fill(1), 3);
     this.soil = make(fieldSoilGeometry(), capacity);
@@ -127,7 +140,7 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { r: 0, s: 0, f: 0, h: 0 };
+    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0 };
     const treeCount = this.trees.map(() => 0);
     const crowns: number[] = [];
     const { temperature, moisture, biome } = land.planet.terrain;
@@ -143,10 +156,29 @@ export class NatureView {
       if (tA.lengthSq() < 1e-6) tA.set(1, 0, 0);
       tA.normalize();
       const tB = up.clone().cross(tA);
-      if (f === Feature.Tree) {
+      if (f === Feature.Tree && land.variety[t] === ORCHARD) {
+        this.placeFruitTree(t, base, tA, tB, counts);
+      } else if (f === Feature.Giant) {
+        this.frames.orient(base, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 13) * 6.28));
+        const sc = 0.95 + SurfaceFrames.hash(t, 14) * 0.25;
+        s.set(sc, sc * (0.95 + SurfaceFrames.hash(t, 15) * 0.15), sc);
+        m.compose(base, q, s);
+        if (counts.g < this.giants.instanceMatrix.count) {
+          const sea = this.season(t);
+          color.setRGB(0.9 + 0.2 * SurfaceFrames.hash(t, 16), 0.95, 0.9);
+          // A giant marked for felling is picked out, faintly, in autumn gold.
+          if (land.variety[t] === 1) color.setRGB(1.5, 1.2, 0.7);
+          if (sea.snow > 0.15) color.lerp(new THREE.Color(1.6, 1.65, 1.75), Math.min(0.5, sea.snow) * 0.6);
+          this.giants.setColorAt(counts.g, color);
+          this.giants.setMatrixAt(counts.g++, m);
+        }
+      } else if (f === Feature.Hedge) {
+        this.placeHedge(t, base, counts);
+      } else if (f === Feature.Tree) {
         const stage = (land.amount[t] as number) / TREE_MATURE;
         const memorial = land.variety[t] === MEMORIAL;
-        const species = speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, memorial);
+        const species = speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, memorial, land.region[t]);
         // Spruce and pine keep their needles; the rest turn and drop their leaves (palms do not).
         const evergreen = species === Species.Spruce || species === Species.Pine || species === Species.Palm;
         const k = stage < 1 || memorial ? 1 : perTile;
@@ -247,12 +279,74 @@ export class NatureView {
       [this.rocks, counts.r],
       [this.stumps, counts.s],
       [this.shrubs, counts.h],
+      [this.giants, counts.g],
+      [this.fruit, counts.o],
+      [this.hedges, counts.e],
       [this.soil, counts.f],
       [this.rows, counts.f],
     ] as const) {
       mesh.count = Math.min(c, mesh.instanceMatrix.count);
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  /** An orchard tree: blossom in spring, fruit through summer and autumn, bare in winter. */
+  private placeFruitTree(t: number, base: THREE.Vector3, tA: THREE.Vector3, tB: THREE.Vector3, counts: { o: number }): void {
+    if (counts.o >= this.fruit.instanceMatrix.count) return;
+    const land = this.land;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const h1 = SurfaceFrames.hash(t, 31);
+    const p = base.clone().addScaledVector(tA, (h1 - 0.5) * 0.3).addScaledVector(tB, (SurfaceFrames.hash(t, 32) - 0.5) * 0.3);
+    this.frames.orient(p, null, q);
+    q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h1 * 6.28));
+    const stage = (land.amount[t] as number) / TREE_MATURE;
+    const sc = (0.35 + 0.65 * stage) * (1.1 + h1 * 0.2);
+    m.compose(p, q, new THREE.Vector3(sc, sc, sc));
+    this.fruit.setMatrixAt(counts.o, m);
+    const sea = this.season(t);
+    const c = new THREE.Color(1, 1, 1);
+    const spring = Math.max(0, 1 - sea.autumn * 2 - sea.bare * 2) * (this.seasonKeyBlossom() ? 1 : 0);
+    if (spring > 0) c.lerp(new THREE.Color(1.7, 1.45, 1.55), 0.45 * spring);
+    if (sea.autumn > 0) c.lerp(new THREE.Color(1.6, 1.1, 0.5), sea.autumn * 0.5);
+    if (sea.bare > 0) c.lerp(new THREE.Color(0.9, 0.75, 0.6), sea.bare);
+    if (sea.snow > 0.15) c.lerp(new THREE.Color(1.6, 1.65, 1.75), Math.min(0.6, sea.snow) * 0.6);
+    this.fruit.setColorAt(counts.o++, c);
+  }
+
+  /** Spring blossom: set by the world view from the season at the focus. */
+  blossom = 0;
+  private seasonKeyBlossom(): boolean {
+    return this.blossom > 0.5;
+  }
+
+  /** A hedgerow: a line of bushes from the tile's middle toward each neighbouring hedge, or a short run on its own. */
+  private placeHedge(t: number, base: THREE.Vector3, counts: { e: number }): void {
+    const land = this.land;
+    const grid = land.planet.grid;
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const up = base.clone().normalize();
+    const links = Array.from(grid.neighborsOf(t)).filter((n) => land.feature[n] === Feature.Hedge);
+    const targets: THREE.Vector3[] = links.length ? links.map((n) => this.frames.pos(n)) : [base.clone().add(new THREE.Vector3(0, 1, 0).cross(up).normalize().multiplyScalar(1.4))];
+    if (!links.length) targets.push(base.clone().multiplyScalar(2).sub(targets[0] as THREE.Vector3));
+    const k = 0.78 + SurfaceFrames.hash(t, 6) * 0.2;
+    const tint = new THREE.Color(k * 0.95, k * (0.9 + SurfaceFrames.hash(t, 5) * 0.08), k * 0.85);
+    for (const target of targets) {
+      if (counts.e >= this.hedges.instanceMatrix.count) return;
+      const dir = target.clone().sub(base);
+      dir.addScaledVector(up, -dir.dot(up));
+      const half = dir.length() * 0.5;
+      if (half < 1e-4) continue;
+      dir.normalize();
+      // Frame: y up, z along the hedge.
+      const x = up.clone().cross(dir).normalize();
+      m.makeBasis(x, up, dir);
+      q.setFromRotationMatrix(m);
+      m.compose(base, q, new THREE.Vector3(1, 1, half + 0.1));
+      this.hedges.setMatrixAt(counts.e, m);
+      this.hedges.setColorAt(counts.e++, tint);
     }
   }
 

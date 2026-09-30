@@ -6,6 +6,11 @@ import type { Overlays } from "./render/overlays";
 import type { ToolId } from "./ui/buildBar";
 import type { Selection } from "./ui/infoPanel";
 
+/** Open ground where a hedgerow can be planted. */
+function hedgeable(land: World["land"], t: number): boolean {
+  return land.isLand(t) && land.use[t] === Use.Free && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.planet.grid.degree(t) === 6;
+}
+
 export interface ToolHost {
   world(): World;
   /** The player this machine builds for. */
@@ -78,13 +83,15 @@ export class Tools {
       this.markerKey = key;
       const tiles: number[] = [];
       if (this.tool === "flag" || this.isBuilding(this.tool)) {
-        const large = this.isBuilding(this.tool) && !!BUILDINGS[BUILDING_INDEX.get(this.tool) as number]?.large;
+        const def = this.isBuilding(this.tool) ? BUILDINGS[BUILDING_INDEX.get(this.tool) as number] : undefined;
         for (let i = 0; i < land.territory.length; i++) {
           if (land.territory[i] !== pl + 1) continue;
-          if (this.tool === "flag" ? land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road : land.canBuild(i, land.bestFlagTile(i, pl), large, pl)) tiles.push(i);
+          if (def ? land.canBuildDef(i, land.bestFlagTile(i, pl), def, pl) : land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
         }
+      } else if (this.tool === "hedge") {
+        for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && hedgeable(land, i)) tiles.push(i);
       }
-      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : "#b8f08c");
+      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : "#b8f08c");
     }
     if (t < 0) return;
 
@@ -94,7 +101,8 @@ export class Tools {
       const flagTile = land.bestFlagTile(t, pl);
       const eco = w.economy;
       const existing = eco.flagAt(flagTile);
-      const ok = flagTile >= 0 && land.canBuild(t, flagTile, false, pl) && !(existing && existing.building >= 0);
+      const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+      const ok = flagTile >= 0 && !!def && land.canBuildDef(t, flagTile, def, pl) && !(existing && existing.building >= 0);
       ov.setGhost(this.tool, t, flagTile, ok);
     } else if (this.tool === "road" && this.roadStart >= 0 && t !== this.roadStart) {
       const path = this.roadPath(this.roadStart, t);
@@ -126,6 +134,9 @@ export class Tools {
       }
       case "flag":
         if (this.host.command({ t: "flag", tile: t })) this.refresh();
+        return;
+      case "hedge":
+        if (this.host.command({ t: "hedge", tile: t })) this.refresh();
         return;
       case "road": {
         if (this.roadStart < 0) {
@@ -162,6 +173,11 @@ export class Tools {
       case "demolish": {
         const now = performance.now();
         if (land.use[t] === Use.Free || land.use[t] === Use.Blocked) {
+          // Hedgerows are grubbed up, and ancient giants marked (or spared) at once.
+          if (land.feature[t] === Feature.Hedge || land.feature[t] === Feature.Giant) {
+            if (this.host.command({ t: "demolish", tile: t })) this.refresh();
+            return;
+          }
           this.host.notify(land.feature[t] === Feature.Tree ? "Trees are felled by woodcutters." : "Nothing to demolish here.", "warn");
           return;
         }

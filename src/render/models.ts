@@ -109,8 +109,7 @@ function foliage(g: THREE.BufferGeometry, centre: THREE.Vector3, colour: THREE.C
 
 /** Merge parts whose colours and normals are already baked (foliage) with plain ones. */
 function mergeBaked(plain: Part[], baked: Part[]): THREE.BufferGeometry {
-  const a = kit.assemble(plain, true);
-  const geos = [a, ...baked.map(([g]) => g)].map((g) => {
+  const geos = [...(plain.length ? [kit.assemble(plain, true)] : []), ...baked.map(([g]) => g)].map((g) => {
     g.deleteAttribute("uv");
     return g;
   });
@@ -269,6 +268,100 @@ export function palmGeometry(): THREE.BufferGeometry {
   return mergeBaked(trunk, fronds);
 }
 
+/**
+ * An ancient giant of the Canopy Deeps: a buttressed, moss-banded trunk five times a man's height,
+ * heavy limbs and a broad, dark crown. Treehouses are built around its trunk.
+ */
+export function giantTreeGeometry(lite = false): THREE.BufferGeometry {
+  const rng = new kit.Rng(83);
+  const bark = "#4d3b2e";
+  const moss = "#4f6a34";
+  const trunk: Part[] = [
+    [cyl(0.34, 0.6, 2.2, 10), bark],
+    [cyl(0.26, 0.34, 2.6, 9, 0, 2.2), bark],
+    [cyl(0.605, 0.62, 0.5, 10, 0, 0.1), moss],
+  ];
+  // Buttress roots flaring out from the base.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + rng.range(-0.2, 0.2);
+    const g = new THREE.BoxGeometry(0.16, 0.9, 1.0).translate(0, 0.45, 0.5);
+    const p = g.getAttribute("position");
+    // Taper toward the tip and the top so each root is a fin.
+    for (let k = 0; k < p.count; k++) {
+      const z = p.getZ(k);
+      const y = p.getY(k);
+      p.setY(k, y * (1 - z * 0.85));
+      p.setX(k, p.getX(k) * (1 - z * 0.6));
+    }
+    g.computeVertexNormals();
+    trunk.push([g.rotateY(a).translate(Math.sin(a) * 0.25, 0, Math.cos(a) * 0.25), i % 2 ? bark : moss]);
+  }
+  // Heavy limbs.
+  const limbs: [number, number, number][] = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const y = rng.range(3.6, 4.6);
+    trunk.push([cyl(0.08, 0.16, 1.9, 6).translate(0, 0.95, 0).rotateZ(1.05).rotateY(a).translate(0, y, 0), bark]);
+    limbs.push([Math.cos(a) * 1.7, y + 0.9, -Math.sin(a) * 1.7]);
+  }
+  const centre = new THREE.Vector3(0, 5.6, 0);
+  const lumps: [number, number, number, number][] = [[0, 6.2, 0, 1.5], [0, 5.3, 0, 1.3]];
+  for (const [x, y, z] of limbs) lumps.push([x, y, z, rng.range(0.95, 1.25)]);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const r = rng.range(1.2, 2.2);
+    lumps.push([Math.cos(a) * r, rng.range(5.2, 6.6), Math.sin(a) * r, rng.range(0.8, 1.15)]);
+  }
+  const leaves: Part[] = lumps.map(([x, y, z, r]) => {
+    const g = new THREE.IcosahedronGeometry(r, lite ? 0 : 1);
+    const p = g.getAttribute("position");
+    for (let k = 0; k < p.count; k++) {
+      const yy = p.getY(k);
+      p.setY(k, yy < 0 ? yy * 0.6 : yy * 0.85);
+    }
+    return foliage(g.translate(x, y, z), centre, kit.jitter("#2f5a33", rng, 1), 0.7);
+  });
+  return mergeBaked(trunk, leaves);
+}
+
+/** An orchard tree: a short trunk, a round crown, and red fruit among the leaves. */
+export function fruitTreeGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(97);
+  const trunk: Part[] = [
+    [cyl(0.05, 0.08, 0.55, 6), "#6e5038"],
+    [cyl(0.025, 0.04, 0.35, 5).rotateZ(-0.8).translate(0.08, 0.5, 0), "#6e5038"],
+    [cyl(0.025, 0.04, 0.35, 5).rotateZ(0.8).rotateY(2).translate(-0.05, 0.5, 0.06), "#6e5038"],
+  ];
+  const centre = new THREE.Vector3(0, 0.85, 0);
+  const lumps: [number, number, number, number][] = [[0, 0.9, 0, 0.36]];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + rng.range(-0.2, 0.2);
+    lumps.push([Math.cos(a) * 0.26, rng.range(0.72, 1.0), Math.sin(a) * 0.26, rng.range(0.2, 0.26)]);
+  }
+  const leaves: Part[] = lumps.map(([x, y, z, r]) => foliage(new THREE.IcosahedronGeometry(r, 1).translate(x, y, z), centre, kit.jitter("#5f9a45", rng, 1.2), 0.7));
+  for (let i = 0; i < 14; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const e = rng.range(-0.4, 0.9);
+    const r = 0.42;
+    trunk.push([new THREE.SphereGeometry(0.045, 6, 4).translate(Math.cos(a) * Math.cos(e) * r, 0.88 + Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r), kit.jitter("#c8392e", rng, 1.5)]);
+  }
+  return mergeBaked(trunk, leaves);
+}
+
+/** One hedgerow segment: a row of clipped, lumpy bushes one unit long along +z. */
+export function hedgeGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(101);
+  const centre = new THREE.Vector3(0, 0.15, 0.5);
+  const parts: Part[] = [];
+  for (let i = 0; i < 5; i++) {
+    const z = i * 0.22 + 0.06;
+    const r = rng.range(0.15, 0.2);
+    const g = new THREE.IcosahedronGeometry(r, 1).scale(1, 1.25, 1.1).translate(rng.range(-0.03, 0.03), r * 1.1, z);
+    parts.push(foliage(g, centre.clone().setZ(z), kit.jitter("#48723a", rng, 1), 0.55));
+  }
+  return mergeBaked([], parts);
+}
+
 export function stumpGeometry(): THREE.BufferGeometry {
   return merge([
     [cyl(0.12, 0.15, 0.18, 7), "#7a5a3f"],
@@ -381,6 +474,16 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
       break;
     case "fish":
       parts = basket([0, 1, 2].map((i) => [new THREE.SphereGeometry(0.03, 6, 4).scale(3, 0.8, 1).rotateY(i * 0.9).translate(0, 0.095 + i * 0.012, 0), "#7fc4c8"] as Part));
+      break;
+    case "fruit":
+      parts = basket(lumps("#c8392e", 5, 0.05));
+      break;
+    case "honey":
+      parts = [
+        [kit.cyl(0.07, 0.08, 0.14, 10), "#d9a33a"],
+        [kit.cyl(0.075, 0.075, 0.03, 10, 0, 0.14), "#e8dcc4"],
+        [kit.cyl(0.02, 0.02, 0.03, 6, 0, 0.17), "#8a6a44"],
+      ];
       break;
     case "meat":
       parts = [[new THREE.SphereGeometry(0.075, 8, 6).scale(1.3, 0.9, 1).translate(0, 0.07, 0), "#b8574a"], [kit.cyl(0.018, 0.018, 0.08, 6).rotateZ(Math.PI / 2).translate(0.12, 0.07, 0), "#efe6d2"]];

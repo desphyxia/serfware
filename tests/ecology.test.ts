@@ -12,6 +12,7 @@ function host(over: Partial<EcologyHost> = {}): EcologyHost & { burnt: number[];
   return {
     dayLength: DAY,
     wellCovers: () => false,
+    beesBoost: () => false,
     scorchBuilding: (t) => burnt.push(t),
     seedling: (t) => seeds.push(t),
     temp: () => 24,

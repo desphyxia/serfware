@@ -17,7 +17,7 @@ import { SkyDome } from "./render/sky";
 import { WorldView } from "./render/worldView";
 import { formatDay, ticksPerDay } from "./sim/clock";
 import { Biome, BIOME_NAMES } from "./sim/planet/terrain";
-import { Feature } from "./sim/econ/landuse";
+import { Feature, Use } from "./sim/econ/landuse";
 import { speciesAt } from "./render/natureView";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
@@ -435,7 +435,7 @@ export class Game {
   focusSpecies(species: number, distance = 14): boolean {
     const land = this.world.land;
     const { temperature, moisture, biome } = land.planet.terrain;
-    const is = (t: number) => land.feature[t] === Feature.Tree && speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, land.variety[t] === MEMORIAL) === species;
+    const is = (t: number) => land.feature[t] === Feature.Tree && speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, land.variety[t] === MEMORIAL, land.region[t]) === species;
     let best = -1;
     let bestN = 0;
     for (let t = 0; t < land.feature.length; t++) {
@@ -449,6 +449,47 @@ export class Game {
     if (best < 0) return false;
     this.focusTile(best, distance);
     return true;
+  }
+
+  /** Debug: look at the heart of a region (the tile with most of it around), e.g. 2 = Canopy Deeps. */
+  focusRegion(region: number, distance = 20): boolean {
+    const land = this.world.land;
+    let best = -1;
+    let bestN = 0;
+    for (let t = 0; t < land.region.length; t += 3) {
+      if (land.region[t] !== region) continue;
+      const n = land.ring(t, 3).filter((m) => land.region[m] === region).length + land.ring(t, 2).filter((m) => land.feature[m] === Feature.Giant).length * 2;
+      if (n > bestN) {
+        bestN = n;
+        best = t;
+      }
+    }
+    if (best < 0) return false;
+    this.focusTile(best, distance);
+    return true;
+  }
+
+  /**
+   * Screenshot hook: a finished treehouse in the giant nearest the Hearthship (the land around is
+   * claimed and the house built at once). Returns the giant's tile or -1.
+   */
+  debugTreehouse(distance = 9): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[this.session.player] ?? -1];
+    if (!keep) return -1;
+    const giant = land.ring(keep.tile, 14).find((t) => land.feature[t] === Feature.Giant && land.use[t] === Use.Free);
+    if (giant === undefined) return -1;
+    const p = this.session.player;
+    for (const t of [giant, ...land.ring(giant, 2)]) if (land.territory[t] === 0) land.territory[t] = p + 1;
+    land.territoryVersion++;
+    const flag = land.bestFlagTile(giant, p);
+    if (flag < 0 || !w.command({ t: "build", type: "treehouse", tile: giant, flagTile: flag, player: p }).ok) return -1;
+    const b = eco.buildingAt(giant);
+    if (b) b.built = true;
+    this.focusTile(giant, distance);
+    return giant;
   }
 
   /** Debug: bring a weather front over the view. */
@@ -1290,11 +1331,15 @@ export class Game {
     const e = terrain.elevation[tile] as number;
     const rows: [string, string][] = [
       ["Tile", `${tile}${grid.degree(tile) === 5 ? " · Star Well" : ""}`],
+      ...(this.world.land.region[tile] ? ([["Region", this.world.land.regionOf(tile).name]] as [string, string][]) : []),
       ["Ground", BIOME_NAMES[terrain.biome[tile] as number] ?? "?"],
       [e >= 0 ? "Height" : "Depth", `${Math.round(Math.abs(e) * 90)} m`],
       ["Temperature", `${(terrain.temperature[tile] as number).toFixed(0)} °C`],
       ["Moisture", `${Math.round((terrain.moisture[tile] as number) * 100)} %`],
     ];
+    const land = this.world.land;
+    if (land.feature[tile] === Feature.Giant) rows.push(["Ancient tree", land.variety[tile] === 1 ? "marked for felling" : `${land.amount[tile]} logs · Demolish marks it`]);
+    else if (land.feature[tile] === Feature.Hedge) rows.push(["Hedgerow", "shelters fields"]);
     this.inspector.replaceChildren(h("dl", { class: "kv" }, ...rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
     this.inspector.hidden = false;
   }
