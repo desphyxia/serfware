@@ -1,8 +1,8 @@
 # Seedfall art direction
 
-Status: **agreed**. A1–A6 are built (renderer, target scene, terrain everywhere, water/sky/
-weather, building kit, settlers and animals); the debug dialog's **Visit hamlet** opens the
-target scene.
+Status: **agreed**. The art track A1–A7 is built (renderer, target scene, terrain everywhere,
+water/sky/weather, building kit, settlers and animals, vegetation and effects); the debug
+dialog's **Visit hamlet** opens the target scene.
 
 Reference: the original *Serf City* (*The Settlers*, 1993), rebuilt with 2026 techniques.
 Decisions taken: **stylised painterly** look, **everything procedural** (no bought or downloaded
@@ -95,7 +95,8 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 - **Trees:**
   - Crowns are clusters of rounded leaf lumps with normals pointing outward, the fluffy, painted look.
   - Species differ by biome. Trees grow through visible stages and sway in the wind; the leaves are shaded in the shader.
-  - Far away they become flat billboard sprites rendered at load time.
+  - On the Low preset they switch to lighter crowns (fewer facets). Far-away billboard
+    sprites are still an option if the triangle budget needs it.
 - **Undergrowth:** shrubs, ferns, reeds by water, flowers by season.
 
 ### Water
@@ -185,7 +186,7 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 | A4 ✓ | Water, sky and weather | Sea, lakes and rivers; physically based sky and painted clouds; haze and light shafts; rain, snow, mud and seasons in the new style |
 | A5 ✓ | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
 | A6 ✓ | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
-| A7 | Vegetation, effects and polish | Tree species per biome, undergrowth, particles, shot-list pass, performance tuning on the presets |
+| A7 ✓ | Vegetation, effects and polish | Tree species per biome, undergrowth, particles, shot-list pass, performance tuning on the presets |
 
 ### What A2 delivered
 
@@ -255,5 +256,22 @@ gentle grassy banks and a wet edge.
 - **Animals:** deer, sheep and cows as articulated figures (legs, grazing heads, tails); herds in
   the pastures; deer bolt from settlers; fish leap near the shore.
 - **Goods:** tools are miniatures too.
+
+### What A7 delivered
+
+- **Tree species per biome:** spruce and birch in the cold; oak, birch and some pine in the
+  temperate belt; pine on dry, warm ground; palms on hot coasts and in deserts. Birches turn
+  butter-yellow and oaks gold and russet in autumn; spruce, pine and palm stay green.
+- **Undergrowth by biome:** ferns and darker bushes under forests, heather on tundra, grey-green
+  sage scrub on steppe and desert, sandy boulders in deserts and lichened ones in the cold.
+- **Effects:** leaves tumble from turning trees in autumn; motes of pollen and dust drift in
+  warm, dry light, most of all when the sun is low; forges (smelter, goldsmith, toolsmith)
+  throw embers up the chimney while they work.
+- **Hearthship:** a lofted clinker hull (lapped strakes, keel with rocker, curved stem, gunwale
+  rails) on a timber slipway, shored up on both sides, with round shields along the gunwales
+  in the owner's colour.
+- **Performance:** `npm run perf` reports visible meshes and triangles per preset at a busy
+  close-up. At the A7 baseline: Low 376k, Medium 583k, High 723k triangles. Low uses lighter
+  tree crowns and a smaller undergrowth ring.
 
 After A7 we return to batch 11. The later biome batches (13–16) follow this document.

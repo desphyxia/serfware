@@ -413,20 +413,44 @@ function beacon(b: Build): void {
 /** The Hearthship: a landed ship turned keep, with a cabin, lantern tower, mast and banners. */
 function keep(b: Build): void {
   const { rng } = b;
-  b.add(...kit.plinth(2.8, 3.9, 0.15, rng));
-  // Hull of planks around ribs, resting on props.
-  const strakes = 7;
-  for (let i = 0; i < strakes; i++) {
-    const f = i / (strakes - 1);
-    const y = 0.35 + f * 0.95;
-    const hw = 0.75 + Math.sin(f * Math.PI * 0.5) * 0.5;
-    const len = 2.6 + f * 0.8;
-    for (const s of [-1, 1]) b.add([kit.box(0.08, 0.15, len, s * hw, y, 0), kit.jitter("#7a5238", rng, 2)]);
+  // A slipway rather than a plinth: timber runners and keel blocks on the levelled ground.
+  for (const x of [-0.45, 0.45]) b.add([kit.box(0.14, 0.08, 3.6, x, 0), "#5a4a3c"]);
+  for (let i = 0; i < 6; i++) b.add([kit.box(1.3, 0.07, 0.16, 0, 0.02, -1.55 + i * 0.62), kit.jitter("#6a5440", rng, 2)]);
+  for (const z of [-1.2, 0, 1.0]) b.add([kit.box(0.34, 0.14, 0.3, 0, 0, z), kit.jitter(kit.C.stoneDark, rng, 1)]);
+  // A beached clinker hull, bow slightly raised on its rocker, shored up with timbers.
+  const deck = 1.42;
+  const h = kit.hull(3.9, 1.22, deck, rng);
+  b.add(...h.parts);
+  const strips = 7;
+  for (let k = 0; k < strips; k++) {
+    const pos: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const z0 = -1.95 + (i / 20) * 3.9;
+      const z1 = z0 + 3.9 / 20;
+      const x = (z: number, f: number) => (f * 2 - 1) * h.halfWidth(z) * 0.97;
+      const f0 = k / strips;
+      const f1 = (k + 1) / strips;
+      pos.push(x(z0, f0), deck, z0, x(z1, f1), deck, z1, x(z1, f0), deck, z1, x(z0, f0), deck, z0, x(z0, f1), deck, z0, x(z1, f1), deck, z1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    b.add([g, kit.jitter(k % 2 ? "#a07a55" : "#94704c", rng, 1.5)]);
   }
-  b.add([kit.box(1.5, 0.15, 2.6, 0, 0.35), "#5a3d2a"]);
-  for (const z of [-1.2, -0.4, 0.4, 1.2]) for (const s of [-1, 1]) b.add([kit.cyl(0.08, 0.14, 0.6, 6, s * 0.95, 0, z), "#5a4a3c"]);
-  for (let i = 0; i < 9; i++) b.add([kit.box(2.3, 0.05, 0.36, 0, 1.45, -1.55 + i * 0.39), kit.jitter("#a07a55", rng, 1.5)]);
-  for (let i = -1; i <= 1; i++) for (const s of [-1, 1]) b.add([new THREE.CylinderGeometry(0.12, 0.12, 0.05, 10).rotateZ(Math.PI / 2).translate(s * 1.26, 1.0, i * 0.8), kit.C.window]);
+  for (const [z, s] of [[-1.3, -1], [-0.2, -1], [0.9, -1], [-1.3, 1], [-0.2, 1], [0.9, 1]] as const) {
+    const x = s * (h.halfWidth(z) * 0.72 + 0.35);
+    b.add([kit.box(0.09, 1.05, 0.09).translate(0, 0.5, 0).rotateZ(s * 0.62).translate(x, -0.02, z), "#5a4a3c"]);
+    b.add([kit.box(0.22, 0.06, 0.18, x, 0, z), kit.C.stoneDark]);
+  }
+  // Round shields along the gunwales, every other one in the owner's colour.
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 6; i++) {
+      const z = -1.35 + i * 0.5;
+      const x = s * (h.halfWidth(z) + 0.035);
+      const y = h.sheer(z) - 0.14;
+      b.add([new THREE.CylinderGeometry(0.15, 0.15, 0.03, 10).rotateZ(Math.PI / 2).rotateY(s * (z > 0 ? -0.25 : 0.1) * (z / 1.9)).translate(x, y, z), i % 2 ? kit.C.player : "#d8cbb0"]);
+      b.add([new THREE.SphereGeometry(0.04, 6, 4).translate(x + s * 0.02, y, z), "#6a6a6a"]);
+    }
+  }
   // Cabin from the kit, with a chimney.
   const cabin = cottage(rng, 1.4, 1.3, 0.9, { roof: ROOF.slate, doorAt: 0 });
   b.place(cabin.parts, 0, -0.55, 0, 1.3);

@@ -462,6 +462,7 @@ function isWindow(r: number, g: number, b: number): boolean {
 export function assemble(parts: Part[], ao = true, keepNormals = false): THREE.BufferGeometry {
   const geos = parts.map(([g, c]) => {
     const geo = g.index ? g.toNonIndexed() : g;
+    if (!geo.getAttribute("normal")) geo.computeVertexNormals();
     const col = colourOf(c);
     const n = geo.getAttribute("position").count;
     const arr = new Float32Array(n * 3);
@@ -498,4 +499,89 @@ function bakeAO(geo: THREE.BufferGeometry): void {
 function smooth(e0: number, e1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
+}
+
+/**
+ * A clinker-built hull lofted from cross sections: fine at the bow (+z), fuller at the stern,
+ * with sheer rising toward both ends. Each strake is its own part, lapped a little over the one
+ * below, so the planking reads from afar. Returns the parts and the gunwale half-width per z.
+ */
+export function hull(len: number, beam: number, depth: number, rng: Rng, tone: Colour = "#7a5238"): { parts: Part[]; halfWidth: (z: number) => number; sheer: (z: number) => number } {
+  const L = len / 2;
+  const halfWidth = (z: number) => {
+    const u = Math.min(1, Math.abs(z) / L);
+    return beam * Math.max(0, 1 - Math.pow(u, z > 0 ? 1.7 : 3.2));
+  };
+  const sheer = (z: number) => depth + 0.28 * Math.pow(z / L, 2);
+  // The keel rockers up toward the bow and a little at the stern.
+  const keel = (z: number) => (z > 0 ? 0.55 * Math.pow(z / L, 2.4) * depth : 0.2 * Math.pow(-z / L, 3) * depth);
+  const stations = 22;
+  const strakes = 7;
+  const parts: Part[] = [];
+  for (let k = 0; k < strakes; k++) {
+    const pos: number[] = [];
+    for (const side of [-1, 1]) {
+      const at = (i: number, f: number, lap: number): [number, number, number] => {
+        const z = -L + (i / stations) * len;
+        const b = halfWidth(z) * (1 + lap);
+        const top = sheer(z);
+        const bot = keel(z);
+        const phi = (f * Math.PI) / 2;
+        return [side * b * Math.sin(phi), top - (top - bot) * Math.pow(Math.cos(phi), 1.25), z];
+      };
+      const f0 = k / strakes;
+      const f1 = (k + 1) / strakes;
+      for (let i = 0; i < stations; i++) {
+        const a = at(i, f0, 0.035);
+        const b = at(i + 1, f0, 0.035);
+        const c = at(i + 1, f1, 0);
+        const d = at(i, f1, 0);
+        const tri = side > 0 ? [a, c, b, a, d, c] : [a, b, c, a, c, d];
+        for (const p of tri) pos.push(...p);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    const c = jitter(tone, rng, 2).offsetHSL(0, 0, (k % 2 ? -0.03 : 0.02) + (k > strakes - 2 ? 0.04 : 0));
+    parts.push([g, c]);
+  }
+  // Keel, stem and sternpost: short timbers following the rocker and rising past the sheer.
+  const post = (z0: number, z1: number, y0: number, y1: number) => {
+    const dz = z1 - z0;
+    const dy = y1 - y0;
+    const l = Math.hypot(dz, dy);
+    const g = new THREE.BoxGeometry(0.12, 0.14, l).rotateX(-Math.atan2(dy, dz)).translate(0, (y0 + y1) / 2, (z0 + z1) / 2);
+    parts.push([g, "#4e3524"]);
+  };
+  for (let i = 0; i < 10; i++) {
+    const z0 = -L + (i / 10) * len * 0.96;
+    const z1 = -L + ((i + 1) / 10) * len * 0.96;
+    post(z0, z1, keel(z0) - 0.04, keel(z1) - 0.04);
+  }
+  const stemTop = sheer(L) + 0.45;
+  for (let i = 0; i < 4; i++) {
+    const a0 = (i / 4) * Math.PI * 0.5;
+    const a1 = ((i + 1) / 4) * Math.PI * 0.5;
+    const r = 0.35;
+    post(L * 0.96 + Math.sin(a0) * r - 0.1, L * 0.96 + Math.sin(a1) * r - 0.1, keel(L * 0.96) + (stemTop - keel(L)) * (i / 4), keel(L * 0.96) + (stemTop - keel(L)) * ((i + 1) / 4));
+  }
+  post(-L - 0.02, -L - 0.12, keel(-L), sheer(-L) + 0.25);
+  // Gunwale rails.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < stations; i++) {
+      const z0 = -L + (i / stations) * len;
+      const z1 = z0 + len / stations;
+      const x0 = side * halfWidth(z0);
+      const x1 = side * halfWidth(z1);
+      const y0 = sheer(z0);
+      const y1 = sheer(z1);
+      const l = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+      if (l < 1e-3) continue;
+      const g = new THREE.BoxGeometry(0.08, 0.07, l);
+      g.lookAt(new THREE.Vector3(x1 - x0, y1 - y0, z1 - z0));
+      g.translate((x0 + x1) / 2, (y0 + y1) / 2 + 0.02, (z0 + z1) / 2);
+      parts.push([g, "#5a3d2a"]);
+    }
+  }
+  return { parts, halfWidth, sheer };
 }

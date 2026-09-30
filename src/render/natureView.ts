@@ -3,8 +3,32 @@ import { MEMORIAL } from "../sim/econ/economy";
 import { Feature, FIELD_RIPE, TREE_MATURE, type LandUse } from "../sim/econ/landuse";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { broadleafGeometry, coniferGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
+import { birchGeometry, broadleafGeometry, coniferGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
 import { PainterlyMaterial } from "./painterly";
+import { Biome } from "../sim/planet/terrain";
+
+/** Tree species drawn for the simulation's trees; chosen per tile from climate and variety. */
+export enum Species {
+  Spruce,
+  Oak,
+  Birch,
+  Pine,
+  Palm,
+}
+
+/**
+ * Which species grows on a tile: spruce and birch in the cold, oak, birch and some pine in the
+ * temperate belt, pine on dry warm ground and palms on hot coasts and in deserts. Memorial trees
+ * are always oaks.
+ */
+export function speciesAt(temperature: number, moisture: number, biome: Biome, variety: number, memorial: boolean): Species {
+  if (memorial) return Species.Oak;
+  if (temperature < 5) return variety === 2 ? Species.Birch : Species.Spruce;
+  if (temperature < 14) return variety < 2 ? Species.Spruce : variety === 2 ? Species.Birch : Species.Pine;
+  if (temperature >= 22 && (biome === Biome.Beach || biome === Biome.Desert || variety === 3)) return Species.Palm;
+  if (moisture < 0.35 && variety !== 2) return Species.Pine;
+  return variety === 2 ? Species.Birch : variety === 3 && temperature < 18 ? Species.Spruce : Species.Oak;
+}
 
 /**
  * Trees, rocks and stumps from the simulation's tile features, drawn as instanced meshes and
@@ -13,13 +37,17 @@ import { PainterlyMaterial } from "./painterly";
  */
 export class NatureView {
   readonly group = new THREE.Group();
-  private readonly conifers: THREE.InstancedMesh;
-  private readonly broadleaves: THREE.InstancedMesh;
+  /** One instanced mesh per Species. */
+  private readonly trees: THREE.InstancedMesh[];
+  /** Full and lighter tree geometry per Species; the lighter set is used at low vegetation. */
+  private readonly treeGeo: { full: THREE.BufferGeometry; lite: THREE.BufferGeometry }[];
   private readonly rocks: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
   private readonly soil: THREE.InstancedMesh;
   private readonly rows: THREE.InstancedMesh;
   private readonly signs: THREE.InstancedMesh;
+  /** Crowns of leaf-dropping trees (x, y, z, leaf fall 0..1) for the falling-leaf effect. */
+  crowns = new Float32Array(0);
   private signVersion = -1;
   private version = -1;
   private maskVersion = -1;
@@ -47,8 +75,18 @@ export class NatureView {
       this.group.add(m);
       return m;
     };
-    this.conifers = make(coniferGeometry(), capacity * 3, treeMat);
-    this.broadleaves = make(broadleafGeometry(), capacity * 3, treeMat);
+    // Palm fronds are thin sheets: drawn from both sides.
+    const palmMat = new PainterlyMaterial({ vertexColors: true, wind: 1.3, brush: 1.2, side: THREE.DoubleSide });
+    const palm = palmGeometry();
+    this.treeGeo = [
+      { full: coniferGeometry(), lite: coniferGeometry(true) },
+      { full: broadleafGeometry(), lite: broadleafGeometry(true) },
+      { full: birchGeometry(), lite: birchGeometry(true) },
+      { full: pineGeometry(), lite: pineGeometry(true) },
+      { full: palm, lite: palm },
+    ];
+    const sizes = [3, 3, 2, 2, 1];
+    this.trees = this.treeGeo.map((g, i) => make(g.full, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
     this.rocks = make(rockGeometry(), capacity);
     this.stumps = make(stumpGeometry(), capacity);
     this.soil = make(fieldSoilGeometry(), capacity);
@@ -69,6 +107,10 @@ export class NatureView {
     this.version = this.land.featureVersion;
     this.maskVersion = this.mask.version;
     this.density = density;
+    for (let i = 0; i < this.trees.length; i++) {
+      const g = this.treeGeo[i] as { full: THREE.BufferGeometry; lite: THREE.BufferGeometry };
+      (this.trees[i] as THREE.InstancedMesh).geometry = density < 0.5 ? g.lite : g.full;
+    }
     const land = this.land;
     const n = land.planet.grid.count;
     const m = new THREE.Matrix4();
@@ -76,7 +118,10 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { c: 0, b: 0, r: 0, s: 0, f: 0 };
+    const counts = { r: 0, s: 0, f: 0 };
+    const treeCount = this.trees.map(() => 0);
+    const crowns: number[] = [];
+    const { temperature, moisture, biome } = land.planet.terrain;
     const green = new THREE.Color("#6f9a45");
     const gold = new THREE.Color("#e2c060");
     const perTile = 1 + Math.round(density * 2);
@@ -92,7 +137,9 @@ export class NatureView {
       if (f === Feature.Tree) {
         const stage = (land.amount[t] as number) / TREE_MATURE;
         const memorial = land.variety[t] === MEMORIAL;
-        const conifer = !memorial && ((land.variety[t] as number) < 2 ? (land.planet.terrain.temperature[t] as number) < 14 : (land.variety[t] as number) === 3);
+        const species = speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, memorial);
+        // Spruce and pine keep their needles; the rest turn and drop their leaves (palms do not).
+        const evergreen = species === Species.Spruce || species === Species.Pine || species === Species.Palm;
         const k = stage < 1 || memorial ? 1 : perTile;
         for (let i = 0; i < k; i++) {
           const h1 = SurfaceFrames.hash(t, i * 3 + 1);
@@ -105,8 +152,8 @@ export class NatureView {
           const sc = (0.25 + 0.75 * stage) * (0.75 + 0.5 * SurfaceFrames.hash(t, i + 9)) * (i === 0 ? 1.1 : 0.85);
           s.set(sc, sc * (0.9 + 0.3 * h2), sc);
           m.compose(p, q, s);
-          const mesh = conifer ? this.conifers : this.broadleaves;
-          const idx = conifer ? counts.c++ : counts.b++;
+          const mesh = this.trees[species] as THREE.InstancedMesh;
+          const idx = (treeCount[species] as number)++;
           if (idx >= mesh.instanceMatrix.count) continue;
           mesh.setMatrixAt(idx, m);
           if (memorial) color.setRGB(2.4, 1.35, 1.9);
@@ -114,11 +161,18 @@ export class NatureView {
             color.setRGB(0.85 + 0.3 * h2, 0.85 + 0.3 * h2 + 0.05 * h1, 0.85 + 0.25 * h2);
             const sea = this.season(t);
             // Broadleaves turn gold and red in autumn and go bare-brown in winter; snow whitens all.
-            if (!conifer && sea.autumn > 0) color.lerp(new THREE.Color(1.9 + 0.5 * h1, 0.95 + 0.4 * h2, 0.35), sea.autumn * (0.6 + 0.4 * h1));
-            if (!conifer && sea.bare > 0) color.lerp(new THREE.Color(0.95, 0.75, 0.6), sea.bare);
-            if (sea.snow > 0.15) color.lerp(new THREE.Color(1.6, 1.65, 1.75), Math.min(0.7, sea.snow) * (conifer ? 0.7 : 0.5));
+            // Birches go butter-yellow, oaks gold and russet.
+            const turn = species === Species.Birch ? new THREE.Color(1.75 + 0.2 * h1, 1.35 + 0.2 * h2, 0.35) : new THREE.Color(1.9 + 0.5 * h1, 0.95 + 0.4 * h2, 0.35);
+            if (!evergreen && sea.autumn > 0) color.lerp(turn, sea.autumn * (0.6 + 0.4 * h1));
+            if (!evergreen && sea.bare > 0) color.lerp(new THREE.Color(0.95, 0.75, 0.6), sea.bare);
+            if (sea.snow > 0.15) color.lerp(new THREE.Color(1.6, 1.65, 1.75), Math.min(0.7, sea.snow) * (evergreen ? 0.7 : 0.5));
           }
           mesh.setColorAt(idx, color);
+          if (!evergreen && !memorial && stage >= 1) {
+            const sea = this.season(t);
+            const fall = Math.min(1, sea.autumn * 0.8 + sea.bare * 0.6);
+            if (fall > 0.05) crowns.push(p.x + up.x * sc * 1.25, p.y + up.y * sc * 1.25, p.z + up.z * sc * 1.25, fall);
+          }
         }
       } else if (f === Feature.Rock) {
         this.frames.orient(base, null, q);
@@ -149,9 +203,9 @@ export class NatureView {
         if (counts.s < this.stumps.instanceMatrix.count) this.stumps.setMatrixAt(counts.s++, m);
       }
     }
+    this.crowns = new Float32Array(crowns);
     for (const [mesh, c] of [
-      [this.conifers, counts.c],
-      [this.broadleaves, counts.b],
+      ...this.trees.map((m, i) => [m, treeCount[i] as number] as const),
       [this.rocks, counts.r],
       [this.stumps, counts.s],
       [this.soil, counts.f],
@@ -189,6 +243,10 @@ export class NatureView {
   }
 
   dispose(): void {
+    for (const g of this.treeGeo) {
+      g.full.dispose();
+      g.lite.dispose();
+    }
     for (const c of this.group.children) {
       const m = c as THREE.InstancedMesh;
       m.geometry.dispose();

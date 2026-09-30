@@ -561,6 +561,9 @@ export class EconView {
       const c = (mesh.userData.meta as BuildingMeta | undefined)?.chimney;
       const occupied = b.def.storage || b.worker >= 0 || (b.def.id === "house" && this.eco.people.some((p) => p.alive && p.house === b.id));
       if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
+      // Forges throw embers up the chimney while they work.
+      if (c && (b.def.id === "smelter" || b.def.id === "goldsmith" || b.def.id === "toolsmith") && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
+        get(`e${b.id}`, "ember", 6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
       if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);
     }
