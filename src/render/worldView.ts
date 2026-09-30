@@ -12,6 +12,7 @@ import { GrassPatch } from "./grass";
 import { Undergrowth } from "./undergrowth";
 import { AmbientFx } from "./ambientFx";
 import { FireView } from "./fireView";
+import { FrontierView } from "./frontierView";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -55,8 +56,10 @@ export class WorldView {
   readonly weather = new WeatherFx();
   readonly ambient = new AmbientFx();
   readonly fire: FireView;
+  readonly frontier: FrontierView;
   private climateVersion = -1;
   private climateTimer = 0;
+  private ashVersion = 0;
   private wearVersion = -1;
   /** Fog of war for the viewing player. */
   readonly mask: FogMask = { explored: undefined, visible: undefined, version: 0 };
@@ -112,6 +115,7 @@ export class WorldView {
     this.undergrowth = new Undergrowth(world.land, this.frames, this.mask);
     this.fauna = new Fauna(world.land, world.economy, this.frames);
     this.fire = new FireView(world.economy, this.frames, this.mask);
+    this.frontier = new FrontierView(world.economy, this.frames, this.rivers, this.mask);
     this.nature.ecology = world.economy.ecology;
     this.grass.cover = world.economy.ecology;
     this.undergrowth.cover = world.economy.ecology;
@@ -119,6 +123,7 @@ export class WorldView {
       this.terrain.group,
       this.water,
       this.rivers.group,
+      this.frontier.group,
       this.weather.group,
       this.ambient.group,
       this.fire.flames.mesh,
@@ -175,9 +180,11 @@ export class WorldView {
       this.waterU.rain.value *= 0.95;
     }
     this.climateTimer -= p.dt;
-    if (this.climateTimer > 0 || w.climate.version === this.climateVersion) return;
+    const key = w.climate.version * 1000 + w.land.ashVersion;
+    if (w.land.ashVersion === this.ashVersion && (this.climateTimer > 0 || key === this.climateVersion)) return;
+    this.ashVersion = w.land.ashVersion;
     this.climateTimer = 1;
-    this.climateVersion = w.climate.version;
+    this.climateVersion = key;
     const td = this.tileData;
     for (let t = 0; t < w.planet.grid.count; t++) {
       td.set(t, "snow", w.land.snowCover[t] as number);
@@ -192,7 +199,9 @@ export class WorldView {
         sum += sc[m] as number;
         k++;
       }
-      td.set(t, "scorch", sum / k / 255);
+      // Volcanic ash shares the channel as a negative value (ash falls where fire has not).
+      const ash = w.land.ash[t] as number;
+      td.set(t, "scorch", ash > 0.02 ? -ash : sum / k / 255);
     }
     td.commit();
     // Orchards blossom in spring (at the view).
@@ -265,7 +274,7 @@ export class WorldView {
     this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
-    const fires = this.fire.update(p.time, p.focus);
+    const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness)];
     this.particles.update(p.dt, p.closeness > 0.2 ? [...this.econ.emitters(), ...fires] : fires, wind, light, p.pixelRatio, p.particles);
     {
       // Motes in warm, dry daylight, most of all when the sun is low.
@@ -354,6 +363,7 @@ export class WorldView {
     this.fauna.dispose();
     this.particles.dispose();
     this.fire.dispose();
+    this.frontier.dispose();
     this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();

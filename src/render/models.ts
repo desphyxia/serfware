@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import * as kit from "./kit";
-import { buildBuilding } from "./buildings";
+import { buildBuilding, sledgeParts } from "./buildings";
 
 /**
  * Procedural low-poly models. Each part is a primitive with a flat vertex colour; parts are
@@ -383,6 +383,45 @@ export function rockGeometry(): THREE.BufferGeometry {
   ]);
 }
 
+/**
+ * A geothermal vent: a low cone of rust-red, sulphur-crusted rock with a dark throat that glows
+ * orange inside. Pressure is shown by the renderer (instance colour, steam).
+ */
+export function ventGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(211);
+  const parts: Part[] = [];
+  // The cone: a ring of slabs leaning in toward the throat.
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * Math.PI * 2 + rng.range(-0.1, 0.1);
+    const r = rng.range(0.42, 0.55);
+    const g = new THREE.DodecahedronGeometry(rng.range(0.2, 0.3), 0).scale(1, 0.75, 0.7).rotateZ(0.5).rotateY(-a).translate(Math.cos(a) * r, 0.14, Math.sin(a) * r);
+    parts.push([g, kit.jitter(rng.pick(["#8a4a32", "#6e3a2a", "#9a6a44"]), rng, 1.5)]);
+  }
+  parts.push([kit.cyl(0.42, 0.7, 0.2, 12), "#5a3a2c"]);
+  // Sulphur crust on the rim.
+  for (let i = 0; i < 9; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    parts.push([new THREE.IcosahedronGeometry(rng.range(0.04, 0.08), 0).scale(1, 0.4, 1).translate(Math.cos(a) * 0.38, 0.27, Math.sin(a) * 0.38), kit.jitter("#d8c04a", rng, 1)]);
+  }
+  // The throat: dark, then glowing deeper in.
+  parts.push([kit.cyl(0.26, 0.22, 0.04, 10, 0, 0.21), "#1a1210"], [kit.cyl(0.14, 0.14, 0.03, 8, 0, 0.23), "#ff9a3a"]);
+  // Scattered glassy cinders.
+  for (let i = 0; i < 6; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(0.75, 1.1);
+    parts.push([new THREE.OctahedronGeometry(rng.range(0.05, 0.09), 0).scale(1, 1.3, 0.8).translate(Math.cos(a) * r, 0.03, Math.sin(a) * r), kit.jitter("#1c1a22", rng, 1)]);
+  }
+  return merge(parts);
+}
+
+/** A sledge (front +Z), for carriers on snow and ice; the dog is drawn with the animals. */
+export function sledgeGeometry(): THREE.BufferGeometry {
+  const parts = sledgeParts(new kit.Rng(19));
+  // The traces to the dog.
+  for (const x of [-0.08, 0.08]) parts.push([kit.box(0.008, 0.008, 0.36, x, 0.14, 0.48), kit.C.rope]);
+  return merge(parts);
+}
+
 export function flagGeometry(): THREE.BufferGeometry {
   return merge([
     [cyl(0.035, 0.045, 1.05, 5), "#d8cbb0"],
@@ -459,6 +498,10 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
       break;
     case "ironore":
       parts = lumps("#a0583f", 4, 0.055);
+      break;
+    case "obsidian":
+      // Volcanic glass: black, conchoidal shards with a faint violet sheen.
+      parts = [0, 1, 2].map((i) => [new THREE.OctahedronGeometry(0.06 + i * 0.012, 0).scale(1, 1.5, 0.7).rotateZ(0.4 * i).translate((i - 1) * 0.06, 0.07, (i % 2) * 0.03), kit.jitter(i === 1 ? "#2a2436" : "#16141c", rng, 1)] as Part);
       break;
     case "goldore":
       parts = lumps("#c9a24a", 4, 0.055);

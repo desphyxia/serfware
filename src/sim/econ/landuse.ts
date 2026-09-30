@@ -30,6 +30,8 @@ export enum Feature {
   Hedge = 6,
   /** An ancient giant (Canopy Deeps). Amount: logs left; variety 1 = marked for felling. */
   Giant = 7,
+  /** A geothermal vent (Emberglass Steppe). Amount: pressure 0..255; it erupts when full. */
+  Vent = 8,
 }
 
 /** Tree varieties: 0..3 are wild or planted timber; these are special and never felled. */
@@ -108,6 +110,16 @@ export class LandUse {
   readonly snowCover: Float32Array;
   /** Region (game biome) of each tile; 0 for water. */
   readonly region: Uint8Array;
+  /** Lake tiles frozen hard enough to walk and lay roads on (set by the climate). */
+  readonly frozen: Uint8Array;
+  iceVersion = 0;
+  /** Bitter cold right now (below -2 °C, set by the climate): walking off-road is slow unless warm. */
+  readonly chill: Uint8Array;
+  /** Within reach of a hearth or a heated waystation (set by the economy). */
+  readonly warm: Uint8Array;
+  /** Volcanic ash on the ground after an eruption (0..1): richer soil, grey until it weathers in. */
+  readonly ash: Float32Array;
+  ashVersion = 0;
 
   constructor(readonly planet: Planet) {
     const n = planet.grid.count;
@@ -129,6 +141,10 @@ export class LandUse {
     this.snowCover = new Float32Array(n);
     this.hydro = computeHydrology(planet);
     this.region = new Uint8Array(n);
+    this.frozen = new Uint8Array(n);
+    this.chill = new Uint8Array(n);
+    this.warm = new Uint8Array(n);
+    this.ash = new Float32Array(n);
     const { biome, temperature, moisture } = planet.terrain;
     for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t));
     this.soil = new Float32Array(n);
@@ -140,9 +156,20 @@ export class LandUse {
     return REGIONS[(this.region[t] ?? 0) as Region];
   }
 
+  /** A lake frozen over: walkable, and roads may cross it until the thaw. */
+  isIce(t: number): boolean {
+    return this.frozen[t] === 1 && this.hydro.lake[t] === 1;
+  }
+
   /** A river runs through this tile. */
   isRiver(t: number): boolean {
     return this.isLand(t) && (this.hydro.flow[t] as number) >= this.hydro.riverFlow;
+  }
+
+  /** A geothermal vent next door (or within `r` steps). */
+  nearVent(t: number, r = 1): boolean {
+    for (const n of r === 1 ? this.planet.grid.neighborsOf(t) : this.ring(t, r)) if (this.feature[n] === Feature.Vent) return true;
+    return false;
   }
 
   /** Fresh or salt water within `r` steps, for irrigation. */
@@ -187,6 +214,10 @@ export class LandUse {
         this.feature[t] = Feature.Rock;
         this.amount[t] = rng.int(4, 9);
         this.variety[t] = rng.int(0, 3);
+      } else if (this.region[t] === Region.EmberglassSteppe && r > 0.975 && this.slope(t) < 1.2 && !grid.neighborsOf(t).some((m) => this.feature[m] === Feature.Vent)) {
+        // Geothermal vents: steam, free heat for forges, and now and then an eruption.
+        this.feature[t] = Feature.Vent;
+        this.amount[t] = rng.int(0, 100);
       }
     }
     this.featureVersion++;
@@ -244,6 +275,7 @@ export class LandUse {
     }
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
     if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
+    if (def.terrain === "vent" && !this.nearVent(t)) return false;
     // Treehouses go up an ancient giant (which stays standing).
     if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
     return this.canBuild(t, flagTile, !!def.large, owner);
@@ -262,13 +294,15 @@ export class LandUse {
     return m;
   }
 
-  /** Settlers can walk here (land, not a building, no rock, not too steep). */
+  /** Settlers can walk here (land or lake ice, not a building, no rock, not too steep). */
   walkable(t: number): boolean {
-    return this.isLand(t) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock && this.feature[t] !== Feature.Giant;
+    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock && this.feature[t] !== Feature.Giant && this.feature[t] !== Feature.Vent;
   }
 
   /** A flag or road of `owner` may go here. */
   roadable(t: number, owner = 0): boolean {
+    // Ice roads: frozen lakes can be crossed (until they thaw).
+    if (this.isIce(t)) return this.territory[t] === owner + 1 && this.use[t] === Use.Free;
     return (
       this.isLand(t) &&
       this.territory[t] === owner + 1 &&
@@ -278,6 +312,7 @@ export class LandUse {
       this.feature[t] !== Feature.Hedge &&
       this.feature[t] !== Feature.Giant &&
       this.feature[t] !== Feature.Field &&
+      this.feature[t] !== Feature.Vent &&
       this.slope(t) < 2.2
     );
   }
@@ -295,7 +330,7 @@ export class LandUse {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
     const f = this.feature[t];
-    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant))) return false;
+    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
@@ -365,12 +400,29 @@ export class LandUse {
 
   /** Cost of stepping from a to b: longer uphill, cheaper on roads. */
   stepCost(a: number, b: number): number {
+    const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
+    // Lake ice is flat: sledges fly over it on a road, feet slip and slide off one.
+    if (this.isIce(b)) return road ? 0.5 : 1.15;
     const e = this.planet.terrain.elevation;
     const dh = (e[b] as number) - (e[a] as number);
-    const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
-    // Fording a river off-road is slow; mud and snow slow everyone.
-    const base = (road ? 0.7 : this.isRiver(b) ? 1.4 : 1) * (1 + 0.5 * (this.mud[b] as number) + 0.4 * (this.snowCover[b] as number));
+    const snow = this.snowCover[b] as number;
+    let base: number;
+    if (road) {
+      // Roads are packed and swept: on snow the carriers take to sledges and go faster.
+      base = (snow > 0.3 ? 0.55 : 0.7) * (1 + 0.5 * (this.mud[b] as number));
+    } else {
+      // Fording a river is slow; mud slows everyone; snow is deeper in the Rimefall drifts.
+      const drift = this.region[b] === Region.RimefallTundra ? 0.9 : 0.4;
+      base = (this.isRiver(b) ? 1.4 : 1) * (1 + 0.5 * (this.mud[b] as number) + drift * snow);
+      // Bitter cold saps walkers far from any hearth.
+      if (this.chill[b] && !this.warm[b]) base *= 1.35;
+    }
     return base * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15);
+  }
+
+  /** Carriers here ride a sledge (a road over snow or ice); for visuals. */
+  sledging(t: number): boolean {
+    return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(t) || (this.snowCover[t] as number) > 0.3);
   }
 
   /** A* over tiles. `ok` decides which tiles may be entered (the goal is always allowed). */

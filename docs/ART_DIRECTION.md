@@ -275,3 +275,23 @@ gentle grassy banks and a wet edge.
   tree crowns and a smaller undergrowth ring.
 
 After A7 we return to batch 11. The later biome batches (13–16) follow this document.
+
+### Rimefall and Emberglass (batch 14)
+
+- Rimefall ground leans lichen blue-grey; Emberglass ground leans rust and ochre (tile colour
+  blends in `terrain/field.ts`).
+- Frozen lakes turn milky blue-white with pressure cracks and snow drifts (`rivers.ts`,
+  `iceColour`), sitting `ICE_LIFT` proud of the water. Walkers, flags and roads stand on the
+  ice (`SurfaceFrames.ice`); ice roads are packed-snow ribbons with two runner tracks
+  (`frontierView.ts`), since the ground material can't reach under the lake.
+- Carriers on snowy roads or ice ride a sledge pulled by a sled dog (a new animal species);
+  waiting, they sit on it.
+- Aurora: curtains on a high sky plane, green at the hem and violet above, with drifting rays.
+  They show near the poles at night and feed bloom (`sky.ts`).
+- Vents are a low cone of rust slabs with a sulphur rim and an orange throat. They steam harder
+  as pressure builds. An eruption throws soot, embers and sparks for half a minute; ash lies
+  pale grey with cinders (stored as negative scorch in the tile data) and weathers away.
+- Rock near a vent is drawn as black volcanic glass; the obsidian good is a few violet-black
+  shards.
+- New kit: the waystation (stone hut, turf cone roof, fat chimney, guiding lantern, parked
+  sledge) and the greenhouse (glass over warm beds, fed by a clay steam pipe).

@@ -8,6 +8,7 @@ import { SpriteBatch } from "./sprites";
 import { mrt, output, vec4 } from "three/tsl";
 import { playerColor } from "./players";
 import { Anim, FigureBatch, Hat, Tool } from "./figures";
+import { AnimalBatch, Pose } from "./animals";
 import { siteGeometry, type BuildingMeta } from "./buildings";
 import {
   windmillRotor,
@@ -15,6 +16,7 @@ import {
   goodGeometry,
   flagGeometry,
   pennantGeometry,
+  sledgeGeometry,
 } from "./models";
 
 export const GOOD_COLORS: Record<string, string> = {
@@ -41,6 +43,7 @@ const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Co
 const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS_EACH = 2500;
+const MAX_SLEDGES = 256;
 
 /** Tool goods to the tool a settler holds. */
 const TOOL_OF: Record<string, Tool> = {
@@ -93,6 +96,9 @@ export class EconView {
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
   private readonly figures = new FigureBatch(MAX_SETTLERS);
+  /** Carriers on snowy roads and lake ice ride sledges pulled by a dog. */
+  private readonly sledges: THREE.InstancedMesh;
+  private readonly dogs = new AnimalBatch("dog", MAX_SLEDGES);
   /** Debug: figures that are not in the simulation (see `showPoses`). */
   private poseGallery: { p: THREE.Vector3; q: THREE.Quaternion; colour: THREE.Color; anim: Anim; phase: number; hat: Hat; tool: Tool }[] = [];
   private figureCount = 0;
@@ -132,6 +138,8 @@ export class EconView {
     this.flagPoles = inst(flagGeometry(), propMat, 2000);
     this.pennants = inst(pennantGeometry(), flagMat, 2000, false);
     this.group.add(this.figures.mesh);
+    this.sledges = inst(sledgeGeometry(), propMat, MAX_SLEDGES);
+    this.group.add(this.dogs.mesh);
     const goodsMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 0.3 });
     this.goodMeshes = GOODS.map((g) => inst(goodGeometry(g.id), goodsMat, MAX_GOODS_EACH));
     this.goodCounts = GOODS.map(() => 0);
@@ -471,6 +479,7 @@ export class EconView {
     const load = new THREE.Vector3();
     const k = 1 - Math.exp(-dt * 12);
     let n = 0;
+    let nSledge = 0;
     const alive = new Set<number>();
     for (const s of this.eco.settlers) {
       if (!s.alive) continue;
@@ -498,10 +507,34 @@ export class EconView {
         const h = ((Math.imul(beat, 2654435761) + s.id * 97) >>> 0) % 10;
         anim = h < 4 ? Anim.Rest : h === 9 ? Anim.Wave : Anim.Idle;
       }
-      const bob = moving ? Math.abs(Math.sin(time * 11 + s.id * 1.7)) * 0.025 : 0;
+      const land = this.eco.land;
+      const here = s.path[s.pi] as number;
+      const next = s.path[Math.min(s.pi + 1, s.path.length - 1)] as number;
+      // Carriers on a snowy road or lake ice ride a sledge; waiting, they sit on it.
+      const sledging = s.role === "carrier" && !HIDDEN_STATES.has(s.state) && nSledge < MAX_SLEDGES && land.sledging(here) && land.sledging(next);
+      const bob = moving && !sledging ? Math.abs(Math.sin(time * 11 + s.id * 1.7)) * 0.025 : 0;
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);
       this.frames.orient(p, p.clone().add(heading), q);
       const colour = s.role === "warden" || s.role === "attacker" ? playerColor(s.owner) : ROLE_COLORS[s.role];
+      if (sledging) {
+        // Sitting on the back of the sledge, the load lashed in front, the dog out ahead.
+        const up = p.clone().normalize();
+        const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+        m.compose(p, q, one);
+        this.sledges.setMatrixAt(nSledge, m);
+        this.dogs.set(nSledge, p.clone().addScaledVector(fwd, 0.72), q, moving ? Pose.Run : Pose.Idle, s.id * 0.37);
+        nSledge++;
+        const seat = p.clone().addScaledVector(up, 0.12).addScaledVector(fwd, -0.14);
+        this.figures.set(n, seat, q, colour, Anim.Rest, (s.id * 0.618) % 1 * 10, look.hat, Tool.None);
+        this.instanceSettler[n] = s.id;
+        n++;
+        if (carrying) {
+          load.copy(p).addScaledVector(up, 0.13).addScaledVector(fwd, 0.1);
+          m.compose(load, q, one);
+          this.addGood(s.carrying, m);
+        }
+        continue;
+      }
       this.figures.set(n, p, q, colour, anim, (s.id * 0.618) % 1 * 10, look.hat, anim === Anim.Carry ? Tool.None : look.tool);
       this.instanceSettler[n] = s.id;
       n++;
@@ -520,6 +553,9 @@ export class EconView {
     }
     this.figureCount = n;
     this.figures.flush(n, time);
+    this.sledges.count = nSledge;
+    this.sledges.instanceMatrix.needsUpdate = true;
+    this.dogs.flush(nSledge, time);
     this.commitGoods();
   }
 
@@ -567,8 +603,9 @@ export class EconView {
       const mesh = this.buildings.get(b.id)?.mesh;
       if (!mesh) continue;
       const c = (mesh.userData.meta as BuildingMeta | undefined)?.chimney;
-      const occupied = b.def.storage || b.worker >= 0 || (!!b.def.home && this.eco.people.some((p) => p.alive && p.house === b.id));
-      if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
+      const occupied = b.def.storage || b.worker >= 0 || this.eco.heated(b) || (!!b.def.home && this.eco.people.some((p) => p.alive && p.house === b.id));
+      // Greenhouses breathe the vent's steam; a burning waystation smokes hard.
+      if (c && occupied) get(`c${b.id}`, b.def.terrain === "vent" ? "steam" : "smoke", b.def.storage ? 3 : b.def.heated ? 3.5 : 1.6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
       // Forges throw embers up the chimney while they work.
       if (c && (b.def.id === "smelter" || b.def.id === "goldsmith" || b.def.id === "toolsmith") && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`e${b.id}`, "ember", 6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
@@ -600,5 +637,7 @@ export class EconView {
     for (const v of this.buildings.values()) if (v.mesh.userData.site) v.mesh.geometry.dispose();
     for (const mesh of [this.flagPoles, this.pennants, ...this.goodMeshes]) mesh.dispose();
     this.figures.mesh.geometry.dispose();
+    this.sledges.dispose();
+    this.dogs.dispose();
   }
 }
