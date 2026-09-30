@@ -175,6 +175,7 @@ export class Game {
           this.view.setViewer(this.session.player, this.fogOn);
         },
         "Visit hamlet": () => this.visitHamlet(),
+        "Start a fire": () => this.toasts.show(this.startFire() >= 0 ? "Lightning strikes the woods nearby." : "No woods nearby to burn.", "warn"),
         "Starter chain": () => this.toasts.show(`Placed ${starterChain(this.world)} buildings with roads.`, "good"),
         "Test crash": () =>
           setTimeout(() => {
@@ -434,6 +435,40 @@ export class Game {
     this.focusPlayer(0, 30);
     this.clearWeather();
     this.toasts.show(`Hamlet: ${n} buildings placed.`, "good");
+  }
+
+  /**
+   * Debug: lightning in the driest woods near the camera focus (the land around is parched first),
+   * then `ticks` of the fire's spread. Returns the tile struck, or -1. Solo games only: this
+   * changes the simulation outside the command log.
+   */
+  startFire(ticks = 0, distance = 18): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy.ecology;
+    const f = this.cam.focus;
+    const centre = w.planet.grid.nearestTile([f.x, f.y, f.z], 0);
+    let best = -1;
+    let most = 0;
+    const seen = w.economy.visible[this.session.player];
+    for (const t of land.ring(centre, 12)) {
+      if (land.feature[t] !== Feature.Tree || (seen && seen[t] !== 1)) continue;
+      const n = land.ring(t, 2).filter((m) => land.feature[m] === Feature.Tree).length;
+      if (n > most) {
+        most = n;
+        best = t;
+      }
+    }
+    if (best < 0) return -1;
+    for (const t of [best, ...land.ring(best, 7)]) {
+      eco.dry[t] = 1;
+      land.mud[t] = 0;
+      land.snowCover[t] = 0;
+    }
+    eco.ignite(best);
+    for (let i = 0; i < ticks; i++) w.step();
+    this.focusTile(best, distance);
+    return best;
   }
 
   /** Screenshot hook: a row of settlers in every work pose near the camera focus. */

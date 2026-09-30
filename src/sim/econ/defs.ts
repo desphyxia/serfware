@@ -12,7 +12,7 @@ export interface GoodDef {
   arms?: boolean;
 }
 
-export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine";
+export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt";
 export type Category = "storage" | "materials" | "food" | "metal" | "lantern";
 
 export interface BuildingDef {
@@ -29,7 +29,7 @@ export interface BuildingDef {
   /** Tool the worker needs (and keeps while employed). */
   tool?: string;
   /** Placement rule beyond flat land. */
-  terrain?: "mountain" | "coast";
+  terrain?: "mountain" | "coast" | "aquifer";
   /** Mines: which deposit they dig. */
   resource?: "coal" | "iron" | "gold" | "granite";
   radius?: number;
@@ -45,6 +45,10 @@ export interface BuildingDef {
   foodPer?: number;
   /** Lantern buildings: light radius in tiles once a warden is inside. */
   light?: number;
+  /** Wells: quench fires and protect buildings within this many steps. */
+  well?: boolean;
+  /** Burns coal or wood at work: soot on the walls, embers up the chimney. */
+  forge?: boolean;
   /** Lantern buildings: warden places. */
   slots?: number;
 }

@@ -64,6 +64,7 @@ const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
   sawmill: { hat: Hat.Cap, tool: Tool.Saw, work: Anim.Saw },
   farm: { hat: Hat.Straw, tool: Tool.Scythe, work: Anim.Sow },
   fisher: { hat: Hat.Straw, tool: Tool.Rod, work: Anim.Fish },
+  hunter: { hat: Hat.Hood, tool: Tool.Sword, work: Anim.Dig },
   bakery: { hat: Hat.Cap, tool: Tool.Peel, work: Anim.Bake },
   mill: { hat: Hat.Cap, tool: Tool.None, work: Anim.Idle },
   butcher: { hat: Hat.Cap, tool: Tool.Cleaver, work: Anim.Chop },
@@ -81,7 +82,7 @@ const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
 export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
-  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8, snowy: true, playerTint: true });
+  private readonly buildingMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, windows: true, brush: 0.8, snowy: true, playerTint: true, weathered: true });
   /** Stranded buildings: greyed and dim, like something left behind. */
   private readonly strandedMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 1.2, overgrown: true, playerTint: true });
   /** Buildings under construction: the finished model, cut off at the height built so far. */
@@ -259,6 +260,7 @@ export class EconView {
       const cur = this.buildings.get(b.id);
       if (cur && cur.key === key) {
         if (stage === "rising") this.setClip(cur.mesh, progress);
+        (cur.mesh.userData.weather as THREE.Vector3).set(b.wear, b.moss, b.soot);
         continue;
       }
       if (cur) this.group.remove(cur.mesh);
@@ -269,6 +271,7 @@ export class EconView {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData.tint = playerColor(b.owner);
+      mesh.userData.weather = new THREE.Vector3(b.wear, b.moss, b.soot);
       mesh.userData.meta = meta;
       const p = this.frames.pos(b.tile, -0.05);
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
@@ -317,11 +320,14 @@ export class EconView {
       const geo = buildingGeometry(id, i);
       const meta = geo.userData.meta as BuildingMeta;
       const pr = progress?.[i] ?? 1;
-      // A negative progress shows the building stranded (left behind, overgrown).
+      // A negative progress shows the building stranded (left behind, overgrown); above 1, built
+      // and weathered by the excess (wear, moss and soot alike).
       const mesh = new THREE.Mesh(geo, pr < 0 ? this.strandedMat : pr >= 1 ? this.buildingMat : this.siteMat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData.tint = playerColor(owner);
+      const weather = Math.min(1, Math.max(0, pr - 1));
+      mesh.userData.weather = new THREE.Vector3(weather, weather, weather);
       mesh.userData.meta = meta;
       const d = from.clone().addScaledVector(dir, i * spacing).normalize();
       const p = d.multiplyScalar(this.frames.groundAt(d));

@@ -107,7 +107,7 @@ export function starterChain(w: World, player = 0): number {
   return n;
 }
 
-/** A fuller demo settlement: materials, food chain, a fisher and a toolsmith. */
+/** A fuller demo settlement: materials, food chain, a fisher, a toolsmith, a well and a hunter. */
 export function demoSettlement(w: World, player = 0): number {
   let n = starterChain(w, player);
   for (const [type, near] of [
@@ -121,6 +121,8 @@ export function demoSettlement(w: World, player = 0): number {
     ["house", undefined],
     ["house", undefined],
     ["house", undefined],
+    ["well", undefined],
+    ["hunter", Feature.Tree],
   ] as const) if (placeConnected(w, type, { minDist: 2, maxDist: 9, near, player })) n++;
   const keep = w.economy.buildings[w.economy.keeps[player] ?? -1];
   if (keep) w.command({ t: "geologist", flagTile: w.economy.flags[keep.flag]!.tile, player });

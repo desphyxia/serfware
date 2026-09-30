@@ -102,6 +102,8 @@ class PainterlyLightingModel extends THREE.PhysicalLightingModel {
   }
 }
 
+const ZERO3 = new THREE.Vector3();
+
 export interface PainterlyOptions {
   color?: THREE.ColorRepresentation;
   vertexColors?: boolean;
@@ -121,6 +123,12 @@ export interface PainterlyOptions {
   overgrown?: boolean;
   /** Construction: nothing above the object's `userData.clip` height (model space) is drawn. */
   clip?: boolean;
+  /**
+   * Weathering from the object's `userData.weather` (wear, moss, soot; 0..1 each): streaked,
+   * faded walls, moss on roofs and plinths, soot high on forge walls. Windows and the owner's
+   * colour stay clean.
+   */
+  weathered?: boolean;
   emissive?: THREE.ColorRepresentation;
   transparent?: boolean;
   opacity?: number;
@@ -149,7 +157,7 @@ export class PainterlyMaterial extends THREE.MeshStandardNodeMaterial {
       const n = big.mul(0.6).add(fine.mul(0.4));
       this.colorNode = materialColor.mul(float(1).add(n.mul(0.09 * brush)));
     }
-    if (o.snowy || o.playerTint || o.overgrown || o.clip) {
+    if (o.snowy || o.playerTint || o.overgrown || o.clip || o.weathered) {
       // Fold the vertex colour in here (so the material doesn't multiply it again), then apply
       // the per-object touches.
       const raw = vec3(vertexColor());
@@ -166,6 +174,24 @@ export class PainterlyMaterial extends THREE.MeshStandardNodeMaterial {
         col = mix(col, vec3(grey), 0.55).mul(0.55);
         const moss = smoothstep(0.1, 0.45, mx_noise_float(positionWorld.mul(1.7)).add(float(0.35).sub(positionGeometry.y.mul(0.3))).add(wUp.mul(0.2)));
         col = mix(col, vec3(0.16, 0.24, 0.1).mul(float(0.8).add(patch)), moss.mul(0.8));
+      }
+      if (o.weathered) {
+        const w = uniform(new THREE.Vector3()).onObjectUpdate(({ object }) => (object?.userData.weather as THREE.Vector3 | undefined) ?? ZERO3);
+        const isWindow = step(0.95, raw.x).mul(step(0.55, raw.y)).mul(step(raw.y, 0.8)).mul(step(0.15, raw.z)).mul(step(raw.z, 0.4));
+        const isPlayer = step(0.95, raw.x).mul(step(raw.y, 0.05)).mul(step(0.95, raw.z));
+        const clean = float(1).sub(isWindow).sub(isPlayer).max(0);
+        const y = positionGeometry.y;
+        // Wear: rain streaks down the walls and a greyer, flatter tone.
+        const streak = smoothstep(0.35, 0.7, mx_noise_float(vec3(positionWorld.x.mul(9), positionWorld.y.mul(0.8), positionWorld.z.mul(9)))).mul(float(1).sub(wUp.max(0)));
+        const grey = dot(col, vec3(0.3, 0.59, 0.11));
+        const worn = mix(col, vec3(grey).mul(0.95), w.x.mul(0.35)).mul(float(1).sub(streak.mul(w.x).mul(0.3)));
+        // Moss: on roofs and low on the walls, in patches.
+        const mossy = smoothstep(0.2, 0.6, mx_noise_float(positionWorld.mul(2.3)).add(wUp.max(0).mul(0.4)).add(float(0.3).sub(y.mul(0.4)).max(0)))
+          .mul(w.y);
+        const withMoss = mix(worn, vec3(0.2, 0.3, 0.12).mul(float(0.85).add(patch)), mossy.mul(0.75));
+        // Soot: darkest high up, in drifts.
+        const sooty = smoothstep(0.4, 1.6, y.add(mx_noise_float(positionWorld.mul(1.9)).mul(0.6))).mul(w.z);
+        col = mix(col, withMoss.mul(float(1).sub(sooty.mul(0.7))), clean);
       }
       if (o.snowy) {
         const cover = smoothstep(0.5, 0.8, wUp.add(patch)).mul(smoothstep(0.05, 0.6, PAINT.snow.add(patch.mul(0.5))));

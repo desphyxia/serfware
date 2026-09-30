@@ -161,6 +161,18 @@
       }
     },
     {
+      "id": "well",
+      "name": "Well",
+      "category": "storage",
+      "description": "Draws groundwater. Bucket lines put out fires within five steps and keep them off nearby buildings. Dig it where the ground holds water.",
+      "cost": {
+        "stone": 2,
+        "plank": 1
+      },
+      "terrain": "aquifer",
+      "well": true
+    },
+    {
       "id": "woodcutter",
       "name": "Woodcutter",
       "category": "materials",
@@ -274,7 +286,8 @@
       "inputStock": 4,
       "workTicks": 60,
       "restTicks": 10,
-      "produces": "bread"
+      "produces": "bread",
+      "forge": true
     },
     {
       "id": "fisher",
@@ -291,6 +304,20 @@
       "workTicks": 90,
       "restTicks": 40,
       "produces": "fish"
+    },
+    {
+      "id": "hunter",
+      "name": "Hunter",
+      "category": "food",
+      "description": "Stalks deer in the woods nearby and brings back meat. Hunt too hard and the herds thin out.",
+      "cost": {
+        "plank": 2
+      },
+      "job": "hunt",
+      "radius": 7,
+      "workTicks": 110,
+      "restTicks": 60,
+      "produces": "meat"
     },
     {
       "id": "pasture",
@@ -438,7 +465,8 @@
       "inputStock": 3,
       "workTicks": 90,
       "restTicks": 10,
-      "produces": "iron"
+      "produces": "iron",
+      "forge": true
     },
     {
       "id": "goldsmith",
@@ -458,7 +486,8 @@
       "inputStock": 3,
       "workTicks": 100,
       "restTicks": 10,
-      "produces": "gold"
+      "produces": "gold",
+      "forge": true
     },
     {
       "id": "toolsmith",
@@ -478,7 +507,8 @@
       "inputStock": 3,
       "workTicks": 80,
       "restTicks": 10,
-      "produces": "tool"
+      "produces": "tool",
+      "forge": true
     },
     {
       "id": "lantern",
@@ -535,7 +565,8 @@
       "inputStock": 3,
       "workTicks": 110,
       "restTicks": 10,
-      "produces": "blade"
+      "produces": "blade",
+      "forge": true
     },
     {
       "id": "bowyer",

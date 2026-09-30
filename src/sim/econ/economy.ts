@@ -20,7 +20,8 @@ import {
   type BuildingDef,
 } from "./defs";
 import { MinHeap } from "./heap";
-import type { Climate } from "../climate/climate";
+import { CLIMATE_STEP, type Climate } from "../climate/climate";
+import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
 import { Deposit, DEPOSIT_IDS, Feature, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
@@ -112,6 +113,13 @@ export interface Building {
   duel: { attacker: number; defender: number; until: number } | null;
   /** Hearthships: militia raised today (at most five a day). */
   levy: number;
+  /** Weathering 0..1: rain and years wear it; at half, it asks for a plank (or stone) of upkeep. */
+  wear: number;
+  /** Soot on forge walls and moss on damp roofs, 0..1 (looks only). */
+  soot: number;
+  moss: number;
+  /** Fire damage: at 3 it burns down (the Hearthship only chars). */
+  burn: number;
   alive: boolean;
 }
 
@@ -225,9 +233,57 @@ export class Economy {
   /** Bumped when territory or sight changes. */
   visionVersion = 0;
   private territoryDirty = false;
+  /** Fire, succession, erosion, groundwater, wildlife and pollinators. */
+  readonly ecology: Ecology;
+  /** Per tile: covered by a working well (rebuilt when buildings change). */
+  private wellMap: Uint8Array;
+  private wellMapVersion = -1;
 
   constructor(readonly land: LandUse) {
     this.dayTicks = ticksPerDay(land.planet.params.dayLengthHours);
+    this.wellMap = new Uint8Array(land.planet.grid.count);
+    this.ecology = new Ecology(land, {
+      dayLength: this.dayTicks,
+      wellCovers: (t) => this.wellCovers(t),
+      scorchBuilding: (t) => this.scorchBuilding(t),
+      seedling: (t) => this.growing.push(t),
+      temp: (t) => this.climate?.temp[t] ?? (land.planet.terrain.temperature[t] as number),
+      rain: (t) => this.climate?.rain[t] ?? 0,
+      notifyFire: (t) => {
+        const owner = (land.territory[t] as number) - 1;
+        if (owner >= 0) this.notify(owner, "Lightning has started a fire on your land! Wells nearby put fires out.");
+      },
+    });
+    land.aquifer = this.ecology.aquifer;
+  }
+
+  /** A built well with water in it covers this tile. */
+  wellCovers(t: number): boolean {
+    if (this.wellMapVersion !== this.structureVersion) {
+      this.wellMapVersion = this.structureVersion;
+      this.wellMap.fill(0);
+      for (const b of this.buildings) {
+        if (!b.alive || !b.built || !b.def.well) continue;
+        this.wellMap[b.tile] = 1;
+        for (const m of this.land.ring(b.tile, WELL_REACH)) this.wellMap[m] = 1;
+      }
+    }
+    return this.wellMap[t] === 1;
+  }
+
+  /** Fire licks at the building on this tile. */
+  private scorchBuilding(t: number): void {
+    const b = this.buildingAt(t);
+    if (!b || !b.alive) return;
+    b.wear = Math.min(1, b.wear + 0.15);
+    b.soot = Math.min(1, b.soot + 0.3);
+    if (this.keeps.includes(b.id) || !b.built) return;
+    b.burn++;
+    if (b.burn === 1) this.notify(b.owner, `Your ${b.def.name.toLowerCase()} has caught fire! A well within five steps would save it.`);
+    if (b.burn >= 3) {
+      this.notify(b.owner, `Your ${b.def.name.toLowerCase()} has burned down.`);
+      this.removeBuilding(b);
+    }
   }
 
   // ------------------------------------------------------------------ setup
@@ -369,7 +425,8 @@ export class Economy {
     let hedge = 0;
     for (const n of land.planet.grid.neighborsOf(t)) if (land.feature[n] === Feature.Tree) hedge = 0.15;
     const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge;
-    return Math.round(FIELD_GROWTH_TICKS / f);
+    // Bees and other pollinators from wild ground nearby help the crop along.
+    return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t)));
   }
 
   /** Soil rests: land that isn't farmed slowly regains its nitrogen. */
@@ -377,6 +434,8 @@ export class Economy {
     const land = this.land;
     for (let t = 0; t < land.soil.length; t++) {
       if (!land.isLand(t) || land.feature[t] === Feature.Field) continue;
+      // Bare, washed slopes don't recover while they stay bare.
+      if ((this.ecology.cover[t] as number) < 90 && land.slope(t) > 0.9) continue;
       const cap = Math.min(1, 0.35 + 0.5 * (land.planet.terrain.moisture[t] as number) + (land.isRiver(t) ? 0.15 : 0));
       if ((land.soil[t] as number) < cap) land.soil[t] = Math.min(cap, (land.soil[t] as number) + 0.03);
     }
@@ -545,6 +604,7 @@ export class Economy {
   private placementHint(def: BuildingDef): string {
     if (def.terrain === "mountain") return `${def.name}s go on mountain slopes inside your border.`;
     if (def.terrain === "coast") return `${def.name}s must be built near water.`;
+    if (def.terrain === "aquifer") return "There's too little groundwater here for a well. Try lower, wetter ground near rivers.";
     return "You can't build here.";
   }
 
@@ -588,6 +648,7 @@ export class Economy {
   private createFlag(tile: number, owner: number): Flag {
     const f: Flag = { id: this.flags.length, owner, tile, goods: [], reserved: 0, roads: [], building: -1, alive: true };
     this.flags.push(f);
+    this.clearShrub(tile);
     this.land.use[tile] = Use.Flag;
     this.land.ref[tile] = f.id;
     this.structureVersion++;
@@ -603,6 +664,7 @@ export class Economy {
     (this.flags[b] as Flag).roads.push(r.id);
     for (let i = 1; i < tiles.length - 1; i++) {
       const t = tiles[i] as number;
+      this.clearShrub(t);
       this.land.use[t] = Use.Road;
       this.land.ref[t] = r.id;
     }
@@ -643,6 +705,10 @@ export class Economy {
       siege: [],
       duel: null,
       levy: 0,
+      wear: 0,
+      soot: 0,
+      moss: 0,
+      burn: 0,
       alive: true,
     };
     this.buildings.push(b);
@@ -657,6 +723,13 @@ export class Economy {
     this.structureVersion++;
     land.useVersion++;
     return b;
+  }
+
+  private clearShrub(t: number): void {
+    if (this.land.feature[t] === Feature.Shrub) {
+      this.land.feature[t] = Feature.None;
+      this.land.featureVersion++;
+    }
   }
 
   /** Put a flag on a road tile, splitting the road in two. */
@@ -836,6 +909,8 @@ export class Economy {
     if (!b.alive) return 0;
     if (!b.built) return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
     if (b.stranded >= 0) return 0;
+    const upkeep = this.upkeepNeed(b, type);
+    if (upkeep > 0) return upkeep;
     if (b.def.slots) return this.armsNeed(b, type);
     if (b.worker < 0 || b.exhausted) return 0;
     const key = inputKeyFor(b.def, type);
@@ -844,6 +919,49 @@ export class Economy {
     let have = 0;
     for (const g of goodsFor(key)) have += (b.stock[g] as number) + (b.pending[g] as number);
     return (b.def.inputStock ?? 4) - have;
+  }
+
+  /** Good a building mends itself with: stone for stone-built ones, else plank. */
+  upkeepGood(b: Building): number {
+    return (b.cost[goodId("stone")] as number) > (b.cost[goodId("plank")] as number) ? goodId("stone") : goodId("plank");
+  }
+
+  /**
+   * Upkeep: a weathered building (wear at half or more) asks for one unit of its upkeep good.
+   * Storage and buildings that already take that good as an input mend from their own stock.
+   */
+  private upkeepNeed(b: Building, type: number): number {
+    if (b.wear < 0.5 || b.def.storage || type !== this.upkeepGood(b) || inputKeyFor(b.def, type)) return 0;
+    return 1 - (b.stock[type] as number) - (b.pending[type] as number);
+  }
+
+  /** Daily weathering, soot and moss; mending when the upkeep good is at hand. */
+  private weather(): void {
+    const land = this.land;
+    for (const b of this.buildings) {
+      if (!b.alive || !b.built) continue;
+      const damp = (land.mud[b.tile] as number) + (land.planet.terrain.moisture[b.tile] as number) * 0.5;
+      b.wear = Math.min(1, b.wear + 0.018 + damp * 0.012);
+      if (b.wear > 0.3) b.moss = Math.min(1, b.moss + damp * 0.03);
+      if (b.def.forge && b.worker >= 0) b.soot = Math.min(1, b.soot + 0.04);
+      b.soot = Math.max(0, b.soot - 0.005);
+      if (b.burn > 0) b.burn = Math.max(0, b.burn - 1);
+      if (b.wear < 0.5) continue;
+      const g = this.upkeepGood(b);
+      if ((b.stock[g] as number) > 0) {
+        b.stock[g]!--;
+        b.wear = 0.08;
+        b.moss *= 0.4;
+        b.soot *= 0.5;
+      }
+    }
+    // Wells draw on the groundwater.
+    for (const b of this.buildings) if (b.alive && b.built && b.def.well) this.ecology.draw(b.tile, 0.04);
+  }
+
+  /** Worn-out buildings (wear above 0.85) work at two-thirds speed. */
+  wearSpeed(b: Building): number {
+    return b.wear > 0.85 ? 1.5 : 1;
   }
 
   /** Distribution weight (0..1) of a building for a good; 0 means it gets none. */
@@ -1946,7 +2064,8 @@ export class Economy {
   /** Work-time factor for a settler at a trade: skill and the settlement's Glow. */
   private speedFactor(s: Settler, trade: string): number {
     const p = this.people[s.person];
-    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60);
+    const b = this.buildings[s.building];
+    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60) * (b && b.built ? this.wearSpeed(b) : 1);
   }
 
   /** Practice makes perfect: raise skill, record milestones in the person's journal. */
@@ -2047,7 +2166,7 @@ export class Economy {
     const land = this.land;
     const def = b.def;
     const open = (t: number) =>
-      land.isLand(t) && land.use[t] === Use.Free && land.feature[t] === Feature.None && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
+      land.isLand(t) && land.use[t] === Use.Free && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
     switch (def.job) {
       case "fell":
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && land.variety[t] !== MEMORIAL);
@@ -2060,6 +2179,19 @@ export class Economy {
         if (ripe >= 0) return ripe;
         const fields = land.ring(b.tile, def.radius ?? 3).filter((t) => land.feature[t] === Feature.Field).length;
         return fields < 8 ? this.findWorkTile(b, open) : -1;
+      }
+      case "hunt": {
+        // The richest ground within reach that nobody else is stalking.
+        let best = -1;
+        let most = 29;
+        for (const t of land.ring(b.tile, def.radius ?? 7)) {
+          const g = this.ecology.game[t] as number;
+          if (g <= most || !land.walkable(t)) continue;
+          if (this.settlers.some((o) => o.alive && o.role === "worker" && o.target === t && o.id !== s.id)) continue;
+          most = g;
+          best = t;
+        }
+        return best;
       }
       case "fish": {
         for (const t of land.ring(b.tile, def.radius ?? 5)) {
@@ -2173,7 +2305,7 @@ export class Economy {
           if (land.amount[t] === 0) land.feature[t] = Feature.None;
           land.featureVersion++;
           got = produced;
-        } else if (def.job === "plant" && land.feature[t] === Feature.None && land.use[t] === Use.Free) {
+        } else if (def.job === "plant" && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
           land.feature[t] = Feature.Tree;
           land.amount[t] = 0;
           land.variety[t] = (t * 7 + this.tick) & 3;
@@ -2187,7 +2319,7 @@ export class Economy {
             // Each harvest takes from the soil.
             land.soil[t] = Math.max(0.05, (land.soil[t] as number) - 0.09);
             got = produced;
-          } else if (land.feature[t] === Feature.None && land.use[t] === Use.Free) {
+          } else if ((land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
             land.feature[t] = Feature.Field;
             land.amount[t] = 0;
             land.nextGrowth[t] = this.tick + this.fieldGrowthTicks(t);
@@ -2197,7 +2329,7 @@ export class Economy {
         } else if (def.job === "fish" && s.home >= 0 && (land.fish[s.home] as number) > 0) {
           land.fish[s.home]!--;
           got = produced;
-        }
+        } else if (def.job === "hunt" && this.ecology.hunt(t)) got = produced;
         s.carrying = got;
         const back = land.findPath(t, b.tile, (x) => land.walkable(x) || x === b.tile, 3000);
         s.state = "back";
@@ -2400,7 +2532,10 @@ export class Economy {
       if (!daily && hourIndex % 3 === p % 3) this.newcomers(p);
       if (daily) {
         for (const k of this.keeps) (this.buildings[k] as Building).levy = 0;
-        if (p === 0) this.restSoil();
+        if (p === 0) {
+          this.restSoil();
+          this.weather();
+        }
         this.dailyLife(p);
         this.trainWardens(p);
       }
@@ -2554,6 +2689,7 @@ export class Economy {
     }
     for (const s of this.settlers) if (s.alive) this.stepSettler(s);
     this.stepNature();
+    this.ecology.step(tick, tick % CLIMATE_STEP === 0);
     this.stepLife();
     this.stepSieges();
     if (tick % 50 === 0) {
@@ -2598,5 +2734,7 @@ export class Economy {
     h.int(owned).int(this.winner);
     for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
+    for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn);
+    this.ecology.hash(h);
   }
 }

@@ -23,6 +23,8 @@ export enum Feature {
   Stump = 3,
   /** A grain field; amount is its growth stage. */
   Field = 4,
+  /** Scrub and young woody growth on an old clearing (succession); cleared by any building. */
+  Shrub = 5,
 }
 
 /** Underground deposits found by geologists and dug by mines. */
@@ -83,6 +85,8 @@ export class LandUse {
   readonly hydro: Hydrology;
   /** Soil nitrogen per tile, 0..1: fields drain it, rest and hedgerows restore it. */
   readonly soil: Float32Array;
+  /** Groundwater capacity per tile (set by the ecology), for siting wells. */
+  aquifer: Float32Array | null = null;
   /** Weather on the ground, kept up to date by the climate: mud (0..1) and snow cover (0..1). */
   readonly mud: Float32Array;
   readonly snowCover: Float32Array;
@@ -206,6 +210,7 @@ export class LandUse {
       return this.canBuild(t, flagTile, !!def.large, owner, 3.2);
     }
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
+    if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
     return this.canBuild(t, flagTile, !!def.large, owner);
   }
 

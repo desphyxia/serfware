@@ -5,7 +5,7 @@ export interface Emitter {
   pos: THREE.Vector3;
   /** Particles per second. */
   rate: number;
-  kind: "smoke" | "steam" | "dust" | "spark" | "ember";
+  kind: "smoke" | "steam" | "dust" | "spark" | "ember" | "soot";
 }
 
 const MAX = 700;
@@ -107,9 +107,9 @@ export class Particles {
     this.vel[i * 3 + 1] = j() * burst;
     this.vel[i * 3 + 2] = j() * burst;
     this.age[i] = 0;
-    this.kind[i] = e.kind === "smoke" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : 4;
+    this.kind[i] = e.kind === "smoke" || e.kind === "soot" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : 4;
     this.life[i] = e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : e.kind === "ember" ? 1.1 + this.rand() * 0.8 : 3.5 + this.rand() * 2;
-    this.shade[i] = e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : e.kind === "spark" ? 2.4 : 0.75;
+    this.shade[i] = e.kind === "soot" ? 0.22 + this.rand() * 0.1 : e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : e.kind === "spark" ? 2.4 : 0.75;
   }
 
   dispose(): void {

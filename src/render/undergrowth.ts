@@ -11,7 +11,7 @@ const MAX = 6000;
 const RING = 18;
 
 /** A soft bush: a few rounded lumps with outward-leaning normals, darker underneath. */
-function bushGeometry(): THREE.BufferGeometry {
+export function bushGeometry(): THREE.BufferGeometry {
   const lumps: [number, number, number, number][] = [
     [0, 0.16, 0, 0.2],
     [0.14, 0.12, 0.05, 0.14],
@@ -138,6 +138,8 @@ export class Undergrowth {
   private readonly ferns: THREE.InstancedMesh;
   private centerTile = -1;
   private key = "";
+  /** Ground cover (0..255) from the ecology: burnt ground is bare until it regrows. */
+  cover: { cover: Uint8Array; groundVersion: number } | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -167,7 +169,7 @@ export class Undergrowth {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${this.cover?.groundVersion ?? 0}`;
     if (this.centerTile >= 0 && key === this.key) {
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
       if (d > Math.cos(this.land.spacing * 5)) return;
@@ -204,6 +206,11 @@ export class Undergrowth {
       let boulders = feature === Feature.Rock ? 2.5 : b === Biome.Rock ? 1.5 : b === Biome.Tundra ? 0.8 : b === Biome.Steppe ? 0.4 : 0.12;
       const shore = wet(t) || grid.neighborsOf(t).some(wet);
       let reeds = b === Biome.Marsh ? 3 : shore ? 2.5 : 0;
+      // Burnt ground: nothing but a few blackened boulders until it greens again.
+      const green = this.cover ? Math.min(1, (this.cover.cover[t] as number) / 200) : 1;
+      bushes *= green;
+      ferns *= green;
+      reeds *= 0.3 + 0.7 * green;
       if (road || field) {
         bushes *= 0.2;
         ferns *= 0.1;

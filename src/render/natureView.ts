@@ -5,6 +5,8 @@ import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
 import { birchGeometry, broadleafGeometry, coniferGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
 import { PainterlyMaterial } from "./painterly";
+import { bushGeometry } from "./undergrowth";
+import type { Ecology } from "../sim/econ/ecology";
 import { Biome } from "../sim/planet/terrain";
 
 /** Tree species drawn for the simulation's trees; chosen per tile from climate and variety. */
@@ -43,6 +45,10 @@ export class NatureView {
   private readonly treeGeo: { full: THREE.BufferGeometry; lite: THREE.BufferGeometry }[];
   private readonly rocks: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
+  /** Scrub on old clearings (succession), a few bushes per tile. */
+  private readonly shrubs: THREE.InstancedMesh;
+  /** The ecology, for charred stumps on burnt ground (set by the world view). */
+  ecology: Ecology | null = null;
   private readonly soil: THREE.InstancedMesh;
   private readonly rows: THREE.InstancedMesh;
   private readonly signs: THREE.InstancedMesh;
@@ -89,6 +95,9 @@ export class NatureView {
     this.trees = this.treeGeo.map((g, i) => make(g.full, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
     this.rocks = make(rockGeometry(), capacity);
     this.stumps = make(stumpGeometry(), capacity);
+    this.stumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+    this.shrubs = make(bushGeometry(), capacity * 3, new PainterlyMaterial({ vertexColors: true, wind: 0.6, brush: 1.2 }));
+    this.shrubs.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 9).fill(1), 3);
     this.soil = make(fieldSoilGeometry(), capacity);
     this.soil.castShadow = false;
     const rowMat = new PainterlyMaterial({ vertexColors: true, wind: 0.35 });
@@ -118,7 +127,7 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { r: 0, s: 0, f: 0 };
+    const counts = { r: 0, s: 0, f: 0, h: 0 };
     const treeCount = this.trees.map(() => 0);
     const crowns: number[] = [];
     const { temperature, moisture, biome } = land.planet.terrain;
@@ -200,7 +209,36 @@ export class NatureView {
         this.frames.orient(base, null, q);
         s.set(1, 1, 1);
         m.compose(base, q, s);
-        if (counts.s < this.stumps.instanceMatrix.count) this.stumps.setMatrixAt(counts.s++, m);
+        if (counts.s < this.stumps.instanceMatrix.count) {
+          // Burnt stumps are charred black.
+          const burnt = ((this.ecology?.scorch[t] as number | undefined) ?? 0) / 255;
+          color.setRGB(1, 1, 1).lerp(new THREE.Color(0.18, 0.15, 0.13), Math.min(1, burnt * 1.5));
+          this.stumps.setColorAt(counts.s, color);
+          this.stumps.setMatrixAt(counts.s++, m);
+        }
+      } else if (f === Feature.Shrub) {
+        const b = land.planet.terrain.biome[t] as Biome;
+        const sea = this.season(t);
+        for (let i = 0; i < 1 + perTile; i++) {
+          if (counts.h >= this.shrubs.instanceMatrix.count) break;
+          const h1 = SurfaceFrames.hash(t, i * 5 + 21);
+          const h2 = SurfaceFrames.hash(t, i * 5 + 22);
+          const r = i === 0 ? 0.15 * h1 : 0.4 + 0.5 * h1;
+          const a = h2 * Math.PI * 2 + i * 2.4;
+          p.copy(base).addScaledVector(tA, Math.cos(a) * r).addScaledVector(tB, Math.sin(a) * r);
+          this.frames.orient(p, null, q);
+          q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h1 * 6.28));
+          const sc = 1.3 + h2 * 1.1;
+          s.set(sc, sc * (0.8 + 0.4 * h1), sc);
+          m.compose(p, q, s);
+          this.shrubs.setMatrixAt(counts.h, m);
+          if (b === Biome.Tundra) color.setHSL(0.95, 0.3, 0.22 + h1 * 0.06);
+          else if (b === Biome.Steppe) color.setHSL(0.17 + h1 * 0.04, 0.24, 0.26 + h2 * 0.06);
+          else color.setHSL(0.26 + (h1 - 0.5) * 0.06, 0.45, 0.16 + h2 * 0.08);
+          if (sea.autumn > 0) color.lerp(new THREE.Color(0.55, 0.32, 0.12), sea.autumn * 0.6 * h2);
+          if (sea.snow > 0.15) color.lerp(new THREE.Color(0.85, 0.88, 0.92), Math.min(0.6, sea.snow));
+          this.shrubs.setColorAt(counts.h++, color);
+        }
       }
     }
     this.crowns = new Float32Array(crowns);
@@ -208,6 +246,7 @@ export class NatureView {
       ...this.trees.map((m, i) => [m, treeCount[i] as number] as const),
       [this.rocks, counts.r],
       [this.stumps, counts.s],
+      [this.shrubs, counts.h],
       [this.soil, counts.f],
       [this.rows, counts.f],
     ] as const) {

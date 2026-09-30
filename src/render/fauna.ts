@@ -173,14 +173,16 @@ export class Fauna {
       for (let i = 0; i < n; i++)
         this.birdData.push({ flock: f, phase: r() * 6.28, radius: 2 + r() * 5, height: 7 + r() * 5, speed: (0.35 + r() * 0.2) * (r() < 0.5 ? 1 : -1) });
     }
-    // Deer on grassy tiles near forests.
+    // Deer on grassy tiles near forests; as many as the ecology's herds here allow.
     this.deer.length = 0;
+    const game = this.eco.ecology.game;
     const grazing = landTiles.filter((t) => {
       const b = terrain.biome[t] as Biome;
-      if (b !== Biome.Meadow && b !== Biome.Forest && b !== Biome.Steppe) return false;
-      return land.feature[t] === Feature.None && land.planet.grid.neighborsOf(t).some((n) => land.feature[n] === Feature.Tree);
+      if (b !== Biome.Meadow && b !== Biome.Forest && b !== Biome.Steppe && b !== Biome.DeepForest) return false;
+      return (game[t] as number) > 25 && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.planet.grid.neighborsOf(t).some((n) => land.feature[n] === Feature.Tree);
     });
-    const herdSize = Math.min(grazing.length, 3 + Math.floor(r() * 5));
+    const density = landTiles.reduce((sum, t) => sum + (game[t] as number), 0) / Math.max(1, landTiles.length);
+    const herdSize = Math.min(grazing.length, 14, Math.round((density / 60) * (3 + r() * 5)));
     for (let i = 0; i < herdSize; i++) {
       const t = grazing[Math.floor(r() * grazing.length)] as number;
       const p = this.frames.pos(t);
@@ -212,7 +214,9 @@ export class Fauna {
     }
     // Butterflies over flowery meadows, fireflies around woods.
     this.bfState.length = 0;
-    const meadows = landTiles.filter((t) => terrain.biome[t] === Biome.Meadow || terrain.biome[t] === Biome.Steppe);
+    // Where the pollinators are: wild, flowering ground.
+    const bees = this.eco.ecology.bees;
+    const meadows = landTiles.filter((t) => (terrain.biome[t] === Biome.Meadow || terrain.biome[t] === Biome.Steppe || (bees[t] as number) > 120) && (bees[t] as number) > 40);
     const colors = ["#f4d35e", "#ffffff", "#ee964b", "#9ad0ec"].map((c) => new THREE.Color(c));
     for (let i = 0; i < this.butterflies.count; i++) {
       const t = (meadows.length ? meadows : landTiles)[Math.floor(r() * Math.max(1, (meadows.length ? meadows : landTiles).length))];
