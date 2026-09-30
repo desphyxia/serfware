@@ -219,6 +219,19 @@
       }
     },
     {
+      "id": "launchrail",
+      "name": "Launch rail",
+      "category": "storage",
+      "description": "A mass driver up a long ramp of timber and iron. Carriers bring it the cargo for probes, Hearthships and skyships; it fires them off to other worlds when the launch window opens.",
+      "large": true,
+      "cost": {
+        "plank": 6,
+        "stone": 8,
+        "iron": 4
+      },
+      "rail": true
+    },
+    {
       "id": "well",
       "name": "Well",
       "category": "storage",

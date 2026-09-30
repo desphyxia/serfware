@@ -1,4 +1,5 @@
-import type { Command, CommandResult } from "../sim/econ/economy";
+import type { CommandResult } from "../sim/econ/economy";
+import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
 import { World, type WorldOptions } from "../sim/world";
 

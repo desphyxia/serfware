@@ -30,6 +30,12 @@ export interface Person {
   /** Tick until which this person is recovering from a wound (can't work or fight). */
   woundedUntil: number;
   alive: boolean;
+  /** Planet index this person was raised on (colonists; absent for people of the world they live on). */
+  origin?: number;
+  /** Walking pace on this world from the gravity they grew up with (1 = native). */
+  stride?: number;
+  /** Left on a Hearthship for another world (no longer here, but not dead). */
+  emigrated?: boolean;
 }
 
 export const ARM_BLADE = 1;
