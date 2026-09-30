@@ -7,7 +7,7 @@ import { AiBuilder } from "./ai/builder";
 import { Climate, CLIMATE_STEP } from "./climate/climate";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
-import { Planet } from "./planet/planet";
+import { Planet, type PlanetOverrides } from "./planet/planet";
 import { Rng } from "./rng";
 
 export interface WorldOptions {
@@ -21,6 +21,10 @@ export interface WorldOptions {
   stakes?: "wounded" | "mortal";
   /** Game days before anyone may attack. */
   peaceDays?: number;
+  /** Another planet of the star system: its physics and climate (see sim/system). */
+  planet?: PlanetOverrides;
+  /** A survey world: the planet only, nobody settled on it yet. */
+  survey?: boolean;
 }
 
 /**
@@ -44,16 +48,16 @@ export class World {
   constructor(seed: string, opts: WorldOptions = {}) {
     this.seed = seed;
     this.rng = new Rng(seed);
-    this.planet = Planet.generate(this.rng.fork("planet"), opts.size);
+    this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet);
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
     this.economy = new Economy(this.land);
     this.climate = new Climate(this.land, this.rng.fork("climate"));
     this.economy.climate = this.climate;
     this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
-    this.rivals = Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
+    this.rivals = opts.survey ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
     this.players = this.humans + this.rivals;
-    for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
+    if (!opts.survey) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
     for (let p = this.humans; p < this.players; p++) this.ai.push(new AiBuilder(p, this.rng.fork(`ai-${p}`)));
     // Start the clock so it is early morning at the first Hearthship.
     const keep = this.economy.buildings[this.economy.keeps[0] ?? -1];

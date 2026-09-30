@@ -144,7 +144,7 @@ export class LandUse {
   readonly glow: Uint8Array;
   readonly dim: Uint8Array;
   glowVersion = 0;
-  /** Carrying costs less on a light world (0.75..1): walkers and carriers move faster. */
+  /** Walking effort from gravity: under 1 on a light world (faster), over 1 on a heavy one (slower). */
   readonly lightness: number;
 
   constructor(readonly planet: Planet) {
@@ -178,7 +178,7 @@ export class LandUse {
     this.sand = new Float32Array(n);
     this.glow = new Uint8Array(n);
     this.dim = new Uint8Array(n);
-    this.lightness = Math.min(1, 0.5 + 0.5 * planet.params.gravity);
+    this.lightness = Math.min(1.2, 0.5 + 0.5 * planet.params.gravity);
     const { biome, temperature, moisture } = planet.terrain;
     const peak = planet.terrain.params.mountainHeight;
     for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t), (planet.terrain.elevation[t] as number) / peak);
