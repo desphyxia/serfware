@@ -63,6 +63,8 @@ export interface BuildingDef {
   dew?: boolean;
   /** Tide mills: grind only while the tide runs (not at the slack of high or low water). */
   tidal?: boolean;
+  /** Launch rails: a mass driver that loads cargo for voyages to other planets. */
+  rail?: boolean;
   /** Solar kilns: now and then the focused heat sets dry growth next door alight. */
   fireRisk?: number;
 }

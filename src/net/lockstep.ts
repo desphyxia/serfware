@@ -1,4 +1,5 @@
-import type { Command, CommandResult } from "../sim/econ/economy";
+import type { CommandResult } from "../sim/econ/economy";
+import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
 import type { World } from "../sim/world";
 import { Session, type SessionInfo } from "./session";
@@ -60,7 +61,7 @@ export class LockstepSession extends Session {
 
   submit(cmd: Command): CommandResult {
     const withPlayer = { ...cmd, player: this.player };
-    const reason = this.world.economy.check(withPlayer);
+    const reason = this.world.check(withPlayer);
     if (reason) return { ok: false, reason };
     this.pending.push(withPlayer);
     return { ok: true };

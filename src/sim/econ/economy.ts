@@ -126,6 +126,8 @@ export interface Building {
   burn: number;
   /** Heated buildings (waystations): warm until this tick on the last log burned. */
   fuelUntil: number;
+  /** Launch rails: cargo wanted for the voyages loading here, by good. */
+  want?: number[];
   alive: boolean;
 }
 
@@ -175,6 +177,8 @@ const LIFE_DAYS = 55;
 const HOUSE_ADULTS = 4;
 const HOUSE_CAPACITY = 6;
 const KEEP_SHELTER = 12;
+/** Buildings (not counting storage) a colony needs before it has taken root. */
+export const ROOTED_BUILDINGS = 8;
 /** Ticks between harvests of one orchard tree (about six in-game hours). */
 const FRUIT_TICKS = 1800;
 /** Tree variety used for memorial trees; woodcutters leave them standing. */
@@ -198,6 +202,18 @@ export type Command = (
 export interface CommandResult {
   ok: boolean;
   reason?: string;
+}
+
+/** A founder aboard a Hearthship: who they are, carried to the new world. */
+export interface Founder {
+  first: string;
+  family: string;
+  born: number;
+  skills: Record<string, number>;
+  journal: string[];
+  /** Planet index they were raised on, and their stride there (see Person). */
+  origin: number;
+  stride: number;
 }
 
 export class Economy {
@@ -235,6 +251,12 @@ export class Economy {
   private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
   tick = 0;
+  /** A colony world (settled from a Hearthship voyage, not a starting world). */
+  colony = false;
+  /** Colony worlds, per player: taken root (enough built that newcomers arrive). */
+  readonly rooted: boolean[] = [];
+  /** Colony worlds, per player: how far its ways have drifted from home, 0..1. */
+  readonly drift: number[] = [];
   /** Messages for players (the UI shows its own player's and clears them). */
   readonly notices: { owner: number; text: string }[] = [];
   /** Per player: tiles lit right now, and tiles ever seen (fog of war). */
@@ -363,7 +385,31 @@ export class Economy {
       }
     }
     if (best < 0) throw new Error("No start site found");
+    this.settleAt(best, rng, player);
+  }
 
+  /**
+   * Can a Hearthship come down here? Flat, dry land with room around it, outside anyone's
+   * territory. Returns why not, or null.
+   */
+  landingProblem(t: number): string | null {
+    const land = this.land;
+    const { grid, terrain } = land.planet;
+    if (t < 0 || t >= grid.count || !land.isLand(t)) return "Land on dry ground.";
+    if (grid.degree(t) === 5) return "That is a Star Well: land beside it, not on it.";
+    if (land.territory[t] !== 0) return "Someone has already settled there.";
+    if ((terrain.elevation[t] as number) > terrain.params.mountainHeight * 0.45 || land.slope(t) > 1.1) return "Too steep to land.";
+    if (land.ring(t, 2).some((n) => !land.isLand(n))) return "Too close to the water.";
+    return null;
+  }
+
+  /**
+   * Place a keep on `best` for `player`: clear the ground, make sure the first chains can run,
+   * claim the land and move the founders in. Without `founders`, the standard start.
+   */
+  settleAt(best: number, rng: Rng, player: number, founders?: { people: Founder[]; stock: number[]; radius: number }): void {
+    const land = this.land;
+    const { grid } = land.planet;
     // Clear space around the keep, then top up trees and rocks so the first chains can run.
     for (const n of [best, ...land.ring(best, 2)]) {
       if (land.feature[n] !== Feature.None) {
@@ -391,7 +437,7 @@ export class Economy {
       }
     }
     land.featureVersion++;
-    land.claim(best, START.territoryRadius, player);
+    land.claim(best, founders?.radius ?? START.territoryRadius, player);
 
     const flagTile = land.bestFlagTile(best, player);
     const flag = this.createFlag(flagTile, player);
@@ -403,14 +449,26 @@ export class Economy {
     this.defeated[player] = false;
     this.wellsSince[player] = -1;
     const r = rng.fork(`people-${player}`);
-    let family = randomFamily(r);
-    for (let i = 0; i < START.settlers; i++) {
-      if (i % 3 === 0) family = randomFamily(r);
-      const age = r.int(16, 34);
-      this.addPerson(player, randomFirst(r), family, -age * this.dayTicks, r);
+    if (founders) {
+      for (const f of founders.people) {
+        const p = this.addPerson(player, f.first, f.family, f.born, r);
+        p.skills = { ...f.skills };
+        p.journal = [...f.journal];
+        p.origin = f.origin;
+        p.stride = f.stride;
+      }
+      keep.residents = founders.people.length;
+      keep.stock = [...founders.stock];
+    } else {
+      let family = randomFamily(r);
+      for (let i = 0; i < START.settlers; i++) {
+        if (i % 3 === 0) family = randomFamily(r);
+        const age = r.int(16, 34);
+        this.addPerson(player, randomFirst(r), family, -age * this.dayTicks, r);
+      }
+      keep.residents = START.settlers;
+      keep.stock = goodsArray(START.stock);
     }
-    keep.residents = START.settlers;
-    keep.stock = goodsArray(START.stock);
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
     this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison })) as Prefs;
@@ -636,6 +694,7 @@ export class Economy {
     const type = buildingType(typeId);
     const def = BUILDINGS[type] as BuildingDef;
     if (def.buildable === false) return { ok: false, reason: `${def.name} can't be built.` };
+    if (def.rail && this.colony && !this.rooted[p]) return { ok: false, reason: `A colony needs ${ROOTED_BUILDINGS} buildings standing (it must take root) before it can build a launch rail.` };
     const land = this.land;
     if (!land.canBuildDef(tile, flagTile, def, p)) return { ok: false, reason: this.placementHint(def) };
     const existing = this.flagAt(flagTile);
@@ -1022,6 +1081,8 @@ export class Economy {
     if (b.stranded >= 0) return 0;
     const upkeep = this.upkeepNeed(b, type);
     if (upkeep > 0) return upkeep;
+    // Launch rails ask for the cargo of the voyages loading there.
+    if (b.def.rail) return (b.want?.[type] ?? 0) - (b.stock[type] as number) - (b.pending[type] as number);
     if (b.def.slots) return this.armsNeed(b, type);
     if ((b.worker < 0 && !b.def.heated) || b.exhausted) return 0;
     const key = inputKeyFor(b.def, type);
@@ -1619,6 +1680,7 @@ export class Economy {
   /** Militia go back to their lives once no attack is under way. */
   private standDown(): void {
     for (const k of this.keeps) {
+      if (k === undefined) continue;
       const keep = this.buildings[k] as Building;
       if (!keep.garrison.length || keep.siege.length || keep.duel) continue;
       if (this.settlers.some((s) => s.alive && s.role === "attacker" && s.building === keep.id)) continue;
@@ -1767,7 +1829,8 @@ export class Economy {
 
   /** Victory by conquest (last Hearthship standing) or by holding the Star Wells. */
   private stepVictory(): void {
-    if (this.winner >= 0) return;
+    // Colonies are not battlefields (yet): nobody wins a colony world.
+    if (this.winner >= 0 || this.colony) return;
     const alive = this.keeps.map((_, p) => p).filter((p) => !this.defeated[p]);
     if (this.keeps.length > 1 && alive.length === 1) {
       this.win(alive[0] as number, "conquest");
@@ -1946,7 +2009,8 @@ export class Economy {
     if (this.land.flooded[b] && !this.land.causeway[b] && this.land.use[b] !== Use.Building) return false;
     // Skystone is buoyant: its carriers walk as if empty-handed, and a little quicker.
     const light = s.carryGood >= 0 && this.goods[s.carryGood]?.type === goodId("skystone") ? 0.8 : 1;
-    const ticks = (onRoad ? TICKS_PER_TILE_ROAD : TICKS_PER_TILE_OFFROAD) * this.land.stepCost(a, b) * light;
+    // People raised on heavier worlds stride easily on lighter ones (and the other way round).
+    const ticks = ((onRoad ? TICKS_PER_TILE_ROAD : TICKS_PER_TILE_OFFROAD) * this.land.stepCost(a, b) * light) / (this.people[s.person]?.stride ?? 1);
     s.prog += Math.max(20, Math.floor(1000 / ticks));
     if (s.prog >= 1000) {
       s.prog -= 1000;
@@ -2781,14 +2845,17 @@ export class Economy {
     const daily = this.tick % this.dayTicks === 0;
     if (this.tick % hour !== 0 && !daily) return;
     const hourIndex = Math.floor(this.tick / hour);
+    if (daily) {
+      for (const k of this.keeps) if (k !== undefined) (this.buildings[k] as Building).levy = 0;
+      this.restSoil();
+      this.weather();
+    }
     for (let p = 0; p < this.keeps.length; p++) {
+      // Colony worlds: only players who have landed there have a keep.
+      if (this.keeps[p] === undefined) continue;
       if (!daily && hourIndex % 3 === p % 3) this.newcomers(p);
       if (daily) {
-        for (const k of this.keeps) (this.buildings[k] as Building).levy = 0;
-        if (p === 0) {
-          this.restSoil();
-          this.weather();
-        }
+        if (this.colony) this.colonyDay(p);
         this.dailyLife(p);
         this.trainWardens(p);
       }
@@ -2806,7 +2873,8 @@ export class Economy {
    * at the Hearthship every few hours. Houses are how a settlement grows.
    */
   private newcomers(owner: number): void {
-    if (this.defeated[owner]) return;
+    // Nobody comes looking for a home at a colony until it has taken root.
+    if (this.defeated[owner] || (this.colony && !this.rooted[owner])) return;
     const keep = this.buildings[this.keeps[owner] ?? -1];
     if (!keep || keep.owner !== owner) return;
     const all = this.members(owner);
@@ -2815,6 +2883,24 @@ export class Economy {
     const p = this.addPerson(owner, randomFirst(r), randomFamily(r), this.tick - r.int(17, 30) * this.dayTicks, r);
     note(p, "Arrived at the Hearthship looking for a new home.");
     this.notify(owner, `${fullName(p)} has come to join you.`);
+  }
+
+  /**
+   * A colony's day: it takes root once enough is built, and its ways drift from home the longer
+   * it goes without a skyship calling.
+   */
+  private colonyDay(owner: number): void {
+    const built = this.buildings.filter((b) => b.alive && b.built && b.owner === owner && !b.def.storage).length;
+    if (!this.rooted[owner] && built >= ROOTED_BUILDINGS) {
+      this.rooted[owner] = true;
+      this.notify(owner, "The colony has taken root: newcomers will now settle here, and it may build its own launch rail.");
+    }
+    this.drift[owner] = Math.min(1, (this.drift[owner] ?? 0) + 0.02);
+  }
+
+  /** A skyship from home calls: news, letters and goods pull the colony's ways back a little. */
+  skyshipCalled(owner: number): void {
+    this.drift[owner] = Math.max(0, (this.drift[owner] ?? 0) - 0.08);
   }
 
   private members(owner: number, stage?: string): Person[] {

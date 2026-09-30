@@ -538,6 +538,38 @@ function ropeway(b: Build): void {
   b.add([kit.box(0.3, 0.24, 0.36, 0.7, 0.14, 0.5), "#8a6444"], ...kit.door(-0.2, 0.14, 0.41, rng), ...kit.pennant(0, 2.5, 0, 0.35));
 }
 
+/**
+ * Launch rail: a mass driver up a long timber trestle, iron rails with copper coils along them,
+ * a cradle at the foot, and a loading shed with the cargo waiting.
+ */
+function launchrail(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(2.5, 1.9, 0.14, rng));
+  // The ramp climbs from the front (+Z) to the back, 30 degrees up.
+  const len = 3.0;
+  const tilt = 0.52;
+  const ramp = (g: THREE.BufferGeometry) => g.rotateX(tilt).translate(0.35, 0.2 + Math.sin(tilt) * (len / 2), 0.55 - Math.cos(tilt) * (len / 2));
+  b.add([ramp(kit.box(0.5, 0.08, len, 0, 0, 0)), kit.C.timberLight]);
+  for (const x of [-0.15, 0.15]) b.add([ramp(kit.box(0.05, 0.06, len, x, 0.08, 0)), "#5a5e66"]);
+  // Copper coils ring the rails, closer together toward the top.
+  for (let i = 0; i < 8; i++) {
+    const f = Math.sqrt(i / 7);
+    b.add([ramp(new THREE.TorusGeometry(0.26, 0.035, 5, 12).translate(0, 0.18, -len / 2 + 0.2 + f * (len - 0.4))), "#b8703a"]);
+  }
+  // Trestle legs under the ramp.
+  for (let i = 1; i < 5; i++) {
+    const z = 0.55 - (i / 5) * Math.cos(tilt) * len;
+    const top = 0.2 + (i / 5) * Math.sin(tilt) * len;
+    for (const x of [0.1, 0.6]) b.add([kit.box(0.07, top - 0.1, 0.07, x, 0.14, z), kit.C.timber]);
+    b.add([kit.box(0.6, 0.05, 0.05, 0.35, top * 0.55, z), kit.C.timber]);
+  }
+  // The cradle at the foot, and the loading shed beside it.
+  b.add([kit.box(0.34, 0.16, 0.5, 0.35, 0.28, 0.7), "#6a4a30"], [kit.box(0.4, 0.04, 0.56, 0.35, 0.44, 0.7), "#5a5e66"]);
+  b.place([...kit.plinth(0.85, 0.75, 0.1, rng), ...kit.stoneWalls(0.8, 0.7, 0.62, 0.1, rng), ...kit.shingleRoof(0.8, 0.7, 0.36, 0.72, kit.jitter(ROOF.slate, rng, 0.5), rng)], -0.75, 0.35);
+  b.add(...kit.door(-0.75, 0.1, 0.71, rng), ...kit.crate(-1.2, 0.95, rng, 0.24), ...kit.crate(-0.95, 1.05, rng, 0.2), ...kit.barrel(-0.35, 1.1, rng), ...kit.sack(-0.15, 1.2, rng));
+  b.add(...kit.pennant(0.35, 0.2 + Math.sin(tilt) * len + 0.1, 0.55 - Math.cos(tilt) * len, 0.4));
+}
+
 /** Saltworks: shallow clay pans in a grid, white salt raked into heaps, a rake and a shed. */
 function saltworks(b: Build): void {
   const { rng } = b;
@@ -827,6 +859,7 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   glowcapfarm,
   peatcutter,
   ropeway,
+  launchrail,
   dewcondenser,
   shellfisher,
   tidemill,

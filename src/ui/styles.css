@@ -858,7 +858,7 @@ input.switch {
 }
 
 /* Star system map (O) and planet visits. */
-.panel.system svg { width: 100%; height: auto; display: block; color: var(--fg, #e8e6da); }
+.panel.system svg { width: 100%; height: auto; aspect-ratio: 1; flex: none; display: block; color: var(--fg, #e8e6da); }
 .panel.system .system-planet { cursor: pointer; }
 .panel.system .system-planet:focus-visible circle:last-of-type { stroke: #f0d08a; stroke-width: 2; }
 .panel.system .system-facts { margin-top: 8px; }
@@ -866,3 +866,17 @@ input.switch {
   background: radial-gradient(circle at 50% 50%, #1a2240 0%, #05070f 70%); }
 .warp.on { opacity: 1; }
 body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"]) { display: none; }
+.panel.system .system-actions { display: grid; gap: 8px; margin-top: 10px; }
+.panel.system h4 { margin: 4px 0 2px; font-size: 0.95em; }
+.panel.system .pack { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line, #ffffff22); border-radius: 6px; }
+.panel.system .pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 4px 10px; }
+.panel.system .pack-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.88em; }
+.panel.system .pack-row input { width: 4.2em; }
+.panel.system .route-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.88em; }
+.panel.system .route-row input { width: 4em; }
+.panel.system .mass { position: relative; height: 18px; border-radius: 4px; background: #ffffff14; overflow: hidden; font-size: 0.8em; }
+.panel.system .mass-bar { position: absolute; inset: 0 auto 0 0; background: #6fae6a88; transition: width 0.15s; }
+.panel.system .mass.over .mass-bar { background: #e0643a99; }
+.panel.system .mass span { position: relative; padding-left: 6px; line-height: 18px; font-variant-numeric: tabular-nums; }
+.panel.system .voyages { margin: 4px 0 0; padding-left: 18px; font-size: 0.88em; display: grid; gap: 3px; }
+.panel.system .btn.small { padding: 1px 8px; font-size: 0.85em; margin-left: 6px; }

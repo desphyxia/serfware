@@ -19,23 +19,24 @@ import { formatDay, ticksPerDay } from "./sim/clock";
 import { Biome, BIOME_NAMES } from "./sim/planet/terrain";
 import { Feature, Use } from "./sim/econ/landuse";
 import { BUILDINGS } from "./sim/econ/defs";
-import { Region } from "./sim/biomes/regions";
+import { Region, REGIONS } from "./sim/biomes/regions";
 import { tideAt } from "./sim/biomes/tides";
 import { speciesAt } from "./render/natureView";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
-import { World } from "./sim/world";
+import { planetSeed, World, type WorldCommand } from "./sim/world";
 import { MEMORIAL, type Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
-import { demoSettlement, starterChain } from "./sim/econ/planner";
+import { demoSettlement, placeConnected, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
-import { generateSystem, planetOverrides, type StarSystem } from "./sim/system/system";
+import { planetOverrides, type StarSystem } from "./sim/system/system";
+import type { Voyage } from "./sim/system/voyages";
 import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
@@ -90,8 +91,10 @@ export class Game {
   private readonly toasts = new Toasts();
   private readonly info: InfoPanel;
   private readonly economyPanel: EconomyPanel;
-  /** The star system of this seed, and which planet is in view (its index; the home planet is the session's). */
-  private system!: StarSystem;
+  /** The star system of this seed (the home world's), and which planet is in view (its index). */
+  private get system(): StarSystem {
+    return this.session.world.system;
+  }
   private readonly systemMap: SystemMap;
   private surveys = new Map<number, World>();
   private homeView: WorldView | null = null;
@@ -160,8 +163,8 @@ export class Game {
     this.cam = this.makeCamera(canvas);
     this.audio = new Ambience(settings.get().audio);
     this.view = new WorldView(this.world, settings.get().graphics, hashString(seed));
-    this.system = generateSystem(this.world.seed, this.world.planet);
     this.visitIndex = this.system.home;
+    this.bindVoyages();
     this.view.setViewer(this.session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.focusStart();
@@ -250,12 +253,14 @@ export class Game {
       () => this.economyPanel.toggle(),
       () => this.systemMap.toggle(),
     );
-    this.systemMap = new SystemMap(
-      () => this.system,
-      () => this.session.world.tick / ticksPerDay(this.session.world.planet.params.dayLengthHours),
-      () => this.visitIndex,
-      (i) => this.visitPlanet(i),
-    );
+    this.systemMap = new SystemMap({
+      home: () => this.session.world,
+      player: () => this.session.player,
+      current: () => this.visitIndex,
+      visit: (i) => this.visitPlanet(i),
+      command: (cmd) => this.command(cmd),
+      charted: (i) => this.charted(i),
+    });
     this.warp = h("div", { class: "warp", "aria-hidden": "true" });
     this.menu = new GameMenu({
       saveNow: (name) => this.saveNow(name),
@@ -335,13 +340,20 @@ export class Game {
     return cam;
   }
 
-  /** Issue a player command; failures are explained with a toast. */
-  command(cmd: Command): boolean {
-    if (this.world !== this.session.world) {
-      this.toasts.show("Nobody lives on this world yet: settling other planets comes with colonisation. Press O to go home.", "warn");
-      return false;
+  /**
+   * Issue a player command; failures are explained with a toast. Commands on a colony go to its
+   * planet; voyages go to the home world, which owns them.
+   */
+  command(cmd: Command | WorldCommand): boolean {
+    const home = this.session.world;
+    if (this.world !== home && !("from" in cmd || "voyage" in cmd || "route" in cmd)) {
+      if (!home.colonies.includes(this.world)) {
+        this.toasts.show(this.landingVoyage() ? "Click open, level ground to bring the Hearthship down." : "Nobody lives on this world yet: send a Hearthship (O, the star system). Press O to go home.", "warn");
+        return false;
+      }
+      cmd = { ...(cmd as Command), planet: this.visitIndex };
     }
-    const r = this.session.submit(cmd);
+    const r = this.session.submit(cmd as WorldCommand);
     if (!r.ok && r.reason) this.toasts.show(r.reason, "warn");
     else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
     return r.ok;
@@ -790,6 +802,82 @@ export class Game {
   }
 
   /** The art target scene: a grown demo settlement seen from the overview camera in fair weather. */
+  /**
+   * Screenshots and testing: stage colonisation at once. "rail": a launch rail with a Hearthship
+   * loaded in its cradle; "launch": the same climbing away; "orbit": circling over the target
+   * planet; "colony": landed, a few buildings up, a skyship coming down with goods.
+   */
+  colonyDemo(stage: "rail" | "launch" | "orbit" | "colony"): number {
+    const w = this.session.world;
+    const v = w.voyages;
+    if (!v) return -1;
+    const me = this.session.player;
+    const home = w.system.home;
+    const to = w.system.planets.find((p) => p.surface && !p.home)!.index;
+    v.surveyed[me] = (1 << w.system.planets.length) - 1;
+    let rail = v.railOf(me, home);
+    if (!rail) {
+      placeConnected(w, "launchrail", { minDist: 3, maxDist: 10, player: me });
+      rail = w.economy.buildings.find((b) => b.alive && b.owner === me && b.def.rail) ?? null;
+      if (!rail) return -1;
+      rail.built = true;
+    }
+    w.command({ t: "hearthship", from: home, to, settlers: 8, cargo: { plank: 20, stone: 16, bread: 10, fish: 4, axe: 2, saw: 1, pick: 1, hammer: 2, shovel: 1, scythe: 1 } });
+    const ship = v.list[v.list.length - 1]!;
+    if (stage === "rail") ship.state = "waiting";
+    else {
+      // Board the founders as the launch would.
+      ship.load.forEach((n, g) => (rail.stock[g] = (rail.stock[g] as number) + n));
+      ship.state = "loading";
+      for (let t = w.tick - (w.tick % 25) + 25, n = 0; (ship.state as string) !== "flying" && n < 20000; t += 25, n++) {
+        w.tick = t;
+        v.step(t);
+      }
+      if (stage === "launch") {
+        ship.departs = w.tick - 110;
+        ship.arrives = w.tick + 1e6;
+      } else {
+        ship.arrives = w.tick;
+        v.step(w.tick - (w.tick % 25) + 25);
+      }
+    }
+    if (stage === "colony") {
+      const eco = w.colonize(to);
+      const grid = eco.land.planet.grid;
+      let best = -1;
+      let bestScore = -Infinity;
+      for (let t = 0; t < grid.count; t++) {
+        if (eco.landingProblem(t)) continue;
+        const flat = eco.land.ring(t, 5).filter((n) => eco.land.isLand(n) && eco.land.slope(n) < 1.2).length;
+        const lat = Math.abs(grid.center[t * 3 + 1] as number);
+        const score = flat - lat * 40;
+        if (score > bestScore) {
+          bestScore = score;
+          best = t;
+        }
+      }
+      w.command({ t: "land", voyage: ship.id, tile: best });
+      const colony = w.colonies[to]!;
+      starterChain(colony, me);
+      for (const type of ["house", "house", "farm", "fisher"]) placeConnected(colony, type, { minDist: 2, maxDist: 7, player: me });
+      for (const b of colony.economy.buildings) if (b.alive && b.owner === me) b.built = true;
+      for (let i = 0; i < 1500; i++) w.step();
+      // A skyship from home, coming down with goods.
+      w.command({ t: "route", from: home, to, good: "bread", amount: 8 });
+      v.step(w.tick - (w.tick % 25) + 25);
+      const run = v.list.find((x) => x.route >= 0);
+      if (run) {
+        run.state = "done";
+        run.departs = w.tick - 4000;
+        run.arrives = w.tick + 110;
+      }
+    }
+    if (stage === "rail" || stage === "launch") {
+      this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(rail.tile)), 12);
+    } else this.visitPlanet(to, true);
+    return to;
+  }
+
   visitHamlet(): void {
     const n = demoSettlement(this.world);
     for (let i = 0; i < 6000; i++) this.world.step();
@@ -1005,10 +1093,10 @@ export class Game {
     document.body.classList.remove("surveying");
     this.session = session;
     this.world = session.world;
-    this.system = generateSystem(this.world.seed, this.world.planet);
     this.visitIndex = this.system.home;
     this.view = new WorldView(this.world, this.settings.get().graphics, hashString(this.world.seed));
     this.view.setViewer(session.player, this.fogOn);
+    this.bindVoyages();
     this.scene.add(this.view.group);
     this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
@@ -1023,11 +1111,64 @@ export class Game {
     };
   }
 
-  /** While surveying another planet: say where, and how to get home. */
+  /** While surveying another planet: say where, and how to get home (or where to land). */
   private surveyText(): string | null {
-    if (this.world === this.session.world) return null;
+    const home = this.session.world;
+    if (this.world === home || home.colonies.includes(this.world)) return null;
     const p = this.system.planets[this.visitIndex];
-    return p ? `Surveying ${p.name}: nobody lives here yet. O for the system map, to return home.` : null;
+    if (!p) return null;
+    if (this.landingVoyage()) return `The Hearthship is circling over ${p.name}. Click open, level ground to land and found a colony.`;
+    return `Surveying ${p.name}: nobody lives here yet. O for the system map, to return home.`;
+  }
+
+  /** A survey view of another planet (the same ground a colony there would stand on). */
+  private surveyWorld(index: number): World {
+    const home = this.session.world;
+    const p = this.system.planets[index]!;
+    const w = this.surveys.get(index) ?? new World(planetSeed(home.seed, p.name), { planet: planetOverrides(p), survey: true });
+    this.surveys.set(index, w);
+    w.tick = Math.max(w.tick, home.tick);
+    w.climate.step(w.tick);
+    return w;
+  }
+
+  /** What a probe charted on a planet: its regions, which carry its hazards and riches. */
+  private charted(index: number): string[] {
+    const w = this.session.world.colonies[index] ?? this.surveyWorld(index);
+    const counts = new Map<number, number>();
+    for (let t = 0; t < w.land.region.length; t++) if (w.land.isLand(t)) counts.set(w.land.region[t] as number, (counts.get(w.land.region[t] as number) ?? 0) + 1);
+    const land = [...counts.values()].reduce((a, b) => a + b, 0);
+    return [...counts.entries()]
+      .filter(([r, n]) => n > land * 0.03 && r !== Region.Meadowlands)
+      .sort((a, b) => b[1] - a[1])
+      .map(([r]) => REGIONS[r as Region]?.name ?? "")
+      .filter(Boolean);
+  }
+
+  /** The player's Hearthship in orbit over the planet in view, waiting for a landing site. */
+  private landingVoyage(): Voyage | null {
+    const home = this.session.world;
+    if (this.world === home) return null;
+    return home.voyages?.list.find((v) => v.owner === this.session.player && v.kind === "hearthship" && v.state === "orbit" && v.to === this.visitIndex) ?? null;
+  }
+
+  /** Bring the orbiting Hearthship down on a tile; true when a landing was ordered. */
+  private tryLand(tile: number): boolean {
+    const v = this.landingVoyage();
+    if (!v || tile < 0) return false;
+    const why = this.world.economy.landingProblem(tile);
+    if (why) {
+      this.toasts.show(why, "warn");
+      return true;
+    }
+    this.command({ t: "land", voyage: v.id, tile });
+    return true;
+  }
+
+  /** Show the voyages touching the planet in view. */
+  private bindVoyages(): void {
+    const home = this.session.world;
+    this.view.voyages.bind(home.voyages, this.visitIndex, () => home.tick);
   }
 
   /**
@@ -1042,16 +1183,17 @@ export class Game {
       this.toasts.show(`${p.name} is a gas giant: there is no ground to stand on.`, "warn");
       return;
     }
+    const known = p.home || !!this.session.world.colonies[index] || !!this.session.world.voyages?.isSurveyed(this.session.player, index);
+    if (!known) {
+      this.toasts.show(`${p.name} is not charted yet: send a probe from a launch rail.`, "warn");
+      return;
+    }
     const go = () => {
       const home = this.session.world;
       let w: World;
       if (p.home) w = home;
-      else {
-        w = this.surveys.get(index) ?? new World(`${home.seed}~${p.name.toLowerCase()}`, { planet: planetOverrides(p), survey: true });
-        this.surveys.set(index, w);
-        w.tick = Math.max(w.tick, home.tick);
-        w.climate.step(w.tick);
-      }
+      else if (home.colonies[index]) w = home.colonies[index];
+      else w = this.surveyWorld(index);
       this.scene.remove(this.view.group);
       if (this.world === home) this.homeView = this.view;
       else this.view.dispose();
@@ -1066,8 +1208,10 @@ export class Game {
       this.info.select(null);
       this.following = -1;
       this.tools.set("select");
-      document.body.classList.toggle("surveying", w !== home);
-      if (w === home) this.focusStart();
+      this.bindVoyages();
+      const colony = home.colonies.includes(w);
+      document.body.classList.toggle("surveying", w !== home && !colony);
+      if (w === home || (colony && w.economy.keeps[this.session.player] !== undefined)) this.focusStart();
       else this.focusCoast();
       // Arrive from orbit.
       const target = this.cam.distance;
@@ -1075,7 +1219,7 @@ export class Game {
       this.cam.zoomTo(target);
       this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(w.planet.params.radius * 4));
       this.systemMap.refresh();
-      this.toasts.show(w === home ? `Home to ${p.name}.` : `Arrived at ${p.name}: ${p.gravity.toFixed(2)} g, ${p.locked ? "a fixed sun" : `${p.dayLengthHours} h days`}.`, "good");
+      this.toasts.show(w === home ? `Home to ${p.name}.` : colony ? `The colony on ${p.name}.` : `Arrived at ${p.name}: ${p.gravity.toFixed(2)} g, ${p.locked ? "a fixed sun" : `${p.dayLengthHours} h days`}.`, "good");
     };
     if (instant) {
       go();
@@ -1241,6 +1385,7 @@ export class Game {
         return;
       }
       if (d.button === 0) {
+        if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
         this.tools.click(this.hoverTile);
       }
@@ -1359,6 +1504,7 @@ export class Game {
   private padAction(a: PadAction): void {
     switch (a) {
       case "confirm":
+        if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
         this.tools.click(this.hoverTile);
         return;
@@ -1468,8 +1614,17 @@ export class Game {
     this.updateEnvironment(now, dt / 1000);
     this.updateHover();
     this.tools.hoverTile(this.hoverTile);
+    // Where a Hearthship has just landed, the survey view gives way to the colony.
+    const colonyHere = this.session.world.colonies[this.visitIndex];
+    if (colonyHere && this.world !== colonyHere && this.world !== this.session.world) {
+      const v = this.visitIndex;
+      this.visitIndex = -1;
+      this.surveys.delete(v);
+      this.visitPlanet(v, true);
+    }
     // A surveyed planet keeps time with home: stepped while in view, jumped when far behind.
-    if (this.world !== this.session.world) {
+    // (Colonies are stepped by the home world itself.)
+    if (this.world !== this.session.world && !this.session.world.colonies.includes(this.world)) {
       const home = this.session.world;
       const w = this.world;
       if (home.tick - w.tick > 600) {
@@ -1477,11 +1632,17 @@ export class Game {
         w.climate.step(w.tick);
       } else for (let n = 0; w.tick < home.tick && n < 40; n++) w.step();
     }
-    const eco = this.session.world.economy;
-    while (eco.notices.length) {
-      const n = eco.notices.shift() as { owner: number; text: string };
-      if (n.owner === this.session.player) this.toasts.show(n.text, "good");
+    const home = this.session.world;
+    const queues = [home.economy.notices, home.voyages?.notices ?? [], ...home.colonies.map((c) => c?.economy.notices ?? [])];
+    for (const [i, q] of queues.entries()) {
+      while (q.length) {
+        const n = q.shift() as { owner: number; text: string };
+        // Colony news says which colony.
+        const where = i >= 2 && this.world !== home.colonies[i - 2] ? `${home.system.planets[home.colonies.indexOf(home.colonies[i - 2])]?.name}: ` : "";
+        if (n.owner === this.session.player) this.toasts.show(where + n.text, "good");
+      }
     }
+    const eco = home.colonies.includes(this.world) ? this.world.economy : home.economy;
     this.audioTimer -= dt;
     if (this.audioTimer <= 0) {
       this.audioTimer = 100;
