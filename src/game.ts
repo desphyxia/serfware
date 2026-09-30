@@ -35,7 +35,7 @@ import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
-import { planetOverrides, type StarSystem } from "./sim/system/system";
+import { worldFor, type StarSystem } from "./sim/system/system";
 import type { Voyage } from "./sim/system/voyages";
 import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
@@ -1125,7 +1125,7 @@ export class Game {
   private surveyWorld(index: number): World {
     const home = this.session.world;
     const p = this.system.planets[index]!;
-    const w = this.surveys.get(index) ?? new World(planetSeed(home.seed, p.name), { planet: planetOverrides(p), survey: true });
+    const w = this.surveys.get(index) ?? new World(planetSeed(home.seed, p.name), { ...worldFor(p), survey: true });
     this.surveys.set(index, w);
     w.tick = Math.max(w.tick, home.tick);
     w.climate.step(w.tick);

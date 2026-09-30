@@ -144,6 +144,14 @@ export class LandUse {
   readonly glow: Uint8Array;
   readonly dim: Uint8Array;
   glowVersion = 0;
+  /**
+   * Life on the ground: 0 barren rock and dust, 1 lichen, 2 moss, 3 grass, 4 woodland. Living
+   * worlds are 4 everywhere; terraformed worlds climb the stages (see sim/climate/atmosphere).
+   */
+  readonly life: Uint8Array;
+  /** Native life mats (1) on worlds that had life of their own before anyone came. */
+  readonly native: Uint8Array;
+  lifeVersion = 0;
   /** Walking effort from gravity: under 1 on a light world (faster), over 1 on a heavy one (slower). */
   readonly lightness: number;
 
@@ -177,6 +185,8 @@ export class LandUse {
     this.shell = new Uint8Array(n);
     this.sand = new Float32Array(n);
     this.glow = new Uint8Array(n);
+    this.life = new Uint8Array(n).fill(4);
+    this.native = new Uint8Array(n);
     this.dim = new Uint8Array(n);
     this.lightness = Math.min(1.2, 0.5 + 0.5 * planet.params.gravity);
     const { biome, temperature, moisture } = planet.terrain;

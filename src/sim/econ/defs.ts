@@ -13,7 +13,9 @@ export interface GoodDef {
 }
 
 export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish" | "fungus" | "peat" | "ropeway";
-export type Category = "storage" | "materials" | "food" | "metal" | "lantern";
+export type Category = "storage" | "materials" | "food" | "metal" | "lantern" | "terra";
+/** Terraforming works: what one work cycle does to a planet (see sim/climate/atmosphere). */
+export type TerraKind = "mirror" | "greenhouse" | "comet" | "seeding" | "basin" | "life" | "bank";
 
 export interface BuildingDef {
   id: string;
@@ -63,6 +65,10 @@ export interface BuildingDef {
   dew?: boolean;
   /** Tide mills: grind only while the tide runs (not at the slack of high or low water). */
   tidal?: boolean;
+  /** Terraforming works: each work cycle feeds the planet's atmosphere or life. Colonies only. */
+  terra?: TerraKind;
+  /** Reserves: native life within this many steps is left as it is, whatever the air becomes. */
+  reserve?: number;
   /** Launch rails: a mass driver that loads cargo for voyages to other planets. */
   rail?: boolean;
   /** Solar kilns: now and then the focused heat sets dry growth next door alight. */

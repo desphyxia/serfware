@@ -16,6 +16,7 @@ export const ICONS: Record<string, string> = {
   metal: svg(`<path d="M4 18h16M6 18l2-6h8l2 6M9 12V8h6v4M12 8V4" ${STROKE}/>`),
   storage: svg(`<path d="M3 10l9-6 9 6v10H3zM9 20v-6h6v6" ${STROKE}/>`),
   lantern: svg(`<path d="M12 2v3M8 7h8l-1 9H9zM9 16l-1 5h8l-1-5M12 10v3" ${STROKE}/>`),
+  terra: svg(`<circle cx="12" cy="12" r="8" ${STROKE}/><path d="M12 20c0-5 2-8 6-9M12 20c0-4-2-6-5-7M9 6c2 1 3 3 3 6" ${STROKE}/>`),
   system: svg(`<circle cx="12" cy="12" r="2.5" ${STROKE}/><ellipse cx="12" cy="12" rx="10" ry="4.5" ${STROKE}/><circle cx="20" cy="10" r="1.3" fill="currentColor"/>`),
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
@@ -26,6 +27,7 @@ export const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "metal", label: "Mining", key: "5" },
   { id: "storage", label: "Homes", key: "6" },
   { id: "lantern", label: "Lanterns", key: "7" },
+  { id: "terra", label: "Terraform", key: "8" },
 ];
 
 /** Hedgerows are planted with the Food tools, though they are not buildings. */
