@@ -1,4 +1,5 @@
 import { Rng } from "../rng";
+import { log, pow } from "../dmath";
 import type { GridSize } from "../planet/grid";
 import type { Planet } from "../planet/planet";
 
@@ -88,8 +89,8 @@ export function generateSystem(seed: string, homePlanet: Planet): StarSystem {
   const ratio = r.range(1.45, 1.9);
   const planets: SystemPlanet[] = [];
   for (let i = 0; i < count; i++) {
-    const orbit = homeOrbit * Math.pow(ratio, i - homeAt) * r.range(0.93, 1.07);
-    const period = 24 * Math.pow(orbit / Math.sqrt(star.luminosity), 1.5) * r.range(0.9, 1.1);
+    const orbit = homeOrbit * pow(ratio, i - homeAt) * r.range(0.93, 1.07);
+    const period = 24 * pow(orbit / Math.sqrt(star.luminosity), 1.5) * r.range(0.9, 1.1);
     const phase = r.next();
     if (i === homeAt) {
       const p = homePlanet.params;
@@ -116,7 +117,7 @@ export function generateSystem(seed: string, homePlanet: Planet): StarSystem {
     }
     const gas = orbit > frostLine && r.next() < 0.7;
     // Warmth from the distance to the habitable zone: hot inside it, cold beyond.
-    const warmth = Math.max(0, Math.min(1, 0.55 + Math.log(homeOrbit / orbit) * 0.9));
+    const warmth = Math.max(0, Math.min(1, 0.55 + log(homeOrbit / orbit) * 0.9));
     const wetness = r.range(0.1, 0.9) * (warmth > 0.9 ? 0.3 : 1);
     const kind: PlanetKind = gas ? "gas" : warmth > 0.92 ? "molten" : warmth > 0.72 ? "arid" : warmth < 0.25 ? "frozen" : wetness > 0.7 ? "ocean" : "temperate";
     planets.push({
@@ -155,7 +156,7 @@ export function launchWindow(from: SystemPlanet, to: SystemPlanet, day: number):
   const a1 = from.orbit;
   const a2 = to.orbit;
   // A transfer orbit's half period, scaled from the home year.
-  const transferDays = 0.5 * from.period * Math.pow((a1 + a2) / (2 * a1), 1.5);
+  const transferDays = 0.5 * from.period * pow((a1 + a2) / (2 * a1), 1.5);
   // The target must lead by this angle at departure so it arrives where the craft does.
   const lead = Math.PI - (transferDays / to.period) * Math.PI * 2;
   const w1 = (Math.PI * 2) / from.period;

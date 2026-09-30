@@ -102,6 +102,37 @@ export function exp(x: number): number {
   return sum * p;
 }
 
+const LN2 = 0.6931471805599453;
+
+/** Natural logarithm from basic arithmetic only (halving to [1, 2), then an atanh series). */
+export function log(x: number): number {
+  if (!(x > 0)) return x === 0 ? -Infinity : NaN;
+  let k = 0;
+  while (x >= 2) {
+    x /= 2;
+    k++;
+  }
+  while (x < 1) {
+    x *= 2;
+    k--;
+  }
+  const z = (x - 1) / (x + 1);
+  const z2 = z * z;
+  let term = z;
+  let sum = 0;
+  for (let n = 1; n < 41; n += 2) {
+    sum += term / n;
+    term *= z2;
+  }
+  return 2 * sum + k * LN2;
+}
+
+/** x to the power y for x > 0 (0 for x = 0), deterministic across engines. */
+export function pow(x: number, y: number): number {
+  if (x === 0) return 0;
+  return exp(y * log(x));
+}
+
 export function clamp(x: number, lo: number, hi: number): number {
   return x < lo ? lo : x > hi ? hi : x;
 }
