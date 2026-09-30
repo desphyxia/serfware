@@ -60,6 +60,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
 - Batch 10b: dams and irrigation channels, water mills, floods from heavy rain on rivers,
   hedgerow and crop-rotation choices for farmers, frozen lakes, mud tint on roads,
   forecasts gated behind the Almanac (batch 20).
+- Batch 11b: bucket-line figures running between a well and the fire; a firebreak order (clear a
+  strip of scrub and trees); burnt-down buildings leaving ruins; erosion and deltas changing the
+  terrain height, not only the soil; a groundwater overlay in build mode; a bow for the hunter's
+  figure; AI rivals fighting fires.
 
 ## Picking up work in a new session
 
