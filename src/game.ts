@@ -12,11 +12,13 @@ import { FOG, makeFogNode } from "./render/fog";
 import { SkyDome } from "./render/sky";
 import { WorldView } from "./render/worldView";
 import { formatDay, ticksPerDay } from "./sim/clock";
-import { BIOME_NAMES } from "./sim/planet/terrain";
+import { Biome, BIOME_NAMES } from "./sim/planet/terrain";
+import { Feature } from "./sim/econ/landuse";
+import { speciesAt } from "./render/natureView";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 import { World } from "./sim/world";
-import type { Command } from "./sim/econ/economy";
+import { MEMORIAL, type Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
@@ -393,6 +395,26 @@ export class Game {
     // Prefer somewhere on the edge of the snow, where it meets green land.
     const edge = land.ring(best, 8).find((t) => land.isLand(t) && (land.snowCover[t] as number) < 0.1);
     this.focusTile(edge ?? best, distance);
+    return true;
+  }
+
+  /** Debug: look at the densest grove of one tree species (see natureView's Species). */
+  focusSpecies(species: number, distance = 14): boolean {
+    const land = this.world.land;
+    const { temperature, moisture, biome } = land.planet.terrain;
+    const is = (t: number) => land.feature[t] === Feature.Tree && speciesAt(temperature[t] as number, moisture[t] as number, biome[t] as Biome, land.variety[t] as number, land.variety[t] === MEMORIAL) === species;
+    let best = -1;
+    let bestN = 0;
+    for (let t = 0; t < land.feature.length; t++) {
+      if (!is(t)) continue;
+      const n = land.ring(t, 3).filter(is).length;
+      if (n > bestN) {
+        bestN = n;
+        best = t;
+      }
+    }
+    if (best < 0) return false;
+    this.focusTile(best, distance);
     return true;
   }
 

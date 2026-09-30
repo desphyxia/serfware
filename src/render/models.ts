@@ -117,7 +117,7 @@ function mergeBaked(plain: Part[], baked: Part[]): THREE.BufferGeometry {
   return mergeGeometries(geos);
 }
 
-export function coniferGeometry(): THREE.BufferGeometry {
+export function coniferGeometry(lite = false): THREE.BufferGeometry {
   const rng = new kit.Rng(17);
   const trunk: Part[] = [[cyl(0.06, 0.1, 0.6, 7), "#5f4230"]];
   const tiers: Part[] = [];
@@ -128,7 +128,7 @@ export function coniferGeometry(): THREE.BufferGeometry {
     const r = 0.66 - f * 0.46;
     const h = 0.62 - f * 0.18;
     const y = 0.45 + f * 1.35;
-    const cone = new THREE.ConeGeometry(r, h, 11, 2);
+    const cone = new THREE.ConeGeometry(r, h, lite ? 7 : 11, lite ? 1 : 2);
     // Droop the lower rim and ruffle it, so tiers read as boughs rather than cones.
     const p = cone.getAttribute("position");
     for (let k = 0; k < p.count; k++) {
@@ -146,7 +146,7 @@ export function coniferGeometry(): THREE.BufferGeometry {
   return mergeBaked(trunk, tiers);
 }
 
-export function broadleafGeometry(): THREE.BufferGeometry {
+export function broadleafGeometry(lite = false): THREE.BufferGeometry {
   const rng = new kit.Rng(29);
   const trunk: Part[] = [
     [cyl(0.07, 0.12, 0.95, 7), "#6e5038"],
@@ -161,7 +161,7 @@ export function broadleafGeometry(): THREE.BufferGeometry {
     lumps.push([Math.cos(a) * rr, rng.range(0.98, 1.42), Math.sin(a) * rr, rng.range(0.27, 0.36)]);
   }
   const leaves: Part[] = lumps.map(([x, y, z, r]) => {
-    const g = new THREE.IcosahedronGeometry(r, 1);
+    const g = new THREE.IcosahedronGeometry(r, lite ? 0 : 1);
     const p = g.getAttribute("position");
     // Slightly lumpy, flattened underneath.
     for (let k = 0; k < p.count; k++) {
@@ -172,6 +172,101 @@ export function broadleafGeometry(): THREE.BufferGeometry {
     return foliage(g.translate(x, y, z), centre, kit.jitter("#5f8f45", rng, 1.2), 0.72);
   });
   return mergeBaked(trunk, leaves);
+}
+
+/** Birch: a slender white trunk banded with dark marks, under a light, airy crown. */
+export function birchGeometry(lite = false): THREE.BufferGeometry {
+  const rng = new kit.Rng(41);
+  const trunk: Part[] = [];
+  for (let i = 0; i < 6; i++) {
+    const y0 = i * 0.2;
+    const r = 0.055 - i * 0.006;
+    const mark = rng.range(0.015, 0.035);
+    trunk.push([cyl(r * 0.94, r, 0.2 - mark, 6, 0, y0), "#e6e1d6"], [cyl(r * 0.97 + 0.003, r * 0.97 + 0.003, mark, 6, 0, y0 + 0.2 - mark), i % 2 ? "#4a4440" : "#8a847a"]);
+  }
+  trunk.push([cyl(0.02, 0.03, 0.4, 5).rotateZ(-0.6).translate(0.1, 0.85, 0), "#e6e1d6"], [cyl(0.018, 0.026, 0.36, 5).rotateZ(0.7).rotateY(2).translate(-0.06, 0.95, 0.06), "#e6e1d6"]);
+  const centre = new THREE.Vector3(0, 1.35, 0);
+  const lumps: [number, number, number, number][] = [[0, 1.5, 0, 0.26], [0, 1.82, 0, 0.18]];
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rng.range(-0.3, 0.3);
+    const rr = rng.range(0.18, 0.28);
+    lumps.push([Math.cos(a) * rr, rng.range(1.05, 1.7), Math.sin(a) * rr, rng.range(0.14, 0.2)]);
+  }
+  const leaves: Part[] = lumps.map(([x, y, z, r]) => {
+    const g = new THREE.IcosahedronGeometry(r, lite ? 0 : 1).scale(1, 1.25, 1);
+    return foliage(g.translate(x, y, z), centre, kit.jitter("#8db55a", rng, 1.2), 0.7);
+  });
+  return mergeBaked(trunk, leaves);
+}
+
+/** Pine: a tall, bare, rust-barked trunk carrying a few flat, dark crowns near the top. */
+export function pineGeometry(lite = false): THREE.BufferGeometry {
+  const rng = new kit.Rng(53);
+  const trunk: Part[] = [
+    [cyl(0.05, 0.1, 1.2, 7), "#6a4a36"],
+    [cyl(0.035, 0.05, 0.7, 6, 0, 1.2), "#b0663e"],
+    [cyl(0.02, 0.03, 0.4, 5).rotateZ(-0.9).translate(0.16, 1.45, 0), "#b0663e"],
+    [cyl(0.02, 0.03, 0.4, 5).rotateZ(0.9).rotateY(2.2).translate(-0.1, 1.6, 0.12), "#b0663e"],
+  ];
+  const centre = new THREE.Vector3(0, 1.75, 0);
+  const pads: [number, number, number, number][] = [[0, 1.95, 0, 0.42], [0.3, 1.62, 0.05, 0.3], [-0.24, 1.72, 0.14, 0.28], [0.05, 1.5, -0.26, 0.25]];
+  const leaves: Part[] = pads.map(([x, y, z, r]) => {
+    const g = new THREE.IcosahedronGeometry(r, lite ? 0 : 1);
+    const p = g.getAttribute("position");
+    for (let k = 0; k < p.count; k++) {
+      const w = 1 + Math.sin(p.getX(k) * 19 + p.getZ(k) * 11) * 0.1;
+      p.setXYZ(k, p.getX(k) * w, p.getY(k) * 0.42, p.getZ(k) * w);
+    }
+    return foliage(g.translate(x, y, z), centre, kit.jitter("#3d5f3e", rng, 1), 0.6);
+  });
+  return mergeBaked(trunk, leaves);
+}
+
+/** Palm: a curved, ringed trunk and a head of drooping fronds (both sides drawn). */
+export function palmGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(67);
+  const trunk: Part[] = [];
+  const at = (f: number) => new THREE.Vector3(0.35 * f * f, f * 1.9, 0);
+  for (let i = 0; i < 9; i++) {
+    const a = at(i / 9);
+    const b = at((i + 1) / 9);
+    const d = b.clone().sub(a);
+    const r = 0.075 - i * 0.004;
+    const g = cyl(r * 0.85, r, d.length(), 7).translate(0, d.length() / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    trunk.push([g.translate(a.x, a.y, a.z), i % 2 ? "#8a7050" : "#9c8260"]);
+  }
+  const top = at(1);
+  trunk.push([new THREE.SphereGeometry(0.06, 6, 4).translate(top.x + 0.04, top.y - 0.06, 0.05), "#5a4430"], [new THREE.SphereGeometry(0.06, 6, 4).translate(top.x - 0.04, top.y - 0.07, -0.04), "#5a4430"]);
+  const fronds: Part[] = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + rng.range(-0.2, 0.2);
+    const len = rng.range(0.75, 0.95);
+    const pos: number[] = [];
+    const seg = 5;
+    const pt = (f: number, side: number) => {
+      const r = f * len;
+      const droop = 0.25 * f - 0.75 * f * f;
+      const w = Math.sin(Math.PI * Math.min(1, f * 1.1)) * 0.13 * side;
+      return [top.x + Math.cos(a) * r - Math.sin(a) * w, top.y + droop * len + Math.abs(w) * 0.3, Math.sin(a) * r + Math.cos(a) * w];
+    };
+    for (let k = 0; k < seg; k++) {
+      const f0 = k / seg;
+      const f1 = (k + 1) / seg;
+      const c0 = pt(f0, 0);
+      const c1 = pt(f1, 0);
+      for (const side of [-1, 1]) {
+        const e0 = pt(f0, side);
+        const e1 = pt(f1, side);
+        pos.push(...c0, ...e0, ...e1, ...c0, ...e1, ...c1);
+        pos.push(...c0, ...e1, ...e0, ...c0, ...c1, ...e1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    fronds.push(foliage(g, top.clone().add(new THREE.Vector3(0, 0.3, 0)), kit.jitter("#5d8f3c", rng, 1.2), 0.5));
+  }
+  return mergeBaked(trunk, fronds);
 }
 
 export function stumpGeometry(): THREE.BufferGeometry {

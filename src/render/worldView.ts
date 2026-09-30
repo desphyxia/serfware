@@ -10,6 +10,7 @@ import { EconView } from "./econView";
 import { Fauna } from "./fauna";
 import { GrassPatch } from "./grass";
 import { Undergrowth } from "./undergrowth";
+import { AmbientFx } from "./ambientFx";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -51,6 +52,7 @@ export class WorldView {
   /** Uniforms shared by the sea, lakes and rivers. */
   readonly waterU: WaterUniforms;
   readonly weather = new WeatherFx();
+  readonly ambient = new AmbientFx();
   private climateVersion = -1;
   private climateTimer = 0;
   private wearVersion = -1;
@@ -112,6 +114,7 @@ export class WorldView {
       this.water,
       this.rivers.group,
       this.weather.group,
+      this.ambient.group,
       this.nature.group,
       this.econ.group,
       this.overlays.group,
@@ -241,6 +244,17 @@ export class WorldView {
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
     this.particles.update(p.dt, p.closeness > 0.2 ? this.econ.emitters() : [], wind, light, p.pixelRatio, p.particles);
+    {
+      // Motes in warm, dry daylight, most of all when the sun is low.
+      const t = this.world.planet.grid.nearestTile([p.focus.x, p.focus.y, p.focus.z], 0);
+      const c = this.world.climate;
+      const sunUp = p.focus.clone().normalize().dot(p.sunDir);
+      const low = 1 - THREE.MathUtils.smoothstep(sunUp, 0.25, 0.8) * 0.6;
+      const warmth = p.daylight * THREE.MathUtils.smoothstep(c.temp[t] as number, 8, 20) * (1 - Math.min(1, (c.rain[t] as number) * 3)) * low;
+      const sun = new THREE.Color(1, 0.85, 0.55).multiplyScalar(0.6 + 0.4 * p.daylight);
+      const span = p.distance ?? 60;
+      this.ambient.update(p.dt, p.time, p.ground ?? p.focus, span, this.nature.crowns, wind, p.closeness > 0.3 ? warmth : 0, sun, p.closeness > 0.3 ? p.particles : 0);
+    }
     this.wearTimer -= p.dt;
     if (this.wearTimer <= 0 && this.world.land.wearVersion !== this.wearVersion) {
       this.wearTimer = 1;
@@ -316,6 +330,7 @@ export class WorldView {
     this.undergrowth.dispose();
     this.fauna.dispose();
     this.particles.dispose();
+    this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();
     this.group.traverse((o) => {

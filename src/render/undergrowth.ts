@@ -7,6 +7,7 @@ import { PainterlyMaterial } from "./painterly";
 import { ROAD_HALF } from "./terrain/field";
 
 const MAX = 6000;
+/** Ring radius in tiles at full vegetation; Low draws a smaller ring. */
 const RING = 18;
 
 /** A soft bush: a few rounded lumps with outward-leaning normals, darker underneath. */
@@ -89,9 +90,44 @@ function reedGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** A fern: arching fronds from a crown, tapering to their tips, drawn from both sides. */
+function fernGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const col: number[] = [];
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + (i % 2) * 0.3;
+    const len = 0.32 + (i % 3) * 0.06;
+    const pt = (f: number, side: number): [number, number, number] => {
+      const r = f * len;
+      const h = (0.9 * f - 0.75 * f * f) * len;
+      const w = Math.sin(Math.PI * Math.min(1, f * 1.05)) * 0.055 * side;
+      return [Math.cos(a) * r - Math.sin(a) * w, h + Math.abs(w) * 0.25, Math.sin(a) * r + Math.cos(a) * w];
+    };
+    for (let k = 0; k < 4; k++) {
+      const f0 = k / 4;
+      const f1 = (k + 1) / 4;
+      for (const side of [-1, 1]) {
+        const tri = [pt(f0, 0), pt(f0, side), pt(f1, side), pt(f0, 0), pt(f1, side), pt(f1, 0)];
+        for (const t of [...tri, ...[tri[0], tri[2], tri[1], tri[3], tri[5], tri[4]]]) {
+          pos.push(...(t as [number, number, number]));
+          const k2 = 0.55 + 0.45 * f1;
+          col.push(0.2 * k2, 0.36 * k2, 0.13 * k2);
+        }
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 /**
- * Mid-distance undergrowth around the camera focus: bushes in meadows and forests, boulders on
- * rocky and dry ground, reeds along rivers, lakes and marshes. Like the grass, the layout per
+ * Mid-distance undergrowth around the camera focus, by biome: ferns and dark bushes under
+ * forests, heather on tundra, grey-green sage scrub on steppe and desert, boulders on rocky and
+ * dry ground (sandy in deserts, lichened in the cold), reeds along rivers, lakes and marshes. Like the grass, the layout per
  * tile is fixed (hash-based), so nothing reshuffles as the camera moves.
  */
 export class Undergrowth {
@@ -99,6 +135,7 @@ export class Undergrowth {
   private readonly bushes: THREE.InstancedMesh;
   private readonly boulders: THREE.InstancedMesh;
   private readonly reeds: THREE.InstancedMesh;
+  private readonly ferns: THREE.InstancedMesh;
   private centerTile = -1;
   private key = "";
 
@@ -120,6 +157,7 @@ export class Undergrowth {
     this.bushes = mk(bushGeometry(), new PainterlyMaterial({ vertexColors: true, wind: 0.5, brush: 1.2 }), MAX, true);
     this.boulders = mk(boulderGeometry(), new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 1 }), MAX / 2, true);
     this.reeds = mk(reedGeometry(), new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, wind: 0.6, brush: 0.4 }), MAX, false);
+    this.ferns = mk(fernGeometry(), new PainterlyMaterial({ vertexColors: true, side: THREE.DoubleSide, wind: 0.5, brush: 0.6 }), MAX, false);
     this.group.name = "undergrowth";
   }
 
@@ -142,7 +180,7 @@ export class Undergrowth {
   private rebuild(center: number, density: number): void {
     const land = this.land;
     const { terrain, grid } = land.planet;
-    const tiles = [center, ...land.ring(center, RING)];
+    const tiles = [center, ...land.ring(center, Math.round(RING * (0.55 + 0.45 * Math.min(1, density))))];
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const turn = new THREE.Quaternion();
@@ -154,18 +192,21 @@ export class Undergrowth {
     let nb = 0;
     let nr = 0;
     let nd = 0;
+    let nf = 0;
     for (const t of tiles) {
       if (!land.isLand(t) || land.hydro.lake[t] || land.use[t] === Use.Building || land.use[t] === Use.Flag || hiddenAt(this.mask, t)) continue;
       const b = terrain.biome[t] as Biome;
       const feature = land.feature[t] as Feature;
       const road = land.use[t] === Use.Road;
       const field = feature === Feature.Field;
-      let bushes = b === Biome.Forest || b === Biome.DeepForest ? 1.6 : b === Biome.Meadow ? 0.7 : b === Biome.Marsh ? 1.2 : b === Biome.Steppe ? 0.3 : 0;
+      let bushes = b === Biome.Forest || b === Biome.DeepForest ? 1.6 : b === Biome.Meadow ? 0.7 : b === Biome.Marsh ? 1.2 : b === Biome.Steppe ? 0.6 : b === Biome.Tundra ? 1.1 : b === Biome.Desert ? 0.3 : b === Biome.Beach ? 0.15 : 0;
+      let ferns = b === Biome.DeepForest ? 3.5 : b === Biome.Forest ? 2.2 : b === Biome.Marsh ? 1 : feature === Feature.Tree ? 1 : 0;
       let boulders = feature === Feature.Rock ? 2.5 : b === Biome.Rock ? 1.5 : b === Biome.Tundra ? 0.8 : b === Biome.Steppe ? 0.4 : 0.12;
       const shore = wet(t) || grid.neighborsOf(t).some(wet);
       let reeds = b === Biome.Marsh ? 3 : shore ? 2.5 : 0;
       if (road || field) {
         bushes *= 0.2;
+        ferns *= 0.1;
         boulders *= 0.2;
         reeds *= 0.3;
       }
@@ -189,7 +230,7 @@ export class Undergrowth {
         const field = this.frames.field;
         if (field.roadDistance(d.x, d.y, d.z, t) < ROAD_HALF + 0.25) return -1;
         const edge = field.riverEdge(d.x, d.y, d.z, t);
-        if (salt >= 3000 ? edge < -0.35 : edge < 0.2) return -1;
+        if (salt >= 3000 && salt < 4000 ? edge < -0.35 : edge < 0.2) return -1;
         if (p.length() < field.R + 0.05) return -1;
         return SurfaceFrames.hash(t, salt + 3);
       };
@@ -200,7 +241,9 @@ export class Undergrowth {
         const sc = 0.7 + h * 0.9;
         m.compose(p, q, s.set(sc, sc * (0.8 + h * 0.4), sc));
         this.bushes.setMatrixAt(nb, m);
-        c.setHSL(0.27 + (h - 0.5) * 0.06 + (b === Biome.Marsh ? 0.03 : 0), 0.5, 0.13 + h * 0.07);
+        if (b === Biome.Tundra) c.setHSL(0.93 + h * 0.06, 0.28, 0.2 + h * 0.06);
+        else if (b === Biome.Steppe || b === Biome.Desert || b === Biome.Beach) c.setHSL(0.17 + h * 0.05, 0.22, 0.24 + h * 0.08);
+        else c.setHSL(0.27 + (h - 0.5) * 0.06 + (b === Biome.Marsh ? 0.03 : 0), 0.5, (b === Biome.DeepForest ? 0.1 : 0.13) + h * 0.07);
         this.bushes.setColorAt(nb++, c);
       }
       for (let i = 0, n = count(boulders, 902); i < n && nd < MAX / 2; i++) {
@@ -209,8 +252,19 @@ export class Undergrowth {
         const sc = 0.6 + h * h * 2.2;
         m.compose(p, q, s.set(sc, sc * (0.7 + h * 0.5), sc * (0.8 + h * 0.3)));
         this.boulders.setMatrixAt(nd, m);
-        c.setHSL(0.09, 0.06 + h * 0.05, 0.5 + h * 0.12);
+        if (b === Biome.Desert || b === Biome.Beach) c.setHSL(0.08, 0.3 + h * 0.1, 0.55 + h * 0.1);
+        else if (b === Biome.Tundra || b === Biome.Snow) c.setHSL(0.2, 0.1 + h * 0.08, 0.48 + h * 0.1);
+        else c.setHSL(0.09, 0.06 + h * 0.05, 0.5 + h * 0.12);
         this.boulders.setColorAt(nd++, c);
+      }
+      for (let i = 0, n = count(ferns, 904); i < n && nf < MAX; i++) {
+        const h = place(4000 + i * 7, 1.7);
+        if (h < 0) continue;
+        const sc = 0.7 + h * 0.8;
+        m.compose(p, q, s.set(sc, sc * (0.8 + h * 0.4), sc));
+        this.ferns.setMatrixAt(nf, m);
+        c.setRGB(0.95, 1, 0.9).multiplyScalar(0.7 + h * 0.4);
+        this.ferns.setColorAt(nf++, c);
       }
       for (let i = 0, n = count(reeds, 903); i < n && nr < MAX; i++) {
         const h = place(3000 + i * 7, 1.75);
@@ -225,14 +279,15 @@ export class Undergrowth {
     this.bushes.count = nb;
     this.boulders.count = nd;
     this.reeds.count = nr;
-    for (const mesh of [this.bushes, this.boulders, this.reeds]) {
+    this.ferns.count = nf;
+    for (const mesh of [this.bushes, this.boulders, this.reeds, this.ferns]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
   }
 
   dispose(): void {
-    for (const mesh of [this.bushes, this.boulders, this.reeds]) {
+    for (const mesh of [this.bushes, this.boulders, this.reeds, this.ferns]) {
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
       mesh.dispose();
