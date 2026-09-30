@@ -10,7 +10,7 @@ const nonDeterministicMath = ["random", "sin", "cos", "tan", "asin", "acos", "at
 );
 
 export default tseslint.config(
-  { ignores: ["dist", "dist-single", "node_modules", "proposal", "artifacts", "desktop/dist"] },
+  { ignores: ["dist", "dist-single", "node_modules", "proposal", "artifacts", "desktop/dist", "desktop/app", "desktop/node_modules"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -60,4 +60,14 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The Electron shell (desktop/): Node scripts, CommonJS in the main process and preload.
+    files: ["desktop/**/*.cjs", "desktop/**/*.mjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { require: "readonly", module: "writable", __dirname: "readonly", Buffer: "readonly", process: "readonly", console: "readonly", setInterval: "readonly" },
+    },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
+  { files: ["desktop/**/*.mjs"], languageOptions: { sourceType: "module" } },
 );

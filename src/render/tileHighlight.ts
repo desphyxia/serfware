@@ -1,15 +1,18 @@
 import * as THREE from "three/webgpu";
 import type { Planet } from "../sim/planet/planet";
 
-/** Glowing outline of the hovered tile. */
+/**
+ * Glowing outline of the hovered tile: a closed line strip (the WebGPU renderer has no LineLoop,
+ * so the first corner is repeated at the end).
+ */
 export class TileHighlight {
-  readonly line: THREE.LineLoop<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  readonly line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private tile = -1;
 
   constructor() {
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
-    this.line = new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: "#ffd58a", transparent: true, opacity: 0.95, depthTest: false }));
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9 * 3), 3));
+    this.line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: "#ffd58a", transparent: true, opacity: 0.95, depthTest: false }));
     this.line.renderOrder = 10;
     this.line.visible = false;
     this.line.frustumCulled = false;
@@ -33,8 +36,9 @@ export class TileHighlight {
       const r = R + h / 3 + 0.12;
       attr.setXYZ(k, (grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
     }
+    attr.setXYZ(cs.length, attr.getX(0), attr.getY(0), attr.getZ(0));
     attr.needsUpdate = true;
-    this.line.geometry.setDrawRange(0, cs.length);
+    this.line.geometry.setDrawRange(0, cs.length + 1);
     this.line.visible = true;
   }
 }

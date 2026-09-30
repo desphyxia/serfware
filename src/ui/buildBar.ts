@@ -6,7 +6,7 @@ export type ToolId = "select" | "flag" | "road" | "demolish" | string;
 const svg = (body: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
 
-const ICONS: Record<string, string> = {
+export const ICONS: Record<string, string> = {
   select: svg(`<path d="M6 4l12 7-5 1.5L10 18z" ${STROKE}/>`),
   flag: svg(`<path d="M7 21V4M7 5h9l-2 3 2 3H7" ${STROKE}/>`),
   road: svg(`<path d="M8 21l2-18M16 21l-2-18M12 5v2M12 11v2M12 17v2" ${STROKE}/>`),
@@ -19,7 +19,7 @@ const ICONS: Record<string, string> = {
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
 
-const CATEGORIES: { id: Category; label: string; key: string }[] = [
+export const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "materials", label: "Materials", key: "3" },
   { id: "food", label: "Food", key: "4" },
   { id: "metal", label: "Mining", key: "5" },
@@ -27,7 +27,7 @@ const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "lantern", label: "Lanterns", key: "7" },
 ];
 
-function costText(def: BuildingDef): string {
+export function costText(def: BuildingDef): string {
   return Object.entries(def.cost)
     .map(([k, v]) => `${GOODS.find((g) => g.id === k)?.name ?? k} ${v}`)
     .join(" · ");

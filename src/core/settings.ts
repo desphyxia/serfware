@@ -1,6 +1,6 @@
 /** Player settings, graphics presets, and persistence. */
 
-export type PresetName = "low" | "medium" | "high";
+export type PresetName = "low" | "medium" | "high" | "deck";
 export type Preset = PresetName | "custom";
 
 export interface GraphicsSettings {
@@ -15,7 +15,7 @@ export interface GraphicsSettings {
   /** 0..1 amount of smoke, dust, birds and other particles. */
   particles: number;
   /** 0 = unlimited. */
-  maxFps: 0 | 30 | 60 | 120;
+  maxFps: 0 | 30 | 40 | 60 | 120;
   terrainDetail: "low" | "medium" | "high";
   atmosphere: "simple" | "scattering";
   /** Screen-space ambient occlusion (GTAO). */
@@ -76,6 +76,22 @@ export const PRESETS: Record<PresetName, GraphicsSettings> = {
     terrainDetail: "medium",
     atmosphere: "scattering",
     ao: true,
+    dof: false,
+    backend: "auto",
+  },
+  /** Steam Deck: 1280×800 at 40 fps (the Deck's sweet spot for battery), lighter shadows and effects. */
+  deck: {
+    resolutionScale: 1,
+    shadows: "soft",
+    shadowMapSize: 1024,
+    msaa: 0,
+    bloom: true,
+    vegetation: 0.5,
+    particles: 0.5,
+    maxFps: 40,
+    terrainDetail: "low",
+    atmosphere: "scattering",
+    ao: false,
     dof: false,
     backend: "auto",
   },
@@ -151,6 +167,8 @@ function structuredCloneSafe<T>(v: T): T {
 type Listener = (s: Settings) => void;
 
 const STORAGE_KEY = "seedfall.settings.v1";
+/** Interface scale for the Steam Deck preset. */
+export const DECK_UI_SCALE = 1.3;
 
 export class SettingsStore {
   private s: Settings;
@@ -176,7 +194,9 @@ export class SettingsStore {
   }
 
   applyPreset(p: PresetName): void {
-    this.s = { ...this.s, preset: p, graphics: { ...PRESETS[p] } };
+    // The Deck preset also enlarges the interface for its 7-inch screen.
+    const ui = p === "deck" ? { ...this.s.ui, uiScale: DECK_UI_SCALE } : this.s.ui;
+    this.s = { ...this.s, preset: p, graphics: { ...PRESETS[p] }, ui };
     this.commit();
   }
 

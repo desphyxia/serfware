@@ -158,6 +158,19 @@ export class PlanetCamera {
     return { dist: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
   }
 
+  /** Controller: turn the view (radians), tilt it, and zoom by a factor (<1 is closer). */
+  rotate(d: number): void {
+    this.tHeading += d;
+  }
+
+  tilt(d: number): void {
+    this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset + d, -0.6, 0.5);
+  }
+
+  zoomBy(f: number): void {
+    this.tDistance = THREE.MathUtils.clamp(this.tDistance * f, this.minDistance, this.maxDistance);
+  }
+
   /** Move the focus by a screen-space delta in pixels. */
   pan(dx: number, dy: number, screenH: number): void {
     const worldPerPixel = (2 * this.distance * Math.tan((this.camera.fov * Math.PI) / 360)) / screenH;

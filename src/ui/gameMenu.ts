@@ -1,6 +1,8 @@
 import { HostLobby, JoinLobby, randomRoom } from "../net/lobby";
 import type { SaveFile } from "../net/session";
 import { webrtcAvailable } from "../net/webrtc";
+import { SteamHostLobby, SteamJoinLobby } from "../net/steamLobby";
+import { desktop } from "../platform/bridge";
 import { copyText, h, Panel } from "./dom";
 
 export interface SaveMeta {
@@ -32,6 +34,9 @@ export class GameMenu extends Panel {
   private readonly saveList: HTMLElement;
   private readonly mpBody: HTMLElement;
   private lobby: HostLobby | JoinLobby | null = null;
+  private selectTab: (name: string) => void = () => {};
+  /** Steam is running (desktop build): multiplayer goes through Steam lobbies. */
+  private steamName = "";
 
   constructor(private readonly host: MenuHost) {
     super("menu", "Game", { width: 400 });
@@ -111,6 +116,14 @@ export class GameMenu extends Panel {
 
     this.body.append(tabs, pages);
     select("Saves");
+    this.selectTab = select;
+    const bridge = desktop();
+    if (bridge)
+      void bridge.steamUser().then((u) => {
+        if (!u) return;
+        this.steamName = u.name;
+        this.renderMpStart();
+      });
   }
 
   protected override onShow(): void {
@@ -157,7 +170,17 @@ export class GameMenu extends Panel {
     const room = h("input", { type: "text", id: "mp-room", value: randomRoom() }) as HTMLInputElement;
     const mode = h("select", { id: "mp-mode" }, h("option", { value: "shared" }, "Co-op: shared keep"), h("option", { value: "neighbours" }, "Co-op: neighbours")) as HTMLSelectElement;
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim() });
+    const steam = this.steamName
+      ? [
+          h("h3", { class: "sub" }, "Steam"),
+          h("p", { class: "hint" }, `Signed in as ${this.steamName}. Host a friends-only lobby and invite friends from the Steam overlay; they can also join from your profile.`),
+          h("div", { class: "btn-row" }, h("button", { class: "btn primary", onclick: () => void this.openSteamHost(mode.value as "shared" | "neighbours") }, "Host on Steam")),
+          h("h3", { class: "sub" }, "Direct (WebRTC)"),
+        ]
+      : [];
+    if (this.steamName) name.value = this.steamName;
     this.mpBody.replaceChildren(
+      ...steam,
       h("p", { class: "hint" }, note),
       h("div", { class: "row" }, h("label", { for: "mp-name" }, "Your name"), name, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-server" }, "Server"), server, h("span")),
@@ -170,6 +193,100 @@ export class GameMenu extends Panel {
         h("button", { class: "btn", onclick: () => void this.openJoin(opts()) }, "Join"),
       ),
     );
+  }
+
+  /** Host a friends-only Steam lobby (desktop build). */
+  async openSteamHost(mode: "shared" | "neighbours"): Promise<SteamHostLobby | null> {
+    const bridge = desktop();
+    if (!bridge) return null;
+    this.lobby?.close();
+    const lobby = new SteamHostLobby({ name: this.steamName || "Host" }, bridge);
+    this.lobby = lobby;
+    const status = h("p", { class: "status" });
+    const players = h("ul", { class: "player-list" });
+    const render = () => {
+      status.textContent = lobby.status;
+      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+    };
+    lobby.subscribe(render);
+    this.mpBody.replaceChildren(
+      h("h3", { class: "sub" }, `Steam lobby · ${mode === "shared" ? "shared keep" : "neighbours"}`),
+      status,
+      players,
+      h(
+        "div",
+        { class: "btn-row" },
+        h("button", { class: "btn", onclick: () => lobby.invite() }, "Invite friends"),
+        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode) }, "Start game"),
+        h(
+          "button",
+          {
+            class: "btn",
+            onclick: () => {
+              lobby.close();
+              this.lobby = null;
+              this.renderMpStart();
+            },
+          },
+          "Close lobby",
+        ),
+      ),
+    );
+    render();
+    try {
+      await lobby.open();
+    } catch (e) {
+      this.host.notify((e as Error).message, "warn");
+    }
+    render();
+    return lobby;
+  }
+
+  /** Join a friend's Steam lobby (from an overlay invite or the friends list). */
+  async openSteamJoin(lobbyId: string): Promise<SteamJoinLobby | null> {
+    const bridge = desktop();
+    if (!bridge) return null;
+    this.lobby?.close();
+    this.selectTab("Multiplayer");
+    const lobby = new SteamJoinLobby({ name: this.steamName || "Guest", room: lobbyId }, bridge);
+    this.lobby = lobby;
+    const status = h("p", { class: "status" });
+    const players = h("ul", { class: "player-list" });
+    const render = () => {
+      status.textContent = lobby.status;
+      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+    };
+    lobby.subscribe(render);
+    this.host.joined(lobby);
+    this.mpBody.replaceChildren(
+      h("h3", { class: "sub" }, "Joining a Steam lobby"),
+      status,
+      players,
+      h(
+        "div",
+        { class: "btn-row" },
+        h(
+          "button",
+          {
+            class: "btn",
+            onclick: () => {
+              lobby.close();
+              this.lobby = null;
+              this.renderMpStart();
+            },
+          },
+          "Leave",
+        ),
+      ),
+    );
+    render();
+    try {
+      await lobby.join(lobbyId);
+    } catch (e) {
+      this.host.notify((e as Error).message, "warn");
+    }
+    render();
+    return lobby;
   }
 
   /** Programmatic entry used by the UI and by the multiplayer test. */

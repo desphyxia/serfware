@@ -2,7 +2,7 @@ import { log } from "../core/log";
 import { World } from "../sim/world";
 import { LockstepSession } from "./lockstep";
 import type { SessionMode } from "./session";
-import type { NetMessage } from "./transport";
+import type { NetMessage, Transport } from "./transport";
 import { RtcPeer, RtcTransport, SignalClient, DEFAULT_ICE } from "./webrtc";
 
 export interface LobbyPlayer {
@@ -20,16 +20,23 @@ export interface LobbyOptions {
 
 type Listener = () => void;
 
-/** Shared lobby state and callbacks. */
+/** Shared lobby state and callbacks. The transport is WebRTC unless a subclass brings another. */
 abstract class Lobby {
-  readonly transport = new RtcTransport();
   players: LobbyPlayer[] = [];
   status = "";
   protected signal: SignalClient | null = null;
   protected listeners = new Set<Listener>();
   onStart: ((session: LockstepSession) => void) | null = null;
 
-  constructor(readonly opts: LobbyOptions) {}
+  constructor(
+    readonly opts: LobbyOptions,
+    readonly transport: Transport = new RtcTransport(),
+  ) {}
+
+  /** The WebRTC transport (only the WebRTC lobbies use its peer management). */
+  protected get rtc(): RtcTransport {
+    return this.transport as RtcTransport;
+  }
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
@@ -58,8 +65,8 @@ export class HostLobby extends Lobby {
   private readonly pendingManual = new Map<string, RtcPeer>();
   private readonly peerPlayer = new Map<string, number>();
 
-  constructor(opts: LobbyOptions) {
-    super(opts);
+  constructor(opts: LobbyOptions, transport?: Transport) {
+    super(opts, transport);
     this.players = [{ id: 0, name: opts.name || "Host" }];
     this.transport.onMessage((msg, from) => this.onPeerMessage(msg, from));
   }
@@ -79,17 +86,12 @@ export class HostLobby extends Lobby {
   private newPeer(id: string): RtcPeer {
     const peer = new RtcPeer(id, this.opts.ice ?? DEFAULT_ICE);
     peer.onOpen = () => {
-      this.transport.add(peer);
+      this.rtc.add(peer);
       this.changed("A guest connected.");
     };
     peer.onClose = () => {
-      const pid = this.peerPlayer.get(id);
-      this.transport.remove(id);
-      if (pid !== undefined) {
-        this.players = this.players.filter((p) => p.id !== pid);
-        this.broadcastLobby();
-        this.changed("A guest left.");
-      }
+      this.rtc.remove(id);
+      this.guestLeft(id);
     };
     return peer;
   }
@@ -122,6 +124,16 @@ export class HostLobby extends Lobby {
     await peer.acceptAnswer(code);
   }
 
+  /** A guest's connection closed: drop them from the lobby. */
+  protected guestLeft(peer: string): void {
+    const pid = this.peerPlayer.get(peer);
+    if (pid === undefined) return;
+    this.peerPlayer.delete(peer);
+    this.players = this.players.filter((p) => p.id !== pid);
+    this.broadcastLobby();
+    this.changed("A guest left.");
+  }
+
   private onPeerMessage(msg: NetMessage, from: string): void {
     if (msg.type === "hello" && !this.peerPlayer.has(from)) {
       const id = this.nextId++;
@@ -133,7 +145,7 @@ export class HostLobby extends Lobby {
     }
   }
 
-  private broadcastLobby(): void {
+  protected broadcastLobby(): void {
     this.transport.broadcast({ type: "lobby", players: this.players });
   }
 
@@ -154,15 +166,15 @@ export class JoinLobby extends Lobby {
   playerId = -1;
   private peer: RtcPeer | null = null;
 
-  constructor(opts: LobbyOptions) {
-    super(opts);
+  constructor(opts: LobbyOptions, transport?: Transport) {
+    super(opts, transport);
     this.transport.onMessage((msg) => this.onPeerMessage(msg));
   }
 
   private makePeer(): RtcPeer {
     const peer = new RtcPeer("host", this.opts.ice ?? DEFAULT_ICE);
     peer.onOpen = () => {
-      this.transport.add(peer);
+      this.rtc.add(peer);
       peer.send({ type: "hello", name: this.opts.name || "Guest" });
       this.changed("Connected. Waiting for the host to start…");
     };
@@ -190,6 +202,11 @@ export class JoinLobby extends Lobby {
   async replyToInvite(code: string): Promise<string> {
     const peer = this.makePeer();
     return peer.acceptOffer(code);
+  }
+
+  /** The host is reachable: introduce ourselves. */
+  protected hello(host: string): void {
+    this.transport.send(host, { type: "hello", name: this.opts.name || "Guest" });
   }
 
   private onPeerMessage(msg: NetMessage): void {

@@ -32,7 +32,7 @@ export class SettingsPanel extends Panel {
     // Graphics
     const g = h("div", { class: "form" });
     const presetRow = h("div", { class: "seg", role: "group", "aria-label": "Graphics preset" });
-    for (const p of ["low", "medium", "high", "custom"] as const) {
+    for (const p of ["low", "medium", "high", "deck", "custom"] as const) {
       const b = h(
         "button",
         {
@@ -43,7 +43,7 @@ export class SettingsPanel extends Panel {
           disabled: p === "custom",
           title: p === "custom" ? "Selected automatically when you change any value below" : undefined,
         },
-        p[0]!.toUpperCase() + p.slice(1),
+        p === "deck" ? "Steam Deck" : p[0]!.toUpperCase() + p.slice(1),
       );
       this.presetButtons.set(p, b);
       presetRow.append(b);
@@ -61,7 +61,7 @@ export class SettingsPanel extends Panel {
     g.append(this.select<GraphicsSettings["terrainDetail"]>("Terrain detail", "g-td", [["low", "Low"], ["medium", "Medium"], ["high", "High"]], (s) => s.graphics.terrainDetail, (v) => ({ terrainDetail: v })));
     g.append(this.select<GraphicsSettings["atmosphere"]>("Atmosphere", "g-atm", [["simple", "Simple"], ["scattering", "Scattering"]], (s) => s.graphics.atmosphere, (v) => ({ atmosphere: v })));
     g.append(this.select<GraphicsSettings["backend"]>("Graphics API (reload)", "g-api", [["auto", "WebGPU if available"], ["webgl", "WebGL 2"]], (s) => s.graphics.backend, (v) => ({ backend: v })));
-    g.append(this.select<GraphicsSettings["maxFps"]>("Frame limit", "g-fps", [[30, "30"], [60, "60"], [120, "120"], [0, "Unlimited"]], (s) => s.graphics.maxFps, (v) => ({ maxFps: v })));
+    g.append(this.select<GraphicsSettings["maxFps"]>("Frame limit", "g-fps", [[30, "30"], [40, "40"], [60, "60"], [120, "120"], [0, "Unlimited"]], (s) => s.graphics.maxFps, (v) => ({ maxFps: v })));
     addTab("Graphics", g);
 
     // Audio
