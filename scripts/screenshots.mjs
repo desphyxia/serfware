@@ -42,7 +42,7 @@ all.push(
   { name: "vent", seed: "frost-1", wait: 4000, setup: () => { const g = window.__seedfall.game; g.setFog(false); g.clearWeather(); const t = g.debugVent(false, 11); if (t >= 0) g.world.land.amount[t] = 220; g.setHour(16.5); g.setView(11, 0.9, -0.05); } },
   { name: "eruption", seed: "frost-1", wait: 6000, setup: () => { const g = window.__seedfall.game; g.setFog(false); g.clearWeather(); g.setHour(20.2); g.debugVent(true, 16); g.setView(16, 1.1, 0.1); } },
   { name: "ash", seed: "frost-1", wait: 4000, setup: () => { const g = window.__seedfall.game; g.setFog(false); g.clearWeather(); g.debugVent(true, 18); for (let i = 0; i < 400; i++) g.world.step(); g.debugVent(false, 18); g.clearWeather(); g.setHour(11); g.setView(18, 1.2, 0.1); } },
-  { name: "aurora", seed: "hedge-1", wait: 4000, setup: () => { const g = window.__seedfall.game; g.clearWeather(); g.focusPlayer(0, 14); g.sky.auroraForce = 1; g.setHour(23.2); g.setView(6, 1.3, 1.0); } },
+  { name: "aurora", seed: "hedge-1", wait: 4000, setup: () => { const g = window.__seedfall.game; g.clearWeather(); g.setFog(false); g.focusRiver(30); g.sky.auroraForce = 1; g.setHour(23.2); g.setView(30, 1.6, 1.2); } },
   { name: "kit-frontier", wait: 3500, setup: () => { const g = window.__seedfall.game; g.focusPlayer(0, 14); g.clearWeather(); g.setHour(15); g.showcase(["waystation", "greenhouse"], 10); g.setView(10, 0.4); } },
 );
 all.push(

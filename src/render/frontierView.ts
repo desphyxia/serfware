@@ -108,13 +108,16 @@ export class FrontierView {
     const col: number[] = [];
     const idx: number[] = [];
     // Across the ribbon: shoulder, track, centre, track, shoulder.
-    const across = [-1.25, -0.5, 0, 0.5, 1.25];
+    // Shoulders fade into the ice colour so the ribbon has no hard edge.
+    const across = [-1.2, -0.62, -0.42, 0, 0.42, 0.62, 1.2];
     const shade = [
-      [0.9, 0.93, 0.97],
-      [0.56, 0.6, 0.66],
-      [0.8, 0.82, 0.85],
-      [0.56, 0.6, 0.66],
-      [0.9, 0.93, 0.97],
+      [0.66, 0.8, 0.86],
+      [0.9, 0.92, 0.95],
+      [0.5, 0.55, 0.62],
+      [0.88, 0.9, 0.93],
+      [0.5, 0.55, 0.62],
+      [0.9, 0.92, 0.95],
+      [0.66, 0.8, 0.86],
     ];
     const a3 = new THREE.Vector3();
     const side = new THREE.Vector3();

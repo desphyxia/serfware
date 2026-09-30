@@ -1287,6 +1287,7 @@ export class Game {
     this.viewFill.intensity = (0.12 + 0.3 * this.daylight) * closeness;
     this.skyFill.color.copy(this.sky.zenith).lerp(new THREE.Color("#c8d6ee"), 0.6);
 
+    this.sky.planetRadius = this.world.planet.params.radius;
     this.sky.update(this.camera, this.sunDir, up, air, time, this.gfx.renderer.getPixelRatio(), this.settings.get().graphics.atmosphere === "scattering" ? 1 : 0.4);
     if (air > 0.02) {
       this.fog.color.copy(this.sky.horizon);

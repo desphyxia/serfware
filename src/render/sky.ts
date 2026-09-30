@@ -17,6 +17,8 @@ export class SkyDome {
     quality: uniform(1),
     /** Aurora strength: high latitudes, at night, inside the atmosphere. */
     aurora: uniform(0),
+    /** Sine of the horizon's dip below level at the camera's height (0 on the ground). */
+    dip: uniform(0),
   };
   private readonly stars: SpriteBatch;
   private readonly starDir: Float32Array;
@@ -27,6 +29,8 @@ export class SkyDome {
   /** Horizon colour of the last update, used for fog and water reflections. */
   readonly horizon = new THREE.Color();
   readonly zenith = new THREE.Color();
+  /** Planet radius, for the horizon's dip (set by the game). */
+  planetRadius = 0;
   /** Debug and screenshots: show the aurora at any latitude (1), not only near the poles. */
   auroraForce = 0;
 
@@ -62,22 +66,35 @@ export class SkyDome {
     col = mix(vec3(0.004, 0.006, 0.016), col, u.air);
     // Aurora: curtains of light on a high sky plane, folding slowly, green at the hem and violet
     // above, with fine vertical rays drifting along them.
-    const plane = d.sub(u.up.mul(e)).div(max(e, 0.06)).mul(0.55);
+    // Heights above the visible horizon, which dips below level when the camera is high up.
+    const eh = e.add(u.dip);
+    const plane = d.sub(u.up.mul(e)).div(max(eh, 0.06)).mul(0.55);
     const fold = mx_noise_float(plane.mul(0.7).add(vec3(time.mul(0.012), 0, time.mul(-0.009))));
-    const band = exp(pow(fold.div(0.085), 2).negate());
-    const band2 = exp(pow(fold.sub(0.28).div(0.06), 2).negate()).mul(0.55);
+    // Squares written out: pow() of a negative base is undefined on the GPU.
+    const f1 = fold.div(0.085);
+    const f2 = fold.sub(0.28).div(0.06);
+    const band = exp(f1.mul(f1).negate());
+    const band2 = exp(f2.mul(f2).negate()).mul(0.55);
     const streaks = mx_noise_float(plane.mul(7).add(vec3(0, time.mul(0.25), 0))).mul(0.5).add(0.6);
-    const reach = smoothstep(-0.02, 0.08, e).mul(float(1).sub(smoothstep(0.35, 0.85, e)));
-    const auroraCol = mix(vec3(0.15, 1.0, 0.5), vec3(0.62, 0.28, 0.95), smoothstep(0.12, 0.5, e));
-    const aurora = auroraCol.mul(band.add(band2).mul(streaks).mul(reach).mul(u.aurora).mul(0.9));
-    col = col.add(aurora);
+    const reach = smoothstep(0.0, 0.1, eh).mul(float(1).sub(smoothstep(0.35, 0.85, e)));
+    const auroraCol = mix(vec3(0.08, 0.95, 0.42), vec3(0.6, 0.2, 0.9), smoothstep(0.1, 0.5, eh));
+    const aurora = auroraCol.mul(band.add(band2).mul(streaks).mul(reach).mul(u.aurora).mul(0.55));
     mat.colorNode = col;
-    // The sun disc and the aurora feed bloom.
-    mat.mrtNode = mrt({ emissive: vec4(vec3(1.0, 0.9, 0.75).mul(smoothstep(0.9993, 0.9997, mu)).mul(u.air).add(aurora.mul(0.5)), 1) });
+    // The sun disc feeds bloom.
+    mat.mrtNode = mrt({ emissive: vec4(vec3(1.0, 0.9, 0.75).mul(smoothstep(0.9993, 0.9997, mu)).mul(u.air), 1) });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 24), mat);
     sky.frustumCulled = false;
     sky.renderOrder = -10;
     this.group.add(sky);
+    // The aurora: its own additive layer, outside the fog (which swallows the dome near the ground).
+    const auroraMat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending });
+    auroraMat.fog = false;
+    auroraMat.colorNode = aurora;
+    auroraMat.mrtNode = mrt({ emissive: vec4(aurora.mul(0.5), 1) });
+    const auroraMesh = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.95, 48, 24), auroraMat);
+    auroraMesh.frustumCulled = false;
+    auroraMesh.renderOrder = -8;
+    this.group.add(auroraMesh);
 
     const count = 3200;
     this.stars = new SpriteBatch(count, { additive: true, sizeMode: "pixels", renderOrder: -9 });
@@ -120,6 +137,8 @@ export class SkyDome {
     u.up.value.copy(up);
     u.air.value = air;
     u.sunUp.value = sunUp;
+    const rc = camera.position.length();
+    u.dip.value = this.planetRadius > 0 && rc > this.planetRadius ? Math.sqrt(1 - (this.planetRadius / rc) ** 2) : 0;
     u.quality.value = quality;
     const day = THREE.MathUtils.smoothstep(sunUp, -0.18, 0.25);
     const night = 1 - day * air;
