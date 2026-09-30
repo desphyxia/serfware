@@ -24,7 +24,7 @@ import {
   vec4,
   vertexColor,
 } from "three/tsl";
-import { PainterlyMaterial } from "../painterly";
+import { PAINT, PainterlyMaterial } from "../painterly";
 import { ROAD_HALF } from "./field";
 import type { TileData } from "./tileData";
 
@@ -41,7 +41,9 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const edge = attribute("aEdge", "float");
   const A = varying(tiles.lookup(tiles.a, tile));
   const B = varying(tiles.lookup(tiles.b, tile));
-  const blown = varying(tiles.lookup(tiles.c, tile).x);
+  const C = varying(tiles.lookup(tiles.c, tile));
+  const blown = C.x;
+  const glowLit = C.y;
   const wear = A.x;
   const fog = A.y;
   const snow = A.z;
@@ -139,6 +141,8 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
     // Roads are trodden clear.
     .mul(float(1).sub(onRoad.mul(0.6)));
   c = mix(c, vec3(0.9, 0.93, 0.97), snowCover.mul(0.95));
+  // Glowcap light: a teal wash on the ground around the patches, strong after dark.
+  c = c.add(vec3(0.05, 0.2, 0.17).mul(glowLit).mul(PAINT.night.mul(1.6).add(0.1)));
   // Fog of war: remembered land a little faded, unexplored land dark and grey.
   const grey = dot(c, vec3(0.3, 0.59, 0.11));
   c = mix(c, mix(vec3(grey), c, 0.7).mul(0.86), smoothstep(0.1, 0.5, fog));

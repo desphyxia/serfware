@@ -12,6 +12,8 @@ const RIME_GROUND = new THREE.Color("#8a9690");
 const EMBER_GROUND = new THREE.Color("#9a6a3c");
 /** Saltglass: salt crust over pale clay, near white with a rose cast. */
 const SALT_GROUND = new THREE.Color("#e9e1d8");
+/** Lumen Mire: dark, peaty moss, blue-green in the twilight. */
+const MIRE_GROUND = new THREE.Color("#3e5446");
 
 /** A levelled patch of ground under a building or flag. */
 export interface Pad {
@@ -113,6 +115,7 @@ export class TerrainField {
       else if (land.region[t] === Region.RimefallTundra && b !== Biome.Snow) c.lerp(RIME_GROUND, 0.35).offsetHSL(0, 0, (tileHash(t) - 0.5) * 0.05);
       else if (land.region[t] === Region.EmberglassSteppe) c.lerp(EMBER_GROUND, 0.3 + tileHash(t) * 0.15);
       else if (land.region[t] === Region.SaltglassFlats) c.lerp(SALT_GROUND, 0.55 + tileHash(t) * 0.2);
+      else if (land.region[t] === Region.LumenMire) c.lerp(MIRE_GROUND, 0.55 + tileHash(t) * 0.15);
       this.tileCol.push(c);
     }
   }

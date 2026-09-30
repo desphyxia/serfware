@@ -638,6 +638,99 @@ export class Game {
     return salt;
   }
 
+  /**
+   * Screenshot hook: the sky island nearest the Hearthship, with a working ropeway station built
+   * under it (the land claimed and the station finished). Returns the island's tile or -1.
+   */
+  debugSkyreef(ropeway = true, distance = 26): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy;
+    const p = this.session.player;
+    const keep = eco.buildings[eco.keeps[p] ?? -1];
+    const isles = eco.skyIslands();
+    if (!keep || !isles.length) return -1;
+    const grid = w.planet.grid;
+    const kc = grid.centerOf(keep.tile);
+    const dist = (t: number) => {
+      const c = grid.centerOf(t);
+      return (c[0] - kc[0]) ** 2 + (c[1] - kc[1]) ** 2 + (c[2] - kc[2]) ** 2;
+    };
+    const isle = [...isles].sort((a, b) => dist(a.at) - dist(b.at))[0]!;
+    if (ropeway) {
+      for (const t of [isle.at, ...land.ring(isle.at, 5)]) if (land.territory[t] === 0) land.territory[t] = p + 1;
+      land.territoryVersion++;
+      const def = BUILDINGS.find((b) => b.id === "ropeway");
+      for (const t of land.ring(isle.at, 3)) {
+        const f = land.bestFlagTile(t, p);
+        if (!def || f < 0 || !land.canBuildDef(t, f, def, p)) continue;
+        if (!w.command({ t: "build", type: "ropeway", tile: t, flagTile: f, player: p }).ok) continue;
+        const b = eco.buildingAt(t);
+        if (b) b.built = true;
+        break;
+      }
+    }
+    this.focusTile(isle.at, distance);
+    return isle.at;
+  }
+
+  /** Screenshot hook: the twilight mire nearest the Hearthship, with a glowcap farm and ripe patches. */
+  debugLumen(distance = 16): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy;
+    const p = this.session.player;
+    const keep = eco.buildings[eco.keeps[p] ?? -1];
+    if (!keep) return -1;
+    let best = -1;
+    let bestN = -1;
+    for (let t = 0; t < land.region.length; t++) {
+      if (land.region[t] !== Region.LumenMire) continue;
+      // Low in latitude, where the twilight is mild rather than polar.
+      const lat = Math.abs(w.planet.grid.center[t * 3 + 1] as number);
+      const n = land.ring(t, 3).filter((m) => land.region[m] === Region.LumenMire && land.isLand(m)).length * (1.2 - lat);
+      if (n > bestN) {
+        bestN = n;
+        best = t;
+      }
+    }
+    if (best < 0) return -1;
+    for (const t of [best, ...land.ring(best, 4)]) if (land.territory[t] === 0) land.territory[t] = p + 1;
+    land.territoryVersion++;
+    const def = BUILDINGS.find((b) => b.id === "glowcapfarm");
+    for (const t of [best, ...land.ring(best, 2)]) {
+      const f = land.bestFlagTile(t, p);
+      if (!def || f < 0 || !land.canBuildDef(t, f, def, p)) continue;
+      if (!w.command({ t: "build", type: "glowcapfarm", tile: t, flagTile: f, player: p }).ok) continue;
+      const b = eco.buildingAt(t);
+      if (b) b.built = true;
+      break;
+    }
+    // Ripe patches around, as a season's work would leave them.
+    for (const t of land.ring(best, 3)) {
+      if (land.use[t] !== Use.Free || land.feature[t] !== Feature.None || !land.isLand(t) || (t * 7) % 3 === 0) continue;
+      land.feature[t] = Feature.Glowcap;
+      land.amount[t] = 4;
+      land.variety[t] = 0;
+    }
+    land.featureVersion++;
+    for (let i = 0; i < 400; i++) w.step();
+    this.focusTile(best, distance);
+    return best;
+  }
+
+  /** Screenshot hook: look at the twilight ring on the equator of a locked planet (the terminator). */
+  focusTwilight(distance: number): boolean {
+    const grid = this.world.planet.grid;
+    for (let t = 0; t < grid.count; t++) {
+      if (Math.abs(grid.center[t * 3] as number) < 0.05 && Math.abs(grid.center[t * 3 + 1] as number) < 0.1) {
+        this.focusTile(t, distance);
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Screenshot hook: the vent nearest the Hearthship, optionally erupting now. Returns its tile or -1. */
   debugVent(erupt = false, distance = 12): number {
     const w = this.world;
@@ -1519,6 +1612,12 @@ export class Game {
       rows.push(["Tremors", `${this.world.economy.tremors.get(tile) ?? 0} since the last eruption`]);
     }
     else if (land.feature[tile] === Feature.Spire) rows.push(["Salt spire", "a landmark: lifts Glow's beauty near home"]);
+    else if (land.feature[tile] === Feature.Glowcap) rows.push(["Glowcaps", `${land.variety[tile] === 1 ? "wild" : "farmed"} · ${(land.amount[tile] as number) >= 4 ? "ripe" : `growing (${land.amount[tile]}/4)`}`]);
+    if (land.region[tile] === Region.LumenMire) rows.push(["Light", land.glow[tile] ? "lit by glowcaps" : land.dim[tile] ? "dark: slow going" : "daylight"]);
+    {
+      const isle = this.world.economy.skyIslands().find((i) => i.at === tile);
+      if (isle) rows.push(["Sky island", `overhead · ${isle.stone} skystone left`]);
+    }
     if (land.tidal[tile]) {
       const c = this.world.climate;
       rows.push(["Tidal flat", `${land.flooded[tile] ? "under water" : "dry"}${land.causeway[tile] ? " · causeway" : ""} · ${land.shell[tile]} shellfish`]);

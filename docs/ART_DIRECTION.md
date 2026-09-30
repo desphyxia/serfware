@@ -313,3 +313,24 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
   - the dew condenser: stone fins with nets over a cistern
   - the shellfisher: a hut on stilts with baskets
   - the tide mill: a stone mill with an undershot wheel
+
+### Lumen Mire and Skyreef (batch 16)
+
+- Tidally locked planets: the sun stands still over longitude 0. The day side bakes and the far
+  side freezes. The twilight ring between them holds the Lumen Mire, where the ground is dark,
+  peaty moss.
+- Glowcaps are pale-stemmed mushrooms with teal caps. They glow faintly by day and strongly at
+  night (an emissive linked to the night factor, into bloom), and wash the ground around them
+  in teal (tile-data C.y). Spores drift up from ripe patches as tiny additive motes.
+- Sky islands are slabs of buoyant stone with turf tops, crystals and a lone pine, tapering to
+  a jagged point with hanging roots. They drift slowly and bob, eleven units above the peak
+  below, and shrink as their skystone is hauled down.
+- Ropeways: a timber tower with a cable wheel. A cable runs to the island's underside, with a
+  gondola riding it. Skiffs (gas bag, hull, red steering sail) and cloth gliders circle each
+  island.
+- A cloud sea lies at 0.62 of the peak height around the Skyreef, fading out over five tiles;
+  the peaks break through it.
+- New kit:
+  - the glowcap farm: a turf hut on a boardwalk with glowing beds
+  - the peat cutter: a hut with stacks of drying peat
+  - the ropeway station
