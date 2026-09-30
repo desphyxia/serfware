@@ -133,6 +133,10 @@
       "id": "mount",
       "name": "Mount",
       "arms": true
+    },
+    {
+      "id": "obsidian",
+      "name": "Obsidian"
     }
   ],
   "buildings": [
@@ -146,7 +150,8 @@
       "cost": {},
       "buildable": false,
       "light": 9,
-      "slots": 0
+      "slots": 0,
+      "warmth": 3
     },
     {
       "id": "house",
@@ -157,7 +162,8 @@
         "plank": 3,
         "stone": 1
       },
-      "home": true
+      "home": true,
+      "warmth": 2
     },
     {
       "id": "treehouse",
@@ -169,7 +175,8 @@
         "log": 1
       },
       "terrain": "giant",
-      "home": true
+      "home": true,
+      "warmth": 2
     },
     {
       "id": "storehouse",
@@ -194,6 +201,22 @@
       },
       "terrain": "aquifer",
       "well": true
+    },
+    {
+      "id": "waystation",
+      "name": "Waystation",
+      "description": "A heated shelter for the frozen roads. Burns a log every few hours when it's bitter out; walkers within four steps keep their pace.",
+      "category": "storage",
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
+      "warmth": 4,
+      "heated": true,
+      "inputs": {
+        "log": 1
+      },
+      "inputStock": 3
     },
     {
       "id": "woodcutter",
@@ -370,6 +393,21 @@
       "workTicks": 220,
       "restTicks": 40,
       "produces": "honey"
+    },
+    {
+      "id": "greenhouse",
+      "name": "Greenhouse",
+      "description": "Glass over warm ground: next to a geothermal vent it grows grain all year, frost or no frost.",
+      "category": "food",
+      "cost": {
+        "plank": 2,
+        "stone": 2
+      },
+      "job": "craft",
+      "terrain": "vent",
+      "workTicks": 150,
+      "restTicks": 30,
+      "produces": "grain"
     },
     {
       "id": "pasture",

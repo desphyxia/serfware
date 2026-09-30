@@ -120,6 +120,8 @@ export interface Building {
   moss: number;
   /** Fire damage: at 3 it burns down (the Hearthship only chars). */
   burn: number;
+  /** Heated buildings (waystations): warm until this tick on the last log burned. */
+  fuelUntil: number;
   alive: boolean;
 }
 
@@ -643,6 +645,7 @@ export class Economy {
     if (def.terrain === "mountain") return `${def.name}s go on mountain slopes inside your border.`;
     if (def.terrain === "coast") return `${def.name}s must be built near water.`;
     if (def.terrain === "aquifer") return "There's too little groundwater here for a well. Try lower, wetter ground near rivers.";
+    if (def.terrain === "vent") return `A ${def.name.toLowerCase()} must stand right next to a geothermal vent.`;
     return "You can't build here.";
   }
 
@@ -786,6 +789,7 @@ export class Economy {
       soot: 0,
       moss: 0,
       burn: 0,
+      fuelUntil: 0,
       alive: true,
     };
     this.buildings.push(b);
@@ -990,9 +994,9 @@ export class Economy {
     const upkeep = this.upkeepNeed(b, type);
     if (upkeep > 0) return upkeep;
     if (b.def.slots) return this.armsNeed(b, type);
-    if (b.worker < 0 || b.exhausted) return 0;
+    if ((b.worker < 0 && !b.def.heated) || b.exhausted) return 0;
     const key = inputKeyFor(b.def, type);
-    if (!key) return 0;
+    if (!key || (key === "coal" && this.ventHeat(b))) return 0;
     if (this.priority(b, type) <= 0) return 0;
     let have = 0;
     for (const g of goodsFor(key)) have += (b.stock[g] as number) + (b.pending[g] as number);
@@ -2166,7 +2170,9 @@ export class Economy {
 
   /** Consume one unit of each input (groups take from the fullest member). Returns false if short. */
   private consumeInputs(b: Building): boolean {
-    const inputs = b.def.inputs ?? {};
+    const inputs = { ...b.def.inputs };
+    // A forge by a geothermal vent smelts on the earth's own heat.
+    if (this.ventHeat(b)) delete inputs.coal;
     for (const [key, n] of Object.entries(inputs)) {
       if (key === "food" && b.def.job === "mine") continue;
       let have = 0;
@@ -2426,7 +2432,8 @@ export class Economy {
           land.amount[t]!--;
           if (land.amount[t] === 0) land.feature[t] = Feature.None;
           land.featureVersion++;
-          got = produced;
+          // Rock by a vent is shot through with volcanic glass.
+          got = land.nearVent(t, 2) && (mix32(t, this.tick) & 1) === 0 ? goodId("obsidian") : produced;
         } else if (def.job === "plant" && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
           land.feature[t] = Feature.Tree;
           land.amount[t] = 0;
@@ -2711,7 +2718,7 @@ export class Economy {
       nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4)),
       shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
       belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)),
-      beauty: Math.min(1, 0.2 + trees / 30) * (grieving ? 0.4 : 1),
+      beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, (this.storageTotals(owner)[goodId("obsidian")] as number) / 24)) * (grieving ? 0.4 : 1),
       rest: Math.max(0.3, Math.min(1, 1.35 - working)),
     };
     this.glowParts[owner] = parts;
@@ -2801,6 +2808,153 @@ export class Economy {
     return this.members(owner);
   }
 
+  // ------------------------------------------------------------------ Rimefall and Emberglass
+
+  /** Tremors felt at each vent since it last erupted (for the tile panel). */
+  readonly tremors = new Map<number, number>();
+  /** Tick of each vent's last eruption (for the renderer's ash column). */
+  readonly eruptedAt = new Map<number, number>();
+  private ventList: number[] | null = null;
+
+  /** Geothermal vent tiles (they never move). */
+  vents(): number[] {
+    if (!this.ventList) {
+      this.ventList = [];
+      for (let t = 0; t < this.land.feature.length; t++) if (this.land.feature[t] === Feature.Vent) this.ventList.push(t);
+    }
+    return this.ventList;
+  }
+
+  /** A forge within two steps of a vent needs no coal. */
+  ventHeat(b: Building): boolean {
+    return !!b.def.forge && !!b.def.inputs?.coal && this.land.nearVent(b.tile, 2);
+  }
+
+  /** A waystation has fuel burning. */
+  heated(b: Building): boolean {
+    return !!b.def.heated && b.built && b.fuelUntil > this.tick;
+  }
+
+  private stepFrontiers(tick: number): void {
+    if (this.climate?.thawed) {
+      this.climate.thawed = false;
+      this.sinkIceRoads();
+    }
+    if (tick % 300 === 150) this.stepWarmth();
+    if (tick % this.dayTicks === 3601 % this.dayTicks) this.stepVents();
+  }
+
+  /** Hourly: waystations burn a log when it's bitter nearby; hearths and fires warm the land. */
+  private stepWarmth(): void {
+    const land = this.land;
+    const log = goodId("log");
+    land.warm.fill(0);
+    for (const b of this.buildings) {
+      if (!b.alive || !b.built || !b.def.warmth || b.stranded >= 0) continue;
+      const around = [b.tile, ...land.ring(b.tile, b.def.warmth)];
+      if (b.def.heated && b.fuelUntil <= this.tick) {
+        if ((b.stock[log] as number) <= 0 || !around.some((t) => land.chill[t])) continue;
+        b.stock[log]!--;
+        b.fuelUntil = this.tick + 1200;
+      }
+      for (const t of around) land.warm[t] = 1;
+    }
+  }
+
+  /** The thaw: roads and flags out on lake ice sink. */
+  private sinkIceRoads(): void {
+    const land = this.land;
+    const sunk = new Set<number>();
+    const thin = (t: number) => land.hydro.lake[t] === 1 && !land.frozen[t];
+    for (const r of this.roads) {
+      if (!r.alive || !r.tiles.some(thin)) continue;
+      sunk.add(r.owner);
+      this.removeRoad(r);
+    }
+    for (const f of this.flags) {
+      if (!f.alive || !thin(f.tile)) continue;
+      sunk.add(f.owner);
+      this.removeFlag(f);
+    }
+    for (const p of sunk) this.notify(p, "The lake ice has broken up and your ice road sank. Lay it again after the next hard frost.");
+  }
+
+  /** Daily: vents build pressure, the ground trembles, and at last they erupt. */
+  private stepVents(): void {
+    const land = this.land;
+    for (const t of this.vents()) {
+      const p = Math.min(255, (land.amount[t] as number) + 5 + (mix32(t, this.tick) & 7));
+      land.amount[t] = p;
+      if (p >= 250) {
+        this.erupt(t);
+        continue;
+      }
+      if (p < 190 || (mix32(t, this.tick ^ 0x7e11) & 1)) continue;
+      this.tremors.set(t, (this.tremors.get(t) ?? 0) + 1);
+      for (const o of this.ownersNear(t, 5)) this.notify(o, "The ground trembles near a vent. It may erupt: keep homes and fields back from it.");
+    }
+    // Old ash weathers into the soil.
+    let ash = false;
+    for (let t = 0; t < land.ash.length; t++) {
+      const a = land.ash[t] as number;
+      if (a <= 0) continue;
+      land.ash[t] = a < 0.02 ? 0 : a * 0.94;
+      ash = true;
+    }
+    if (ash) land.ashVersion++;
+  }
+
+  /** Players with land within `r` steps of `t`. */
+  private ownersNear(t: number, r: number): number[] {
+    const out = new Set<number>();
+    for (const m of [t, ...this.land.ring(t, r)]) if (this.land.territory[m]) out.add((this.land.territory[m] as number) - 1);
+    return [...out].sort((a, b) => a - b);
+  }
+
+  /** A vent blows: ash falls (enriching the soil), buildings nearby are scorched, dry growth catches. */
+  erupt(t: number): void {
+    const land = this.land;
+    const grid = land.planet.grid;
+    land.amount[t] = 0;
+    this.tremors.delete(t);
+    this.eruptedAt.set(t, this.tick);
+    const dist = new Map<number, number>([[t, 0]]);
+    for (let d = 1, front = [t]; d <= 4; d++) {
+      const next: number[] = [];
+      for (const x of front) for (const n of grid.neighborsOf(x)) if (!dist.has(n)) {
+        dist.set(n, d);
+        next.push(n);
+      }
+      front = next;
+    }
+    for (const [x, d] of [...dist].sort((a, b) => a[0] - b[0])) {
+      if (!land.isLand(x)) continue;
+      const fall = 1 - d / 5;
+      land.ash[x] = Math.max(land.ash[x] as number, fall);
+      land.soil[x] = Math.min(1, (land.soil[x] as number) + 0.3 * fall);
+      land.snowCover[x] = 0;
+      if (d === 0) continue;
+      const b = land.use[x] === Use.Building ? this.buildings[land.ref[x] as number] : undefined;
+      if (b?.alive) {
+        if (d <= 1) this.scorchBuilding(x);
+        b.wear = Math.min(1, b.wear + 0.4 * fall);
+        b.soot = Math.min(1, b.soot + 0.6 * fall);
+      } else if (d <= 3 && land.use[x] === Use.Free) {
+        const f = land.feature[x];
+        if ((f === Feature.Tree || f === Feature.Shrub || f === Feature.Field) && (mix32(x, this.tick) & 3) !== 0) this.ecology.ignite(x);
+        else if (d === 2 && f === Feature.None && (mix32(x, this.tick ^ 0xb5) & 7) === 0) {
+          // Glassy bombs land and set: obsidian boulders.
+          land.feature[x] = Feature.Rock;
+          land.amount[x] = 4;
+          land.variety[x] = x & 3;
+          land.featureVersion++;
+        }
+      }
+    }
+    land.ashVersion++;
+    for (const o of this.ownersNear(t, 6)) this.notify(o, "A vent has erupted! Ash has fallen; it will enrich the soil once it weathers in.");
+  }
+
   // ------------------------------------------------------------------ main step
 
   step(tick: number): void {
@@ -2820,6 +2974,7 @@ export class Economy {
       this.standDown();
     }
     if (tick % 100 === 0) this.stepVictory();
+    this.stepFrontiers(tick);
     if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();
   }
@@ -2857,7 +3012,10 @@ export class Economy {
     h.int(owned).int(this.winner);
     for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
-    for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn);
+    for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);
+    let vents = 0;
+    for (const t of this.vents()) vents = (vents * 31 + (this.land.amount[t] as number)) | 0;
+    h.int(vents);
     this.ecology.hash(h);
   }
 }

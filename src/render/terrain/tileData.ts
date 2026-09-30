@@ -5,7 +5,7 @@ type N = THREE.Node<"vec4">;
 
 /**
  * Per-tile shading data shared by every terrain chunk and the sea: one texel per tile.
- * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, scorch).
+ * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, scorch or -ash).
  * Shaders look it up by tile index in the vertex stage and interpolate across tiles.
  */
 export class TileData {

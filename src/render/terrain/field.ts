@@ -7,6 +7,9 @@ import { biomeColor, tileHash } from "../palette";
 import { Region } from "../../sim/biomes/regions";
 
 const CANOPY_FLOOR = new THREE.Color("#2c3a22");
+/** Rimefall: lichen and frost-bitten moss, blue-grey. Emberglass: rust and ochre, iron-rich. */
+const RIME_GROUND = new THREE.Color("#8a9690");
+const EMBER_GROUND = new THREE.Color("#9a6a3c");
 
 /** A levelled patch of ground under a building or flag. */
 export interface Pad {
@@ -105,6 +108,8 @@ export class TerrainField {
       c.offsetHSL(0, 0, (0.5 - (terrain.moisture[t] as number)) * 0.05);
       // Canopy Deeps: the floor under the giants is dark, mossy and damp.
       if (land.region[t] === Region.CanopyDeeps) c.lerp(CANOPY_FLOOR, 0.6).offsetHSL(0, 0, (tileHash(t) - 0.5) * 0.04);
+      else if (land.region[t] === Region.RimefallTundra && b !== Biome.Snow) c.lerp(RIME_GROUND, 0.35).offsetHSL(0, 0, (tileHash(t) - 0.5) * 0.05);
+      else if (land.region[t] === Region.EmberglassSteppe) c.lerp(EMBER_GROUND, 0.3 + tileHash(t) * 0.15);
       this.tileCol.push(c);
     }
   }

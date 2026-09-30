@@ -492,6 +492,77 @@ export class Game {
     return giant;
   }
 
+  /**
+   * Screenshot hook: an ice road across the frozen lake nearest the Hearthship (the lake is frozen,
+   * the land claimed and carriers set on it). Returns the lake tile or -1.
+   */
+  debugIceRoad(distance = 12): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy;
+    const p = this.session.player;
+    const keep = eco.buildings[eco.keeps[p] ?? -1];
+    if (!keep) return -1;
+    const grid = w.planet.grid;
+    const kc = grid.centerOf(keep.tile);
+    const dist = (t: number) => {
+      const c = grid.centerOf(t);
+      return (c[0] - kc[0]) ** 2 + (c[1] - kc[1]) ** 2 + (c[2] - kc[2]) ** 2;
+    };
+    const lakes = Array.from({ length: grid.count }, (_, t) => t).filter((t) => land.hydro.lake[t] === 1);
+    lakes.sort((x, y) => dist(x) - dist(y));
+    const across = (a: number, b: number) => land.findPath(a, b, (x) => land.hydro.lake[x] === 1 || x === b, 400);
+    for (const lake of lakes.slice(0, 40)) {
+      // Two shore tiles joined by a path over the lake alone, the shortest such crossing.
+      const shore = land.ring(lake, 3).filter((x) => land.isLand(x) && land.use[x] === Use.Free && land.feature[x] !== Feature.Tree && land.slope(x) < 2);
+      let path: number[] | null = null;
+      for (const a of shore)
+        for (const b of shore) {
+          if (a >= b || land.ring(a, 2).includes(b)) continue;
+          const q = across(a, b);
+          if (q && q.length >= 4 && q.slice(1, -1).every((x) => land.hydro.lake[x] === 1) && (!path || q.length < path.length)) path = q;
+        }
+      if (!path) continue;
+      for (const t of [...path, ...path.flatMap((x) => land.ring(x, 3))]) {
+        if (land.territory[t] === 0) land.territory[t] = p + 1;
+        if (land.hydro.lake[t]) land.frozen[t] = 1;
+        else if (land.isLand(t)) land.snowCover[t] = Math.max(land.snowCover[t]!, 0.7);
+      }
+      land.iceVersion++;
+      land.territoryVersion++;
+      for (const t of [path[0]!, path[path.length - 1]!]) if (land.use[t] !== Use.Flag) w.command({ t: "flag", tile: t, player: p });
+      if (!w.command({ t: "road", tiles: path, player: p }).ok) continue;
+      const mid = path[Math.floor(path.length / 2)]!;
+      this.focusTile(mid, distance);
+      return mid;
+    }
+    return -1;
+  }
+
+  /** Screenshot hook: the vent nearest the Hearthship, optionally erupting now. Returns its tile or -1. */
+  debugVent(erupt = false, distance = 12): number {
+    const w = this.world;
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[this.session.player] ?? -1];
+    if (!keep) return -1;
+    const grid = w.planet.grid;
+    const kc = grid.centerOf(keep.tile);
+    let best = -1;
+    let bestD = Infinity;
+    for (const t of eco.vents()) {
+      const c = grid.centerOf(t);
+      const d = (c[0] - kc[0]) ** 2 + (c[1] - kc[1]) ** 2 + (c[2] - kc[2]) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = t;
+      }
+    }
+    if (best < 0) return -1;
+    if (erupt) eco.erupt(best);
+    this.focusTile(best, distance);
+    return best;
+  }
+
   /** Debug: bring a weather front over the view. */
   summonWeather(strength = 1): void {
     const f = this.cam.focus;
@@ -1340,6 +1411,14 @@ export class Game {
     const land = this.world.land;
     if (land.feature[tile] === Feature.Giant) rows.push(["Ancient tree", land.variety[tile] === 1 ? "marked for felling" : `${land.amount[tile]} logs · Demolish marks it`]);
     else if (land.feature[tile] === Feature.Hedge) rows.push(["Hedgerow", "shelters fields"]);
+    else if (land.feature[tile] === Feature.Vent) {
+      const p = land.amount[tile] as number;
+      rows.push(["Vent", p > 190 ? "pressure high: may erupt" : p > 100 ? "rumbling" : "steaming quietly"]);
+      rows.push(["Tremors", `${this.world.economy.tremors.get(tile) ?? 0} since the last eruption`]);
+    }
+    if (land.hydro.lake[tile]) rows.push(["Lake", land.frozen[tile] ? "frozen: roads may cross the ice" : "open water"]);
+    else if ((land.ash[tile] as number) > 0.05) rows.push(["Ash", "volcanic: enriching the soil"]);
+    if (land.chill[tile]) rows.push(["Cold", land.warm[tile] ? "bitter, but a hearth is near" : "bitter: walkers slow down"]);
     this.inspector.replaceChildren(h("dl", { class: "kv" }, ...rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])));
     this.inspector.hidden = false;
   }

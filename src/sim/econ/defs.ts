@@ -29,7 +29,7 @@ export interface BuildingDef {
   /** Tool the worker needs (and keeps while employed). */
   tool?: string;
   /** Placement rule beyond flat land. */
-  terrain?: "mountain" | "coast" | "aquifer" | "giant";
+  terrain?: "mountain" | "coast" | "aquifer" | "giant" | "vent";
   /** Mines: which deposit they dig. */
   resource?: "coal" | "iron" | "gold" | "granite";
   radius?: number;
@@ -51,6 +51,10 @@ export interface BuildingDef {
   well?: boolean;
   /** Burns coal or wood at work: soot on the walls, embers up the chimney. */
   forge?: boolean;
+  /** Keeps people warm within this many steps (a hearth; a waystation only while it burns fuel). */
+  warmth?: number;
+  /** Burns a unit of fuel (log or coal) every few hours in the cold to keep its warmth. */
+  heated?: boolean;
   /** Lantern buildings: warden places. */
   slots?: number;
 }

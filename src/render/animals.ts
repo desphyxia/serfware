@@ -8,7 +8,7 @@ import { PainterlyMaterial } from "./painterly";
  * each swung about its joint in the vertex shader. One draw call per species. Front is +Z.
  */
 
-export type Species = "deer" | "sheep" | "cow";
+export type Species = "deer" | "sheep" | "cow" | "dog";
 
 export const enum Pose {
   Idle = 0,
@@ -91,6 +91,32 @@ function speciesPieces(species: Species): Piece[] {
         { part: A.Head, pivot: [0, 0.33, 0.16], parts: head },
         ...legs(0.06, 0.1, -0.11, top, 0.018, "#2e2a28", "#1e1a18"),
         { part: A.Tail, pivot: [0, 0.32, -0.2], parts: [[new THREE.IcosahedronGeometry(0.035, 0).translate(0, 0.3, -0.22), wool]] },
+      ];
+    }
+    case "dog": {
+      // A thick-coated sled dog: grey back, pale belly and mask, curled tail, a red harness.
+      const coat = "#6e6a66";
+      const pale = "#e6e0d6";
+      const top = 0.16;
+      const body: Part[] = [
+        [new THREE.SphereGeometry(0.075, 9, 6).scale(1, 0.95, 2.1).translate(0, 0.25, 0), coat],
+        [new THREE.SphereGeometry(0.06, 8, 5).scale(1, 0.8, 1.7).translate(0, 0.22, 0.01), pale],
+        [new THREE.IcosahedronGeometry(0.075, 1).scale(1.1, 1.1, 0.9).translate(0, 0.28, 0.1), coat],
+        [box(0.16, 0.025, 0.03, 0, 0.27, 0.07), "#b8443a"],
+        [box(0.02, 0.1, 0.02, 0, 0.27, 0.07), "#b8443a"],
+      ];
+      const head: Part[] = [
+        [new THREE.SphereGeometry(0.055, 8, 6).scale(0.95, 0.9, 1.05).translate(0, 0.35, 0.18), coat],
+        [new THREE.SphereGeometry(0.035, 7, 5).scale(0.8, 0.7, 1.3).translate(0, 0.33, 0.235), pale],
+        [new THREE.SphereGeometry(0.012, 5, 4).translate(0, 0.335, 0.28), "#1e1a18"],
+        [new THREE.ConeGeometry(0.022, 0.06, 4).translate(-0.03, 0.41, 0.17), coat],
+        [new THREE.ConeGeometry(0.022, 0.06, 4).translate(0.03, 0.41, 0.17), coat],
+      ];
+      return [
+        { part: A.Body, pivot: [0, 0, 0], parts: body },
+        { part: A.Head, pivot: [0, 0.3, 0.13], parts: head },
+        ...legs(0.04, 0.09, -0.1, top, 0.016, coat, pale),
+        { part: A.Tail, pivot: [0, 0.3, -0.15], parts: [[new THREE.TorusGeometry(0.045, 0.02, 5, 8, Math.PI * 1.4).rotateY(Math.PI / 2).translate(0, 0.33, -0.16), coat]] },
       ];
     }
     case "cow": {

@@ -3,11 +3,15 @@ import type { Planet } from "../sim/planet/planet";
 import type { TerrainField } from "./terrain/field";
 
 const UP = new THREE.Vector3(0, 1, 0);
+/** Ice stands this far proud of the open-water surface. */
+export const ICE_LIFT = 0.05;
 const _tmp = new THREE.Vector3();
 
 /** Helpers to place objects upright on the planet surface, on the detailed ground. */
 export class SurfaceFrames {
   private readonly tileR: Float32Array;
+  /** Lakes that freeze: walkers, flags and roads stand on the ice rather than the lake bed. */
+  ice: { frozen: Uint8Array; lake: Uint8Array; level: Float32Array } | null = null;
 
   constructor(
     readonly planet: Planet,
@@ -26,14 +30,20 @@ export class SurfaceFrames {
     return out.set(c[t * 3] as number, c[t * 3 + 1] as number, c[t * 3 + 2] as number);
   }
 
-  /** Ground radius at a tile centre (cached). */
+  /** Ground radius at a tile centre (cached); the top of the ice on a frozen lake. */
   radius(t: number): number {
     let r = this.tileR[t] as number;
     if (!r) {
       r = this.field.tileRadius(t);
       this.tileR[t] = r;
     }
-    return r;
+    return Math.max(r, this.iceTop(t));
+  }
+
+  /** Radius of the ice surface on a frozen lake tile, else 0. */
+  iceTop(t: number): number {
+    const ice = this.ice;
+    return ice && ice.frozen[t] && ice.lake[t] ? this.field.R + (ice.level[t] as number) + ICE_LIFT : 0;
   }
 
   /** World position on the ground at tile t, lifted by `lift`. */
@@ -48,12 +58,12 @@ export class SurfaceFrames {
     const da = this.dir(a, new THREE.Vector3());
     const db = this.dir(b, _tmp);
     out.copy(da).lerp(db, f).normalize();
-    return out.multiplyScalar(Math.max(this.field.R, this.field.radiusAt(out, f < 0.5 ? a : b)) + lift);
+    return out.multiplyScalar(Math.max(this.field.R, this.field.radiusAt(out, f < 0.5 ? a : b), this.iceTop(a), this.iceTop(b)) + lift);
   }
 
   /** Ground radius at any unit direction. */
   groundAt(dir: THREE.Vector3, hint?: number): number {
-    return Math.max(this.field.R, this.field.radiusAt(dir, hint));
+    return Math.max(this.field.R, this.field.radiusAt(dir, hint), hint === undefined ? 0 : this.iceTop(hint));
   }
 
   /** Orientation with local +Y along the surface normal and local +Z toward `toward` (a world point). */

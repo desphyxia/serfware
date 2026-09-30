@@ -4,7 +4,7 @@ import { Feature, FIELD_RIPE, ORCHARD, TREE_MATURE, type LandUse } from "../sim/
 import { Region } from "../sim/biomes/regions";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry } from "./models";
+import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, stumpGeometry, ventGeometry } from "./models";
 import { PainterlyMaterial } from "./painterly";
 import { bushGeometry } from "./undergrowth";
 import type { Ecology } from "../sim/econ/ecology";
@@ -47,6 +47,8 @@ export class NatureView {
   /** Full and lighter tree geometry per Species; the lighter set is used at low vegetation. */
   private readonly treeGeo: { full: THREE.BufferGeometry; lite: THREE.BufferGeometry }[];
   private readonly rocks: THREE.InstancedMesh;
+  /** Emberglass vents. */
+  private readonly vents: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
   /** Canopy Deeps giants, orchard trees and hedgerow segments. */
   private readonly giants: THREE.InstancedMesh;
@@ -101,6 +103,8 @@ export class NatureView {
     const sizes = [3, 3, 2, 2, 1];
     this.trees = this.treeGeo.map((g, i) => make(g.full, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
     this.rocks = make(rockGeometry(), capacity);
+    this.rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
+    this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)));
     this.stumps = make(stumpGeometry(), capacity);
     this.stumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.giants = make(giantTreeGeometry(), Math.max(64, Math.ceil(capacity / 6)), treeMat);
@@ -140,7 +144,7 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0 };
+    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0, v: 0 };
     const treeCount = this.trees.map(() => 0);
     const crowns: number[] = [];
     const { temperature, moisture, biome } = land.planet.terrain;
@@ -221,7 +225,20 @@ export class NatureView {
         const sc = 0.7 + (land.amount[t] as number) * 0.09;
         s.set(sc, sc, sc);
         m.compose(base, q, s);
-        if (counts.r < this.rocks.instanceMatrix.count) this.rocks.setMatrixAt(counts.r++, m);
+        if (counts.r < this.rocks.instanceMatrix.count) {
+          // Rock by a vent is black volcanic glass; tundra rock is frosted.
+          if (land.nearVent(t, 2)) color.setRGB(0.2, 0.19, 0.25);
+          else color.setRGB(1, 1, 1).lerp(new THREE.Color(1.15, 1.2, 1.3), Math.min(0.5, this.season(t).snow));
+          this.rocks.setColorAt(counts.r, color);
+          this.rocks.setMatrixAt(counts.r++, m);
+        }
+      } else if (f === Feature.Vent) {
+        this.frames.orient(base, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 23) * 6.28));
+        const sc = 1.35 + SurfaceFrames.hash(t, 24) * 0.3;
+        s.set(sc, sc * 0.9, sc);
+        m.compose(base, q, s);
+        if (counts.v < this.vents.instanceMatrix.count) this.vents.setMatrixAt(counts.v++, m);
       } else if (f === Feature.Field) {
         this.frames.orient(base, null, q);
         q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 7) * Math.PI));
@@ -277,6 +294,7 @@ export class NatureView {
     for (const [mesh, c] of [
       ...this.trees.map((m, i) => [m, treeCount[i] as number] as const),
       [this.rocks, counts.r],
+      [this.vents, counts.v],
       [this.stumps, counts.s],
       [this.shrubs, counts.h],
       [this.giants, counts.g],

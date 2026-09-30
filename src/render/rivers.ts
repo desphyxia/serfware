@@ -1,9 +1,10 @@
 import * as THREE from "three/webgpu";
-import { abs, attribute, float, mrt, smoothstep, vec4 } from "three/tsl";
+import { abs, attribute, float, mix, mrt, mx_noise_float, positionWorld, smoothstep, vec3, vec4 } from "three/tsl";
 import { waterNodes, type WaterUniforms } from "./waterShade";
 import type { LandUse } from "../sim/econ/landuse";
 import type { SurfaceFrames } from "./frames";
 import { RIVER_SURFACE } from "./terrain/field";
+import { ICE_LIFT } from "./frames";
 
 /**
  * Rivers as flowing ribbons that widen downstream, and lakes as flat water at their spill
@@ -34,11 +35,13 @@ export class RiverView {
     this.riverMat.colorNode = river.color;
     this.riverMat.opacityNode = smoothstep(0, 0.08, float(1).sub(abs(across)));
     this.riverMat.mrtNode = mrt({ emissive: vec4(river.glint.mul(0.6), 1) });
-    // Lakes: still water.
+    // Lakes: still water, or ice in a hard frost.
     this.lakeMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-    const lake = waterNodes(u, { fog: attribute("aFog", "float"), scale: 1.6 });
-    this.lakeMat.colorNode = lake.color;
-    this.lakeMat.mrtNode = mrt({ emissive: vec4(lake.glint.mul(0.6), 1) });
+    const fog = attribute("aFog", "float");
+    const lake = waterNodes(u, { fog, scale: 1.6 });
+    const ice = attribute("aIce", "float");
+    this.lakeMat.colorNode = mix(lake.color, vec4(iceColour(fog, u.day), 1), ice);
+    this.lakeMat.mrtNode = mrt({ emissive: vec4(lake.glint.mul(0.6).mul(float(1).sub(ice)), 1) });
     this.group.add(this.buildRivers(land, frames), this.buildLakes(land));
     this.group.name = "rivers";
   }
@@ -178,11 +181,31 @@ export class RiverView {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
     g.setAttribute("aFog", new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
+    g.setAttribute("aIce", new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
     g.setIndex(idx);
     const mesh = new THREE.Mesh(g, this.lakeMat);
     mesh.renderOrder = 1;
     mesh.frustumCulled = false;
     return mesh;
+  }
+
+  /** Frozen lakes turn to ice (the ice sits a little proud of the water, see ICE_LIFT). */
+  setIce(frozen: Uint8Array): void {
+    const lakes = this.group.children[1] as THREE.Mesh;
+    const attr = lakes.geometry.getAttribute("aIce") as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    const pos = lakes.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const p = pos.array as Float32Array;
+    for (let i = 0; i < this.lakeTiles.length; i++) {
+      const on = frozen[this.lakeTiles[i] as number] ? 1 : 0;
+      if (arr[i] === on) continue;
+      // Lift or lower the vertex by the ice's thickness.
+      const k = 1 + ((on ? 1 : -1) * ICE_LIFT) / Math.hypot(p[i * 3] as number, p[i * 3 + 1] as number, p[i * 3 + 2] as number);
+      for (let j = 0; j < 3; j++) p[i * 3 + j]! *= k;
+      arr[i] = on;
+    }
+    attr.needsUpdate = true;
+    pos.needsUpdate = true;
   }
 
   /** Fog of war: per-tile values (0 seen, 0.5 remembered, 1 unknown). */
@@ -201,4 +224,22 @@ export class RiverView {
     this.riverMat.dispose();
     this.lakeMat.dispose();
   }
+}
+
+/**
+ * Lake ice: milky blue-white, clearer and darker in patches, with fine pressure cracks and drifts
+ * of snow; unexplored lakes darken like the land.
+ */
+function iceColour(fog: THREE.Node<"float">, day: THREE.Node<"float">): THREE.Node<"vec3"> {
+  const p = positionWorld;
+  const broad = mx_noise_float(p.mul(0.35));
+  const fine = mx_noise_float(p.mul(2.2));
+  let c: THREE.Node<"vec3"> = mix(vec3(0.42, 0.6, 0.7), vec3(0.78, 0.87, 0.92), smoothstep(-0.35, 0.45, broad.add(fine.mul(0.2))));
+  const crack = float(1).sub(smoothstep(0.0, 0.018, abs(mx_noise_float(p.mul(0.6))))).max(float(1).sub(smoothstep(0.0, 0.02, abs(mx_noise_float(p.mul(2.7).add(3))))).mul(0.6));
+  c = mix(c, vec3(0.28, 0.42, 0.52), crack.mul(0.55));
+  const drift = smoothstep(0.15, 0.55, fine.mul(0.6).add(broad.mul(0.7)));
+  c = mix(c, vec3(0.93, 0.95, 0.98), drift.mul(0.8));
+  c = c.mul(day.mul(0.75).add(0.25));
+  c = mix(c, c.mul(0.6), smoothstep(0.1, 0.5, fog));
+  return mix(c, c.mul(0.1).add(vec3(0.008, 0.011, 0.02)), smoothstep(0.55, 1, fog));
 }

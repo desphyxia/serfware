@@ -410,6 +410,93 @@ function beacon(b: Build): void {
   b.meta.flame = new THREE.Vector3(0, 3.41, 0);
 }
 
+/**
+ * The waystation: a squat stone hut with a turf roof and a fat chimney, a stacked woodpile, a
+ * lantern on a pole to guide sledges through the whiteout, and a sledge parked by the door.
+ */
+function waystation(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.25, 1.1, 0.14, rng));
+  b.add(...kit.roundTower(0.55, 0.62, 0.14, rng, "#a39c90", 1));
+  b.add(...kit.coneRoof(0.72, 0.5, 0.76, kit.jitter("#6f7458", rng, 0.6), rng));
+  b.add(...kit.door(0, 0.14, 0.55, rng));
+  b.add(...kit.windowPart(0.52, 0.48, 0.18, rng, kit.C.shutterRed, Math.PI / 2.5, 0.8));
+  // A fat stone chimney: the fire that keeps the road alive.
+  b.add([kit.cyl(0.16, 0.2, 1.25, 7, -0.32, 0.14, -0.28), kit.jitter(kit.C.stoneDark, rng, 1)], [kit.cyl(0.19, 0.19, 0.06, 7, -0.32, 1.39, -0.28), kit.C.stone]);
+  b.meta.chimney = new THREE.Vector3(-0.32, 1.5, -0.28);
+  // Firewood under a lean-to.
+  b.add(...kit.logStack(0.78, -0.2, 3, 0.55, rng, Math.PI / 2));
+  b.add([kit.box(0.05, 0.62, 0.05, 1.0, 0, -0.55), kit.C.timber], [kit.box(0.05, 0.62, 0.05, 1.0, 0, 0.15), kit.C.timber], [kit.box(0.4, 0.04, 0.84, 0.86, 0.6, -0.2, 0), kit.jitter(ROOF.brown, rng, 0.5)]);
+  // The guiding lantern.
+  b.add([kit.cyl(0.03, 0.04, 1.5, 5, -0.8, 0, 0.55), kit.C.timber], [kit.box(0.3, 0.04, 0.04, -0.68, 1.46, 0.55), kit.C.timber]);
+  b.add([kit.box(0.14, 0.18, 0.14, -0.56, 1.24, 0.55), "#3a3a3a"], [kit.box(0.1, 0.14, 0.1, -0.56, 1.26, 0.55), kit.C.window]);
+  b.meta.flame = new THREE.Vector3(-0.56, 1.33, 0.55);
+  // A sledge by the door, and snowshoes on the wall.
+  b.place(sledgeParts(rng), 0.62, 0.72, 0.4);
+  for (const x of [-0.18, 0.18]) b.add([new THREE.TorusGeometry(0.08, 0.012, 4, 10).scale(1, 1.6, 1).translate(x + 0.02, 0.5, 0.575), kit.C.timberLight]);
+  b.add(...kit.pennant(0, 1.26, 0, 0.35));
+}
+
+/** A small sledge: two curled runners, slats and a lashed bundle. Front is +Z. */
+export function sledgeParts(rng: kit.Rng): Part[] {
+  const parts: Part[] = [];
+  for (const x of [-0.13, 0.13]) {
+    parts.push([kit.box(0.025, 0.025, 0.62, x, 0, 0), "#4a3526"]);
+    parts.push([new THREE.TorusGeometry(0.07, 0.013, 4, 8, Math.PI).rotateY(Math.PI / 2).rotateX(-Math.PI / 2).translate(x, 0.07, 0.31), "#4a3526"]);
+    for (const z of [-0.2, 0.05]) parts.push([kit.box(0.02, 0.1, 0.02, x, 0.02, z), kit.C.timber]);
+  }
+  for (let i = 0; i < 5; i++) parts.push([kit.box(0.32, 0.02, 0.08, 0, 0.11, -0.24 + i * 0.1), kit.jitter(kit.C.timberLight, rng, 1)]);
+  parts.push([kit.box(0.02, 0.18, 0.02, -0.13, 0.12, -0.28), kit.C.timber], [kit.box(0.02, 0.18, 0.02, 0.13, 0.12, -0.28), kit.C.timber], [kit.box(0.3, 0.02, 0.02, 0, 0.3, -0.28), kit.C.timber]);
+  return parts;
+}
+
+/**
+ * The greenhouse: glass over warm ground. A stone footing, a timber-ribbed glass house with rows
+ * of green inside, and a clay pipe that draws the vent's steam under the beds.
+ */
+function greenhouse(b: Build): void {
+  const { rng } = b;
+  const w = 1.5;
+  const d = 0.95;
+  b.add(...kit.plinth(w + 0.1, d + 0.1, 0.16, rng));
+  b.add([kit.box(w, 0.2, d, 0, 0.16), kit.jitter(kit.C.stone, rng, 1)]);
+  // Beds of green inside, seen through the glass.
+  for (let i = 0; i < 3; i++) {
+    b.add([kit.box(w - 0.2, 0.06, 0.18, 0, 0.36, -0.28 + i * 0.28), "#5a3e2a"]);
+    for (let k = 0; k < 6; k++) b.add([new THREE.IcosahedronGeometry(0.08, 0).scale(1, 1.4, 1).translate(-0.55 + k * 0.22 + rng.range(-0.03, 0.03), 0.48, -0.28 + i * 0.28), kit.jitter(k % 2 ? "#6f9a45" : "#8aa84a", rng, 2)]);
+  }
+  // Glass walls and a pitched glass roof, framed by ribs.
+  const glass = "#cfe6e2";
+  const h = 0.55;
+  b.add([kit.box(w, h, 0.02, 0, 0.36, d / 2), glass], [kit.box(w, h, 0.02, 0, 0.36, -d / 2), glass], [kit.box(0.02, h, d, w / 2, 0.36), glass], [kit.box(0.02, h, d, -w / 2, 0.36), glass]);
+  const pitch = 0.42;
+  const slope = Math.hypot(d / 2, pitch);
+  const ang = Math.atan2(pitch, d / 2);
+  for (const sgn of [-1, 1]) {
+    b.add([new THREE.BoxGeometry(w + 0.04, 0.02, slope).rotateX(sgn * ang).translate(0, 0.36 + h + pitch / 2, (sgn * d) / 4), glass]);
+  }
+  for (let i = 0; i <= 5; i++) {
+    const x = -w / 2 + (i * w) / 5;
+    for (const sgn of [-1, 1]) {
+      b.add([kit.box(0.035, h, 0.035, x, 0.36, (sgn * d) / 2), kit.C.timber]);
+      b.add([new THREE.BoxGeometry(0.035, 0.035, slope).rotateX(sgn * ang).translate(x, 0.36 + h + pitch / 2 + 0.02, (sgn * d) / 4), kit.C.timber]);
+    }
+  }
+  b.add([kit.box(w + 0.06, 0.05, 0.05, 0, 0.36 + h + pitch, 0), kit.C.timber]);
+  // Gable ends: glass triangles.
+  for (const x of [-w / 2, w / 2]) {
+    const tri = new THREE.BufferGeometry();
+    tri.setAttribute("position", new THREE.Float32BufferAttribute([x, 0.36 + h, -d / 2, x, 0.36 + h, d / 2, x, 0.36 + h + pitch, 0, x, 0.36 + h, d / 2, x, 0.36 + h, -d / 2, x, 0.36 + h + pitch, 0], 3));
+    b.add([tri, glass]);
+  }
+  b.add(...kit.door(0, 0.36, d / 2 + 0.015, rng));
+  // The steam pipe from the vent side, with a little valve wheel.
+  b.add([kit.cyl(0.06, 0.06, 0.9, 8).rotateZ(Math.PI / 2).translate(-w / 2 - 0.45, 0.22, -0.2), "#a0583f"], [kit.cyl(0.07, 0.07, 0.3, 8, -w / 2 - 0.9, 0, -0.2), "#a0583f"]);
+  b.add([new THREE.TorusGeometry(0.07, 0.012, 4, 10).translate(-w / 2 - 0.5, 0.36, -0.2), "#3a3a3a"]);
+  b.meta.chimney = new THREE.Vector3(-w / 2 - 0.9, 0.35, -0.2);
+  b.add(...kit.pennant(w / 2 - 0.05, 0.36 + h, d / 2 - 0.05, 0.3));
+}
+
 /** The well: a round stone curb under a little shingled roof, with a windlass and bucket. */
 function well(b: Build): void {
   const { rng } = b;
@@ -605,6 +692,8 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   orchard,
   apiary,
   treehouse,
+  waystation,
+  greenhouse,
   pasture,
   butcher,
   coalmine: (b) => mine(b, "coal"),

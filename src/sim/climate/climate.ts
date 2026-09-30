@@ -40,6 +40,8 @@ export class Climate {
   private readonly count: number;
   /** Bumped each climate step; renderers follow it. */
   version = 0;
+  /** Some lake ice broke up since the economy last looked (roads over it sink). */
+  thawed = false;
 
   constructor(
     private readonly land: LandUse,
@@ -105,6 +107,17 @@ export class Climate {
       this.rain[t] = rain;
       const temp = (terrain.temperature[t] as number) + this.seasonalOffset(tick, ty) - rain * 4;
       this.temp[t] = temp;
+      land.chill[t] = temp < -2 ? 1 : 0;
+      if (land.hydro.lake[t]) {
+        // Lakes freeze over in a hard frost and break up in the thaw.
+        const was = land.frozen[t] as number;
+        if (!was && temp < -3) land.frozen[t] = 1;
+        else if (was && temp > 1) land.frozen[t] = 0;
+        if (land.frozen[t] !== was) {
+          land.iceVersion++;
+          this.thawed ||= !!was;
+        }
+      }
       if (!land.isLand(t)) continue;
       // Mud follows rain and dries slowly; snow builds below freezing and melts above.
       const mud = land.mud[t] as number;

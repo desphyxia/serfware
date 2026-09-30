@@ -68,6 +68,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 14b: coal as waystation fuel (a "fuel" input group without touching log distribution);
+  settlers caught by an eruption fleeing; lava flows and new land from big eruptions; ice fishing
+  holes on frozen lakes; warm clothing from a tailor for Rimefall walkers; the AI siting
+  waystations and avoiding ice roads before the thaw; obsidian tools and glass for the Lumen
+  Mire lanterns; a warmth overlay in build mode; aurora sounds.
 
 ## Picking up work in a new session
 
