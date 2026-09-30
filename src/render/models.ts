@@ -528,6 +528,52 @@ export function skiffGeometry(): THREE.BufferGeometry {
   return merge(parts);
 }
 
+/**
+ * A skyship: a clinker hull hung under a long ribbed gas envelope, brass fins and a glowing
+ * copper drive at the stern. Bow is -Z (like the skiff).
+ */
+export function skyshipGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(131);
+  const h = kit.hull(1.7, 0.42, 0.3, rng, "#7a5236");
+  const parts = h.parts;
+  parts.push([new THREE.SphereGeometry(0.5, 16, 10).scale(1, 0.8, 2.6).translate(0, 1.35, 0), "#d9c9a2"]);
+  for (let i = -3; i <= 3; i++) parts.push([new THREE.TorusGeometry(0.44, 0.022, 4, 16).scale(1, 0.8, 1).translate(0, 1.35, i * 0.3), "#8a6a44"]);
+  for (const [x, z] of [[-0.24, -0.4], [0.24, -0.4], [-0.24, 0.4], [0.24, 0.4]] as const) parts.push([box(0.016, 0.72, 0.016, x, 0.3, z), kit.C.rope]);
+  parts.push([box(0.02, 0.4, 0.34, 0, 1.4, 1.2), "#b8903a"], [box(0.6, 0.02, 0.3, 0, 1.35, 1.22), "#b8903a"]);
+  parts.push([kit.cyl(0.1, 0.13, 0.26, 10).rotateX(Math.PI / 2).translate(0, 0.38, 0.95), "#b8703a"], [kit.cyl(0.07, 0.07, 0.04, 10).rotateX(Math.PI / 2).translate(0, 0.38, 1.1), "#ffb45a"]);
+  parts.push([box(0.36, 0.22, 0.4, 0, 0.3, 0.1), "#6a4a30"], [box(0.4, 0.04, 0.44, 0, 0.43, 0.1), "#56657a"]);
+  return merge(parts);
+}
+
+/**
+ * The Hearthship under way: a big lofted clinker hull with a deckhouse, two long gas envelopes
+ * and a row of copper drives. It lands and unpacks into a keep.
+ */
+export function hearthshipCraftGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(277);
+  const h = kit.hull(3.2, 0.8, 0.6, rng, "#6e4a30");
+  const parts = h.parts;
+  for (const x of [-0.55, 0.55]) {
+    parts.push([new THREE.SphereGeometry(0.55, 16, 10).scale(1, 0.85, 3.1).translate(x, 2.0, 0), "#e2d4b0"]);
+    for (let i = -4; i <= 4; i++) parts.push([new THREE.TorusGeometry(0.5, 0.025, 4, 16).scale(1, 0.85, 1).translate(x, 2.0, i * 0.34), "#8a6a44"]);
+  }
+  parts.push([box(1.0, 0.5, 1.2, 0, 0.55, 0.3), "#8a6444"], [box(1.1, 0.06, 1.3, 0, 0.82, 0.3), "#a8513c"], [box(0.9, 0.08, 0.1, 0, 0.62, -0.29), "#ffd890"]);
+  for (const x of [-0.4, 0, 0.4]) parts.push([kit.cyl(0.12, 0.16, 0.34, 10).rotateX(Math.PI / 2).translate(x, 0.45, 1.75), "#b8703a"], [kit.cyl(0.09, 0.09, 0.04, 10).rotateX(Math.PI / 2).translate(x, 0.45, 1.94), "#ffb45a"]);
+  for (const [x, z] of [[-0.5, -0.9], [0.5, -0.9], [-0.5, 0.9], [0.5, 0.9]] as const) parts.push([box(0.02, 1.2, 0.02, x, 0.6, z), kit.C.rope]);
+  return merge(parts);
+}
+
+/** A survey probe: a brass sphere with a dish, antennae and a glowing eye. */
+export function probeGeometry(): THREE.BufferGeometry {
+  return merge([
+    [new THREE.SphereGeometry(0.28, 12, 8), "#c8a050"],
+    [new THREE.CylinderGeometry(0.3, 0.05, 0.12, 12).translate(0, 0.32, 0), "#d8d0c0"],
+    [box(0.01, 0.6, 0.01, 0.15, 0.1, 0), "#5a5e66"],
+    [box(0.01, 0.5, 0.01, -0.15, 0.05, 0.05), "#5a5e66"],
+    [new THREE.SphereGeometry(0.07, 8, 6).translate(0, 0, -0.27), "#7fe0ff"],
+  ]);
+}
+
 /** A glider: a pale cloth wing on a light frame, as the Skyreef folk ride the updrafts. */
 export function gliderGeometry(): THREE.BufferGeometry {
   const wing = new THREE.BufferGeometry();

@@ -68,6 +68,12 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 18b: colonies' wardens and lanterns on shared colony worlds (PvP beyond home), AI
+  rivals that colonise, the AI using launch rails, return voyages carrying people home, the
+  founders walking to the rail to board (they vanish from the keep for now), a moving craft in
+  orbit seen from the system map in 3D, colony-coloured roofs from cultural drift, dialect names
+  for colony-born newcomers, per-colony saves of the view, and surveying from orbit before a
+  probe lands (hazard markers on the globe).
 - Batch 17b: a molten world's lava look, gas giants you can orbit (their moons as landing
   sites), multiplayer: seeing the system shared (survey views are local for now), a 3D orrery
   instead of the flat map, carrier load (how much one carries) by gravity, and system-wide

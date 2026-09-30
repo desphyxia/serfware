@@ -14,6 +14,7 @@ import { AmbientFx } from "./ambientFx";
 import { FireView } from "./fireView";
 import { FrontierView } from "./frontierView";
 import { SkyView } from "./skyView";
+import { VoyageView } from "./voyageView";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -61,6 +62,7 @@ export class WorldView {
   readonly fire: FireView;
   readonly frontier: FrontierView;
   readonly sky: SkyView;
+  readonly voyages: VoyageView;
   private climateVersion = -1;
   private climateTimer = 0;
   private ashVersion = 0;
@@ -145,6 +147,7 @@ export class WorldView {
     this.fire = new FireView(world.economy, this.frames, this.mask);
     this.frontier = new FrontierView(world.economy, this.frames, this.rivers, this.mask);
     this.sky = new SkyView(world.economy, this.frames, this.mask);
+    this.voyages = new VoyageView(world.economy, this.frames);
     this.nature.ecology = world.economy.ecology;
     this.grass.cover = world.economy.ecology;
     this.undergrowth.cover = world.economy.ecology;
@@ -154,6 +157,7 @@ export class WorldView {
       this.rivers.group,
       this.frontier.group,
       this.sky.group,
+      this.voyages.group,
       this.weather.group,
       this.ambient.group,
       this.fire.flames.mesh,
@@ -304,6 +308,7 @@ export class WorldView {
     this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
+    this.voyages.update(p.time, p.dt, p.focus);
     const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness, p.time, this.waterU.tideLift.value), ...this.sky.update(p.time, p.dt, p.focus)];
     this.particles.update(p.dt, p.closeness > 0.2 ? [...this.econ.emitters(), ...fires] : fires, wind, light, p.pixelRatio, p.particles);
     {
@@ -408,6 +413,7 @@ export class WorldView {
     this.fire.dispose();
     this.frontier.dispose();
     this.sky.dispose();
+    this.voyages.dispose();
     this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();

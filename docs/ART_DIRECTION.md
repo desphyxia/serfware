@@ -345,3 +345,18 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
   orbit to the surface.
 - Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
   gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.
+
+### Colonisation (batch 18)
+
+- **Launch rail:** a timber trestle ramp climbing at about 30 degrees, iron rails with copper
+  coils that crowd together toward the top, a cradle at the foot, and a slate-roofed loading shed
+  with crates and barrels. A pennant flies at the top of the ramp.
+- **Craft** share the Hearthship's language: clinker hulls hung under ribbed, cream gas envelopes,
+  with brass fins and copper drives that glow amber at the stern. A skyship has one envelope; the
+  Hearthship under way has two, a deckhouse with a red roof and a lit window strip, and three
+  drives. A probe is a small brass sphere with a white dish, antennae and a cyan eye.
+- Loaded craft rest on the ramp. At launch they run up the rails and climb ever more steeply,
+  growing as they go (so they stay readable from afar). Skyships come down in a spiral to the
+  keep they unload at. A Hearthship waiting for its landing site circles low over the view.
+- On the system map, craft under way are gold dots (probes are cyan) with a dashed trail.
+  Uncharted planets are drawn faded, with a "?" by the name; colonies read "(colony)".
