@@ -2,6 +2,8 @@ import type { StateHasher } from "../hash";
 import { dayInfo, ticksPerDay } from "../clock";
 import { atan2, TAU } from "../dmath";
 import { Region } from "../biomes/regions";
+import { sunHeight } from "../biomes/sun";
+import { Biome } from "../planet/terrain";
 import { mix32, Rng } from "../rng";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
 import {
@@ -25,7 +27,7 @@ import { MinHeap } from "./heap";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
-import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
+import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, GLOWCAP_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
 /**
  * The Serf City core: flags, roads with one carrier each, goods handed from flag to flag,
@@ -1010,14 +1012,20 @@ export class Economy {
   /** Needed count of a good type at a building (construction or production inputs). */
   need(b: Building, type: number): number {
     if (!b.alive) return 0;
-    if (!b.built) return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
+    if (!b.built) {
+      // Skystone builds like stone: a site short of stone takes either, counted together.
+      const stone = goodId("stone");
+      const sky = goodId("skystone");
+      if (type === sky || type === stone) return (b.cost[stone] as number) - (b.delivered[stone] as number) - (b.pending[stone] as number) - (b.pending[sky] as number);
+      return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
+    }
     if (b.stranded >= 0) return 0;
     const upkeep = this.upkeepNeed(b, type);
     if (upkeep > 0) return upkeep;
     if (b.def.slots) return this.armsNeed(b, type);
     if ((b.worker < 0 && !b.def.heated) || b.exhausted) return 0;
     const key = inputKeyFor(b.def, type);
-    if (!key || (key === "coal" && this.ventHeat(b))) return 0;
+    if (!key || (key === "fuel" && this.ventHeat(b))) return 0;
     if (this.priority(b, type) <= 0) return 0;
     let have = 0;
     for (const g of goodsFor(key)) have += (b.stock[g] as number) + (b.pending[g] as number);
@@ -1178,7 +1186,7 @@ export class Economy {
   /** A building receives a good carried in by a carrier. */
   private receive(b: Building, type: number): void {
     b.pending[type] = Math.max(0, (b.pending[type] as number) - 1);
-    if (!b.built) b.delivered[type]!++;
+    if (!b.built) b.delivered[type === goodId("skystone") ? goodId("stone") : type]!++;
     else b.stock[type]!++;
   }
 
@@ -1936,7 +1944,9 @@ export class Economy {
     const onRoad = this.land.use[b] === Use.Road || this.land.use[b] === Use.Flag;
     // High water over the flats: wait on the shore for the ebb (causeways and stilts stay dry).
     if (this.land.flooded[b] && !this.land.causeway[b] && this.land.use[b] !== Use.Building) return false;
-    const ticks = (onRoad ? TICKS_PER_TILE_ROAD : TICKS_PER_TILE_OFFROAD) * this.land.stepCost(a, b);
+    // Skystone is buoyant: its carriers walk as if empty-handed, and a little quicker.
+    const light = s.carryGood >= 0 && this.goods[s.carryGood]?.type === goodId("skystone") ? 0.8 : 1;
+    const ticks = (onRoad ? TICKS_PER_TILE_ROAD : TICKS_PER_TILE_OFFROAD) * this.land.stepCost(a, b) * light;
     s.prog += Math.max(20, Math.floor(1000 / ticks));
     if (s.prog >= 1000) {
       s.prog -= 1000;
@@ -1965,11 +1975,12 @@ export class Economy {
   }
 
   private releaseReservations(s: Settler): void {
-    if (s.target >= 0) {
-      const f = this.flags[s.target] as Flag;
-      f.reserved = Math.max(0, f.reserved - 1);
-      s.target = -1;
+    // Only carriers reserve a place at a flag; a worker's target is a tile or a good type.
+    if (s.target >= 0 && s.role === "carrier") {
+      const f = this.flags[s.target];
+      if (f) f.reserved = Math.max(0, f.reserved - 1);
     }
+    s.target = -1;
     for (const g of this.goods) if (g.alive && g.carrier === s.id && g.id !== s.carryGood) g.carrier = -1;
   }
 
@@ -2190,6 +2201,7 @@ export class Economy {
 
   /** Local daytime (07:00 to 19:00 solar) at a tile. */
   sunUp(t: number): boolean {
+    if (this.land.planet.params.locked) return sunHeight(this.land.planet, t) > 0.05;
     const c = this.land.planet.grid.center;
     const lon = atan2(-(c[t * 3 + 2] as number), c[t * 3] as number) / TAU;
     const h = dayInfo(this.tick, this.land.planet.params.dayLengthHours, lon).hour;
@@ -2218,7 +2230,7 @@ export class Economy {
   private consumeInputs(b: Building): boolean {
     const inputs = { ...b.def.inputs };
     // A forge by a geothermal vent smelts on the earth's own heat.
-    if (this.ventHeat(b)) delete inputs.coal;
+    if (this.ventHeat(b)) delete inputs.fuel;
     for (const [key, n] of Object.entries(inputs)) {
       if (key === "food" && b.def.job === "mine") continue;
       let have = 0;
@@ -2329,6 +2341,16 @@ export class Economy {
         }
         return best;
       }
+      case "fungus": {
+        // Ripe glowcaps first (wild ones too); otherwise plant on open damp ground.
+        const ripe = this.findWorkTile(b, (t) => land.feature[t] === Feature.Glowcap && (land.amount[t] as number) >= GLOWCAP_RIPE);
+        if (ripe >= 0) return ripe;
+        const caps = land.ring(b.tile, def.radius ?? 3).filter((t) => land.feature[t] === Feature.Glowcap).length;
+        return caps < 8 ? this.findWorkTile(b, open) : -1;
+      }
+      case "peat":
+        // Cut peat from deep mire soil.
+        return this.findWorkTile(b, (t) => (land.region[t] === Region.LumenMire || land.planet.terrain.biome[t] === Biome.Marsh) && open(t) && (land.soil[t] as number) > 0.35);
       case "shellfish": {
         // Exposed flats with shellfish on them, at low water.
         for (const t of land.ring(b.tile, def.radius ?? 5)) {
@@ -2395,6 +2417,19 @@ export class Economy {
             s.target = out;
             s.timer = Math.round((def.workTicks ?? 60) * this.speedFactor(s, def.id));
           } else s.timer = 15;
+          return;
+        }
+        if (def.job === "ropeway") {
+          // Gondolas go up only while a sky island with stone drifts within reach.
+          const isle = this.islandNear(b.tile, def.radius ?? 3);
+          if (!isle) {
+            s.timer = 120;
+            return;
+          }
+          isle.stone--;
+          s.state = "craft";
+          s.target = goodId(def.produces ?? "skystone");
+          s.timer = Math.round((def.workTicks ?? 100) * this.speedFactor(s, def.id));
           return;
         }
         if (def.job === "bees") {
@@ -2519,7 +2554,21 @@ export class Economy {
           land.fish[s.home]!--;
           got = produced;
         } else if (def.job === "hunt" && this.ecology.hunt(t)) got = produced;
-        else if (def.job === "shellfish" && !land.flooded[t] && (land.shell[t] as number) > 0) {
+        else if (def.job === "fungus") {
+          if (land.feature[t] === Feature.Glowcap && (land.amount[t] as number) >= GLOWCAP_RIPE) {
+            land.feature[t] = Feature.None;
+            land.amount[t] = 0;
+            got = produced;
+          } else if ((land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
+            land.feature[t] = Feature.Glowcap;
+            land.amount[t] = 0;
+            land.variety[t] = 0;
+          }
+          land.featureVersion++;
+        } else if (def.job === "peat" && (land.soil[t] as number) > 0.35) {
+          land.soil[t] = (land.soil[t] as number) - 0.2;
+          got = produced;
+        } else if (def.job === "shellfish" && !land.flooded[t] && (land.shell[t] as number) > 0) {
           land.shell[t]!--;
           got = produced;
         }
@@ -2685,6 +2734,11 @@ export class Economy {
       if ((land.amount[t] as number) < FIELD_RIPE && (land.nextGrowth[t] as number) <= this.tick) {
         // Outside the growing season fields wait; frost doesn't kill them, it just holds them.
         if (this.climate && !this.climate.growing(t)) {
+          land.nextGrowth[t] = this.tick + 200;
+          continue;
+        }
+        // Mire crops grow only in daylight or under glowcaps.
+        if (land.region[t] === Region.LumenMire && !land.glow[t] && !this.sunUp(t)) {
           land.nextGrowth[t] = this.tick + 200;
           continue;
         }
@@ -2885,6 +2939,84 @@ export class Economy {
     return this.members(owner);
   }
 
+  // ------------------------------------------------------------------ Lumen Mire and Skyreef
+
+  /** Floating islands of buoyant stone over the Skyreef: where they drift from, where they are now, stone left. */
+  readonly islands: { id: number; home: number; at: number; stone: number }[] = [];
+  private islandsMade = false;
+  private lumenTiles: number[] | null = null;
+
+  /** Sky islands, made once from the Skyreef heights (spaced out, at most eight). */
+  skyIslands(): { id: number; home: number; at: number; stone: number }[] {
+    if (!this.islandsMade) {
+      this.islandsMade = true;
+      const land = this.land;
+      const reef: number[] = [];
+      for (let t = 0; t < land.region.length; t++) if (land.region[t] === Region.Skyreef) reef.push(t);
+      reef.sort((a, b) => mix32(a, 0x5c1f) - mix32(b, 0x5c1f));
+      for (const t of reef) {
+        if (this.islands.length >= Math.min(8, Math.ceil(reef.length / 20))) break;
+        if (this.islands.some((i) => land.ring(i.home, 5).includes(t))) continue;
+        this.islands.push({ id: this.islands.length, home: t, at: t, stone: 40 });
+      }
+    }
+    return this.islands;
+  }
+
+  /** A sky island with stone left within `r` steps of a tile. */
+  islandNear(t: number, r: number): { id: number; home: number; at: number; stone: number } | null {
+    const near = [t, ...this.land.ring(t, r)];
+    return this.skyIslands().find((i) => i.stone > 0 && near.includes(i.at)) ?? null;
+  }
+
+  /** Daily: the islands drift a step on the high winds, never far from home; mire spores spread. */
+  private stepHeights(): void {
+    const land = this.land;
+    for (const isle of this.skyIslands()) {
+      const around = land.ring(isle.home, 3);
+      const next = land.planet.grid.neighborsOf(isle.at).filter((t) => t === isle.home || around.includes(t));
+      if (next.length) isle.at = next[mix32(isle.id, this.tick) % next.length] as number;
+    }
+    // Spores: wild glowcaps seed the damp ground next to them.
+    this.lumenTiles ??= Array.from({ length: land.region.length }, (_, t) => t).filter((t) => land.region[t] === Region.LumenMire);
+    let spread = false;
+    for (const t of this.lumenTiles) {
+      if (land.feature[t] !== Feature.Glowcap || (land.amount[t] as number) < GLOWCAP_RIPE || (mix32(t, this.tick) & 3) !== 0) continue;
+      const ns = land.planet.grid.neighborsOf(t);
+      const n = ns[mix32(this.tick, t) % ns.length] as number;
+      if (land.region[n] !== Region.LumenMire || land.use[n] !== Use.Free || land.feature[n] !== Feature.None) continue;
+      land.feature[n] = Feature.Glowcap;
+      land.amount[n] = 0;
+      land.variety[n] = 1;
+      spread = true;
+    }
+    if (spread) land.featureVersion++;
+  }
+
+  /** Hourly: glowcaps grow (in any light) and glow; mire tiles out of the sun and the glow go dim. */
+  private stepLight(): void {
+    const land = this.land;
+    land.glow.fill(0);
+    let grew = false;
+    for (let t = 0; t < land.feature.length; t++) {
+      if (land.feature[t] !== Feature.Glowcap) continue;
+      const a = land.amount[t] as number;
+      if (a < GLOWCAP_RIPE && (mix32(t, this.tick) & 1)) {
+        land.amount[t] = a + 1;
+        grew = true;
+      }
+      if (a >= 2) {
+        land.glow[t] = 1;
+        for (const n of land.planet.grid.neighborsOf(t)) land.glow[n] = 1;
+      }
+    }
+    for (const b of this.buildings) if (b.alive && b.built && b.def.job === "fungus") for (const m of [b.tile, ...land.ring(b.tile, 2)]) land.glow[m] = 1;
+    this.lumenTiles ??= Array.from({ length: land.region.length }, (_, t) => t).filter((t) => land.region[t] === Region.LumenMire);
+    for (const t of this.lumenTiles) land.dim[t] = !land.glow[t] && !this.sunUp(t) ? 1 : 0;
+    land.glowVersion++;
+    if (grew) land.featureVersion++;
+  }
+
   // ------------------------------------------------------------------ Saltglass and Tidewater
 
   /** Sandstorms raging now (Saltglass): centre tile and the tick they blow out. */
@@ -2964,7 +3096,7 @@ export class Economy {
 
   /** A forge within two steps of a vent needs no coal. */
   ventHeat(b: Building): boolean {
-    return !!b.def.forge && !!b.def.inputs?.coal && this.land.nearVent(b.tile, 2);
+    return !!b.def.forge && !!b.def.inputs?.fuel && this.land.nearVent(b.tile, 2);
   }
 
   /** A waystation has fuel burning. */
@@ -2979,10 +3111,12 @@ export class Economy {
     }
     if (tick % 300 === 150) {
       this.stepWarmth();
+      this.stepLight();
       if (this.storms.length) this.stepStorms();
     }
     if (tick % this.dayTicks === 3601 % this.dayTicks) this.stepVents();
     if (tick % this.dayTicks === 1801 % this.dayTicks) this.stepCoasts();
+    if (tick % this.dayTicks === 5401 % this.dayTicks) this.stepHeights();
   }
 
   /** Hourly: waystations burn a log when it's bitter nearby; hearths and fires warm the land. */
@@ -3160,6 +3294,7 @@ export class Economy {
     let coast = 0;
     for (let t = 0; t < this.land.sand.length; t += 7) coast = (coast * 31 + Math.round((this.land.sand[t] as number) * 100) + (this.land.causeway[t] as number) * 7 + (this.land.shell[t] as number)) | 0;
     h.int(coast).int(this.storms.length);
+    for (const i of this.islands) h.int(i.at).int(i.stone);
     this.ecology.hash(h);
   }
 }

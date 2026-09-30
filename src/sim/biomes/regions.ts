@@ -86,15 +86,33 @@ export const REGIONS: Readonly<Record<Region, RegionDef>> = {
     rules: NEUTRAL,
     fauna: ["gulls"],
   },
-  [Region.LumenMire]: { id: Region.LumenMire, key: "lumen", name: "Lumen Mire", blurb: "Glowing fens of reed and peat.", batch: 16, rules: { ...NEUTRAL, fieldGrowth: 0.8 }, fauna: ["fireflies"] },
-  [Region.Skyreef]: { id: Region.Skyreef, key: "skyreef", name: "Skyreef", blurb: "Floating stone in thin air.", batch: 16, rules: NEUTRAL, fauna: [] },
+  [Region.LumenMire]: {
+    id: Region.LumenMire,
+    key: "lumen",
+    name: "Lumen Mire",
+    blurb: "Glowing fens of reed and peat in the twilight. Light is scarce: grow glowcaps, and they light the way.",
+    batch: 16,
+    rules: { ...NEUTRAL, fieldGrowth: 0.8, game: 1.1 },
+    fauna: ["fireflies"],
+  },
+  [Region.Skyreef]: {
+    id: Region.Skyreef,
+    key: "skyreef",
+    name: "Skyreef",
+    blurb: "The highest peaks, where buoyant stone lifts off into the sky and drifts on the high winds.",
+    batch: 16,
+    rules: { ...NEUTRAL, fieldGrowth: 0.6, treeGrowth: 0.7 },
+    fauna: ["gliders"],
+  },
 };
 
 /**
  * Which region a land tile belongs to, from its terrain class, temperature (°C), moisture (0..1)
  * and whether it is on the coast.
  */
-export function regionFor(biome: Biome, temperature: number, moisture: number, coastal: boolean): Region {
+export function regionFor(biome: Biome, temperature: number, moisture: number, coastal: boolean, height = 0): Region {
+  // The highest peaks, where buoyant stone lifts off the mountains into the sky.
+  if (height > 0.7 && (biome === Biome.Rock || biome === Biome.Snow)) return Region.Skyreef;
   switch (biome) {
     case Biome.DeepSea:
     case Biome.Sea:

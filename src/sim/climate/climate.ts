@@ -3,6 +3,7 @@ import { asin, clamp, cos, exp, sin, TAU } from "../dmath";
 import type { LandUse } from "../econ/landuse";
 import { Rng } from "../rng";
 import { moonsOf, tideAt, tideLevel, type Moon } from "../biomes/tides";
+import { sunHeight } from "../biomes/sun";
 
 /** Game days in a year: four seasons of six days. */
 export const YEAR_DAYS = 24;
@@ -81,6 +82,8 @@ export class Climate {
 
   /** Season at a latitude (sine of latitude: -1 south pole .. 1 north pole). */
   season(tick: number, y: number): Season {
+    // A locked planet has no seasons: one long summer under the fixed sun.
+    if (this.land.planet.params.locked) return "summer";
     let p = this.yearPhase(tick);
     if (y < 0) p = (p + 0.5) % 1;
     return p < 0.25 ? "spring" : p < 0.5 ? "summer" : p < 0.75 ? "autumn" : "winter";
@@ -92,6 +95,15 @@ export class Climate {
     const swing = 32 * (tilt / 0.48) * Math.abs(y) + 3;
     const s = sin((this.yearPhase(tick) - 0.125) * TAU);
     return swing * s * (y >= 0 ? 1 : -1);
+  }
+
+  /**
+   * Temperature offset at a tile: the seasons, or on a locked planet the fixed sun (hot under it,
+   * frozen on the far side, mild in the twilight ring) in place of latitude and season.
+   */
+  offsetAt(tick: number, t: number, y: number): number {
+    if (!this.land.planet.params.locked) return this.seasonalOffset(tick, y);
+    return y * y * 36 + 34 * sunHeight(this.land.planet, t) - 12;
   }
 
   /** Zonal wind speed (radians per step) at a latitude: westward trades, eastward westerlies. */
@@ -126,7 +138,7 @@ export class Climate {
       const ty = c[t * 3 + 1] as number;
       const rain = this.rainAt(t);
       this.rain[t] = rain;
-      const temp = (terrain.temperature[t] as number) + this.seasonalOffset(tick, ty) - rain * 4;
+      const temp = (terrain.temperature[t] as number) + this.offsetAt(tick, t, ty) - rain * 4;
       this.temp[t] = temp;
       land.chill[t] = temp < -2 ? 1 : 0;
       if (land.hydro.lake[t]) {
@@ -178,7 +190,7 @@ export class Climate {
       copy.advanceFronts();
       const r = copy.rainAt(t);
       wet = Math.max(wet, r);
-      const temp = (this.land.planet.terrain.temperature[t] as number) + this.seasonalOffset(tick + i * CLIMATE_STEP, ty) - r * 4;
+      const temp = (this.land.planet.terrain.temperature[t] as number) + this.offsetAt(tick + i * CLIMATE_STEP, t, ty) - r * 4;
       low = Math.min(low, temp);
       high = Math.max(high, temp);
     }

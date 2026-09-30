@@ -12,7 +12,7 @@ export interface GoodDef {
   arms?: boolean;
 }
 
-export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish";
+export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish" | "fungus" | "peat" | "ropeway";
 export type Category = "storage" | "materials" | "food" | "metal" | "lantern";
 
 export interface BuildingDef {
@@ -29,7 +29,7 @@ export interface BuildingDef {
   /** Tool the worker needs (and keeps while employed). */
   tool?: string;
   /** Placement rule beyond flat land. */
-  terrain?: "mountain" | "coast" | "aquifer" | "giant" | "vent" | "saltpan";
+  terrain?: "mountain" | "coast" | "aquifer" | "giant" | "vent" | "saltpan" | "skyreef";
   /** Mines: which deposit they dig. */
   resource?: "coal" | "iron" | "gold" | "granite";
   radius?: number;

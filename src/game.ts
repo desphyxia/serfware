@@ -1237,6 +1237,7 @@ export class Game {
       Radius: p.params.radius.toFixed(1),
       Day: `${p.params.dayLengthHours} h`,
       Tilt: `${(p.params.axialTilt * RAD).toFixed(1)}°`,
+      Rotation: p.params.locked ? "tidally locked (fixed sun)" : `${p.params.dayLengthHours} h day`,
       Gravity: `${p.params.gravity} g`,
       Land: `${Math.round(land * 100)} %`,
     };
@@ -1342,9 +1343,10 @@ export class Game {
     const p = this.world.planet.params;
     const f = this.world.day().fraction;
     // The subsolar point moves west as the planet turns east, so local noon is at lon = -theta.
-    const theta = -(f - 0.5) * Math.PI * 2;
+    // A tidally locked planet keeps its sun fixed over longitude 0 on the equator.
+    const theta = p.locked ? 0 : -(f - 0.5) * Math.PI * 2;
     // The sun climbs and sinks with the seasons (northern summer at year phase 0.375).
-    const dec = p.axialTilt * Math.sin((this.world.climate.yearPhase(this.world.tick) - 0.125) * Math.PI * 2);
+    const dec = p.locked ? 0 : p.axialTilt * Math.sin((this.world.climate.yearPhase(this.world.tick) - 0.125) * Math.PI * 2);
     this.sunDir.set(Math.cos(dec) * Math.cos(theta), Math.sin(dec), -Math.cos(dec) * Math.sin(theta)).normalize();
 
     const R = p.radius;

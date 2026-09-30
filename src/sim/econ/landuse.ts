@@ -7,6 +7,7 @@ import { MinHeap } from "./heap";
 import { computeHydrology, type Hydrology } from "../planet/hydrology";
 import { Region, REGIONS, regionFor, type RegionDef } from "../biomes/regions";
 import { TIDE_MEAN, TIDE_RANGE } from "../biomes/tides";
+import { sunHeight } from "../biomes/sun";
 
 /** What stands on a tile. */
 export enum Use {
@@ -35,7 +36,11 @@ export enum Feature {
   Vent = 8,
   /** A salt-crystal spire (Saltglass Flats): a landmark that blocks the way and lifts Glow's beauty. */
   Spire = 9,
+  /** Glowcap fungus (Lumen Mire): amount is its growth stage 0..4; variety 1 = wild. Glows from stage 2. */
+  Glowcap = 10,
 }
+
+export const GLOWCAP_RIPE = 4;
 
 /** Tree varieties: 0..3 are wild or planted timber; these are special and never felled. */
 export const MEMORIAL = 7;
@@ -135,6 +140,12 @@ export class LandUse {
   /** Sand blown over the ground by storms (0..1): slows roads until traffic clears it. */
   readonly sand: Float32Array;
   sandVersion = 0;
+  /** Lit by glowcaps (1) and, in the Lumen Mire, too dark to hurry (dim, 1). Set by the economy. */
+  readonly glow: Uint8Array;
+  readonly dim: Uint8Array;
+  glowVersion = 0;
+  /** Carrying costs less on a light world (0.75..1): walkers and carriers move faster. */
+  readonly lightness: number;
 
   constructor(readonly planet: Planet) {
     const n = planet.grid.count;
@@ -165,8 +176,21 @@ export class LandUse {
     this.causeway = new Uint8Array(n);
     this.shell = new Uint8Array(n);
     this.sand = new Float32Array(n);
+    this.glow = new Uint8Array(n);
+    this.dim = new Uint8Array(n);
+    this.lightness = Math.min(1, 0.5 + 0.5 * planet.params.gravity);
     const { biome, temperature, moisture } = planet.terrain;
-    for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t));
+    const peak = planet.terrain.params.mountainHeight;
+    for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t), (planet.terrain.elevation[t] as number) / peak);
+    // A locked planet: the wet twilight ring is Lumen Mire; the far side is frozen tundra.
+    if (planet.params.locked) {
+      for (let t = 0; t < n; t++) {
+        if (!this.isLand(t)) continue;
+        const s = sunHeight(planet, t);
+        if (Math.abs(s) < 0.22 && (moisture[t] as number) > 0.3 && this.region[t] !== Region.Skyreef) this.region[t] = Region.LumenMire;
+        else if (s < -0.3 && this.region[t] !== Region.Skyreef) this.region[t] = Region.RimefallTundra;
+      }
+    }
     for (let t = 0; t < n; t++) {
       if (this.region[t] !== Region.TidewaterReach || (planet.terrain.elevation[t] as number) >= TIDE_MEAN + TIDE_RANGE) continue;
       this.tidal[t] = 1;
@@ -239,6 +263,11 @@ export class LandUse {
         this.feature[t] = Feature.Rock;
         this.amount[t] = rng.int(4, 9);
         this.variety[t] = rng.int(0, 3);
+      } else if (this.region[t] === Region.LumenMire && r > 0.93) {
+        // Wild glowcaps in the mire.
+        this.feature[t] = Feature.Glowcap;
+        this.amount[t] = GLOWCAP_RIPE;
+        this.variety[t] = 1;
       } else if (this.region[t] === Region.SaltglassFlats && r > 0.965 && !grid.neighborsOf(t).some((m) => this.feature[m] === Feature.Spire)) {
         // Salt-crystal spires stand over the flats.
         this.feature[t] = Feature.Spire;
@@ -307,6 +336,7 @@ export class LandUse {
     if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
     if (def.terrain === "vent" && !this.nearVent(t)) return false;
     if (def.terrain === "saltpan" && this.region[t] !== Region.SaltglassFlats && !this.isCoast(t)) return false;
+    if (def.terrain === "skyreef" && this.region[t] !== Region.Skyreef && !this.ring(t, 2).some((m) => this.region[m] === Region.Skyreef)) return false;
     // Treehouses go up an ancient giant (which stays standing).
     if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
     return this.canBuild(t, flagTile, !!def.large, owner);
@@ -347,6 +377,7 @@ export class LandUse {
       this.feature[t] !== Feature.Field &&
       this.feature[t] !== Feature.Vent &&
       this.feature[t] !== Feature.Spire &&
+      this.feature[t] !== Feature.Glowcap &&
       this.slope(t) < 2.2
     );
   }
@@ -364,7 +395,7 @@ export class LandUse {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
     const f = this.feature[t];
-    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire))) return false;
+    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
@@ -451,7 +482,9 @@ export class LandUse {
       // Bitter cold saps walkers far from any hearth.
       if (this.chill[b] && !this.warm[b]) base *= 1.35;
     }
-    return base * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15);
+    // Lumen Mire nights are dark: slow going where nothing glows.
+    if (this.dim[b]) base *= 1.3;
+    return base * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15) * this.lightness;
   }
 
   /** Carriers here ride a sledge (a road over snow or ice); for visuals. */
