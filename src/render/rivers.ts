@@ -64,7 +64,12 @@ export class RiverView {
     const fwd = new THREE.Vector3();
     let alongBase = 0;
     // The same smoothed courses the terrain carves its beds along.
-    for (const samples of field.rivers) {
+    for (const course of field.rivers) {
+      // Stop at the first point in the sea or a lake: that water draws itself, and a second
+      // layer over it would show as a lighter patch.
+      const firstWet = course.findIndex((p) => p.wet);
+      const samples = firstWet >= 0 ? course.slice(0, firstWet + 1) : course;
+      if (samples.length < 2) continue;
       const base = pos.length / 3;
       // Last vertex placed on each side: an edge never steps backward along the flow (on the
       // inside of a tight bend it waits in place instead of folding the ribbon over itself).
