@@ -137,6 +137,19 @@
     {
       "id": "obsidian",
       "name": "Obsidian"
+    },
+    {
+      "id": "salt",
+      "name": "Salt"
+    },
+    {
+      "id": "glass",
+      "name": "Glass"
+    },
+    {
+      "id": "shellfish",
+      "name": "Shellfish",
+      "group": "food"
     }
   ],
   "buildings": [
@@ -282,6 +295,42 @@
       "produces": "plank"
     },
     {
+      "id": "saltworks",
+      "name": "Saltworks",
+      "description": "Shallow pans the sun dries to salt. Works by day; on the Saltglass or the coast. Salt in store keeps food from spoiling (more nourishment).",
+      "category": "materials",
+      "cost": {
+        "plank": 2,
+        "stone": 1
+      },
+      "job": "craft",
+      "terrain": "saltpan",
+      "daylight": true,
+      "workTicks": 120,
+      "restTicks": 20,
+      "produces": "salt"
+    },
+    {
+      "id": "solarkiln",
+      "name": "Solar kiln",
+      "description": "Mirrors focus the sun to melt stone into glass, by day only. Glass in store lifts Glow's beauty; the heat now and then sets dry growth alight.",
+      "category": "materials",
+      "cost": {
+        "plank": 2,
+        "stone": 3
+      },
+      "job": "craft",
+      "daylight": true,
+      "fireRisk": 30,
+      "inputs": {
+        "stone": 1
+      },
+      "inputStock": 3,
+      "workTicks": 110,
+      "restTicks": 10,
+      "produces": "glass"
+    },
+    {
       "id": "farm",
       "name": "Farm",
       "category": "food",
@@ -313,6 +362,26 @@
       },
       "inputStock": 4,
       "workTicks": 60,
+      "restTicks": 10,
+      "produces": "flour"
+    },
+    {
+      "id": "tidemill",
+      "name": "Tide mill",
+      "description": "Grinds grain on the running tide: no wind needed, but it stands still at the slack of high and low water.",
+      "category": "food",
+      "cost": {
+        "plank": 2,
+        "stone": 3
+      },
+      "job": "craft",
+      "terrain": "coast",
+      "tidal": true,
+      "inputs": {
+        "grain": 1
+      },
+      "inputStock": 4,
+      "workTicks": 50,
       "restTicks": 10,
       "produces": "flour"
     },
@@ -408,6 +477,32 @@
       "workTicks": 150,
       "restTicks": 30,
       "produces": "grain"
+    },
+    {
+      "id": "dewcondenser",
+      "name": "Dew condenser",
+      "description": "Cold stone fins that catch the night's dew: fields within three steps grow half again as fast, and it quenches fires like a well.",
+      "category": "food",
+      "cost": {
+        "stone": 2,
+        "plank": 1
+      },
+      "dew": true
+    },
+    {
+      "id": "shellfisher",
+      "name": "Shellfisher",
+      "description": "Gathers cockles and mussels from the tidal flats at low water.",
+      "category": "food",
+      "cost": {
+        "plank": 2
+      },
+      "job": "shellfish",
+      "terrain": "coast",
+      "radius": 5,
+      "workTicks": 70,
+      "restTicks": 40,
+      "produces": "shellfish"
     },
     {
       "id": "pasture",

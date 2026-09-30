@@ -6,6 +6,7 @@ import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
 import { computeHydrology, type Hydrology } from "../planet/hydrology";
 import { Region, REGIONS, regionFor, type RegionDef } from "../biomes/regions";
+import { TIDE_MEAN, TIDE_RANGE } from "../biomes/tides";
 
 /** What stands on a tile. */
 export enum Use {
@@ -32,6 +33,8 @@ export enum Feature {
   Giant = 7,
   /** A geothermal vent (Emberglass Steppe). Amount: pressure 0..255; it erupts when full. */
   Vent = 8,
+  /** A salt-crystal spire (Saltglass Flats): a landmark that blocks the way and lifts Glow's beauty. */
+  Spire = 9,
 }
 
 /** Tree varieties: 0..3 are wild or planted timber; these are special and never felled. */
@@ -120,6 +123,17 @@ export class LandUse {
   /** Volcanic ash on the ground after an eruption (0..1): richer soil, grey until it weathers in. */
   readonly ash: Float32Array;
   ashVersion = 0;
+  /** Tidewater flats: land the highest tides cover (1), and whether the sea covers it now. */
+  readonly tidal: Uint8Array;
+  readonly flooded: Uint8Array;
+  floodVersion = 0;
+  /** Raised causeways over the flats: roads that stay dry at high tide. */
+  readonly causeway: Uint8Array;
+  /** Shellfish on the flats, gathered at low tide. */
+  readonly shell: Uint8Array;
+  /** Sand blown over the ground by storms (0..1): slows roads until traffic clears it. */
+  readonly sand: Float32Array;
+  sandVersion = 0;
 
   constructor(readonly planet: Planet) {
     const n = planet.grid.count;
@@ -145,8 +159,18 @@ export class LandUse {
     this.chill = new Uint8Array(n);
     this.warm = new Uint8Array(n);
     this.ash = new Float32Array(n);
+    this.tidal = new Uint8Array(n);
+    this.flooded = new Uint8Array(n);
+    this.causeway = new Uint8Array(n);
+    this.shell = new Uint8Array(n);
+    this.sand = new Float32Array(n);
     const { biome, temperature, moisture } = planet.terrain;
     for (let t = 0; t < n; t++) if (this.isLand(t)) this.region[t] = regionFor(biome[t] as Biome, temperature[t] as number, moisture[t] as number, this.isCoast(t));
+    for (let t = 0; t < n; t++) {
+      if (this.region[t] !== Region.TidewaterReach || (planet.terrain.elevation[t] as number) >= TIDE_MEAN + TIDE_RANGE) continue;
+      this.tidal[t] = 1;
+      this.shell[t] = 6 + (t % 5);
+    }
     this.soil = new Float32Array(n);
     for (let t = 0; t < n; t++) this.soil[t] = Math.min(1, 0.35 + 0.5 * (planet.terrain.moisture[t] as number) + (this.isRiver(t) ? 0.15 : 0));
   }
@@ -214,6 +238,11 @@ export class LandUse {
         this.feature[t] = Feature.Rock;
         this.amount[t] = rng.int(4, 9);
         this.variety[t] = rng.int(0, 3);
+      } else if (this.region[t] === Region.SaltglassFlats && r > 0.965 && !grid.neighborsOf(t).some((m) => this.feature[m] === Feature.Spire)) {
+        // Salt-crystal spires stand over the flats.
+        this.feature[t] = Feature.Spire;
+        this.amount[t] = 0;
+        this.variety[t] = rng.int(0, 3);
       } else if (this.region[t] === Region.EmberglassSteppe && r > 0.975 && this.slope(t) < 1.2 && !grid.neighborsOf(t).some((m) => this.feature[m] === Feature.Vent)) {
         // Geothermal vents: steam, free heat for forges, and now and then an eruption.
         this.feature[t] = Feature.Vent;
@@ -276,6 +305,7 @@ export class LandUse {
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
     if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
     if (def.terrain === "vent" && !this.nearVent(t)) return false;
+    if (def.terrain === "saltpan" && this.region[t] !== Region.SaltglassFlats && !this.isCoast(t)) return false;
     // Treehouses go up an ancient giant (which stays standing).
     if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
     return this.canBuild(t, flagTile, !!def.large, owner);
@@ -296,7 +326,9 @@ export class LandUse {
 
   /** Settlers can walk here (land or lake ice, not a building, no rock, not too steep). */
   walkable(t: number): boolean {
-    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && this.feature[t] !== Feature.Rock && this.feature[t] !== Feature.Giant && this.feature[t] !== Feature.Vent;
+    if (this.flooded[t] && !this.causeway[t]) return false;
+    const f = this.feature[t];
+    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire;
   }
 
   /** A flag or road of `owner` may go here. */
@@ -313,6 +345,7 @@ export class LandUse {
       this.feature[t] !== Feature.Giant &&
       this.feature[t] !== Feature.Field &&
       this.feature[t] !== Feature.Vent &&
+      this.feature[t] !== Feature.Spire &&
       this.slope(t) < 2.2
     );
   }
@@ -330,7 +363,7 @@ export class LandUse {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
     const f = this.feature[t];
-    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent))) return false;
+    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
@@ -409,7 +442,7 @@ export class LandUse {
     let base: number;
     if (road) {
       // Roads are packed and swept: on snow the carriers take to sledges and go faster.
-      base = (snow > 0.3 ? 0.55 : 0.7) * (1 + 0.5 * (this.mud[b] as number));
+      base = (snow > 0.3 ? 0.55 : 0.7) * (1 + 0.5 * (this.mud[b] as number)) * (1 + 1.5 * (this.sand[b] as number));
     } else {
       // Fording a river is slow; mud slows everyone; snow is deeper in the Rimefall drifts.
       const drift = this.region[b] === Region.RimefallTundra ? 0.9 : 0.4;

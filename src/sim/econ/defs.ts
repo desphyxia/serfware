@@ -12,7 +12,7 @@ export interface GoodDef {
   arms?: boolean;
 }
 
-export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees";
+export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish";
 export type Category = "storage" | "materials" | "food" | "metal" | "lantern";
 
 export interface BuildingDef {
@@ -29,7 +29,7 @@ export interface BuildingDef {
   /** Tool the worker needs (and keeps while employed). */
   tool?: string;
   /** Placement rule beyond flat land. */
-  terrain?: "mountain" | "coast" | "aquifer" | "giant" | "vent";
+  terrain?: "mountain" | "coast" | "aquifer" | "giant" | "vent" | "saltpan";
   /** Mines: which deposit they dig. */
   resource?: "coal" | "iron" | "gold" | "granite";
   radius?: number;
@@ -57,6 +57,14 @@ export interface BuildingDef {
   heated?: boolean;
   /** Lantern buildings: warden places. */
   slots?: number;
+  /** Works only while the sun is up (solar kilns, salt pans). */
+  daylight?: boolean;
+  /** Dew condensers: water for fields within three steps (and quenching, like a well). */
+  dew?: boolean;
+  /** Tide mills: grind only while the tide runs (not at the slack of high or low water). */
+  tidal?: boolean;
+  /** Solar kilns: now and then the focused heat sets dry growth next door alight. */
+  fireRisk?: number;
 }
 
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];

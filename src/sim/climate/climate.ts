@@ -2,6 +2,7 @@ import { ticksPerDay } from "../clock";
 import { asin, clamp, cos, exp, sin, TAU } from "../dmath";
 import type { LandUse } from "../econ/landuse";
 import { Rng } from "../rng";
+import { moonsOf, tideAt, tideLevel, type Moon } from "../biomes/tides";
 
 /** Game days in a year: four seasons of six days. */
 export const YEAR_DAYS = 24;
@@ -42,6 +43,11 @@ export class Climate {
   version = 0;
   /** Some lake ice broke up since the economy last looked (roads over it sink). */
   thawed = false;
+  /** The planet's moons, and the tide they raise now (-1 low .. 1 high). */
+  readonly moons: Moon[];
+  tide = 0;
+  /** Tide change per climate step (positive while flooding). */
+  tideFlow = 0;
 
   constructor(
     private readonly land: LandUse,
@@ -54,6 +60,7 @@ export class Climate {
     this.rng = rng;
     this.dayTicks = ticksPerDay(planet.params.dayLengthHours);
     this.count = 5 + Math.round(n / 1500);
+    this.moons = moonsOf(planet, this.dayTicks);
     for (let i = 0; i < this.count; i++) this.fronts.push(this.spawn(true));
   }
 
@@ -99,6 +106,20 @@ export class Climate {
     const grid = land.planet.grid;
     const c = grid.center;
     this.advanceFronts();
+    // Tides: the sea rises over the Tidewater flats and falls back.
+    const tide = tideAt(this.moons, tick);
+    this.tideFlow = tide - this.tide;
+    this.tide = tide;
+    const level = tideLevel(tide);
+    const elev = land.planet.terrain.elevation;
+    for (let t = 0; t < grid.count; t++) {
+      if (!land.tidal[t]) continue;
+      const wet = (elev[t] as number) < level ? 1 : 0;
+      if (land.flooded[t] !== wet) {
+        land.flooded[t] = wet;
+        land.floodVersion++;
+      }
+    }
     // Rain, temperature, mud and snow per tile.
     const terrain = land.planet.terrain;
     for (let t = 0; t < grid.count; t++) {
