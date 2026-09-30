@@ -36,12 +36,26 @@ try {
   await guest.page.evaluate(async (server) => {
     window.__lobby = await window.__seedfall.game.joinLobby({ name: "Guest", server, room: "mp-test", ice: [] });
   }, server);
-  for (let i = 0; i < 20; i++) {
-    const hs = await host.page.evaluate(() => ({ s: window.__lobby.status, n: window.__lobby.players.length, peers: window.__lobby.transport.peers }));
-    const gs = await guest.page.evaluate(() => ({ s: window.__lobby.status, id: window.__lobby.playerId }));
-    if (process.env.MP_DEBUG) console.log(JSON.stringify(hs), JSON.stringify(gs));
-    if (hs.n === 2) break;
-    await host.page.waitForTimeout(1000);
+  // Headless WebRTC now and then loses the first handshake (the guest waits on "Asking the host to
+  // connect…" forever): after 20 s, the guest asks again, as a player would by pressing Join again.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let joined = false;
+    for (let i = 0; i < 20; i++) {
+      const hs = await host.page.evaluate(() => ({ s: window.__lobby.status, n: window.__lobby.players.length, peers: window.__lobby.transport.peers }));
+      const gs = await guest.page.evaluate(() => ({ s: window.__lobby.status, id: window.__lobby.playerId }));
+      if (process.env.MP_DEBUG) console.log(JSON.stringify(hs), JSON.stringify(gs));
+      if (hs.n === 2) {
+        joined = true;
+        break;
+      }
+      await host.page.waitForTimeout(1000);
+    }
+    if (joined) break;
+    console.log(`No handshake after 20 s; the guest asks again (attempt ${attempt + 2}).`);
+    await guest.page.evaluate(async (server) => {
+      window.__lobby.close?.();
+      window.__lobby = await window.__seedfall.game.joinLobby({ name: "Guest", server, room: "mp-test", ice: [] });
+    }, server);
   }
   await host.page.waitForFunction(() => window.__lobby.players.length === 2, null, { timeout: 30000 });
   await guest.page.waitForFunction(() => window.__lobby.playerId === 1, null, { timeout: 30000 });

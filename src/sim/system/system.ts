@@ -118,8 +118,11 @@ export function generateSystem(seed: string, homePlanet: Planet): StarSystem {
     const gas = orbit > frostLine && r.next() < 0.7;
     // Warmth from the distance to the habitable zone: hot inside it, cold beyond.
     const warmth = Math.max(0, Math.min(1, 0.55 + log(homeOrbit / orbit) * 0.9));
-    const wetness = r.range(0.1, 0.9) * (warmth > 0.9 ? 0.3 : 1);
+    let wetness = r.range(0.1, 0.9) * (warmth > 0.9 ? 0.3 : 1);
     const kind: PlanetKind = gas ? "gas" : warmth > 0.92 ? "molten" : warmth > 0.72 ? "arid" : warmth < 0.25 ? "frozen" : wetness > 0.7 ? "ocean" : "temperate";
+    // Molten and arid worlds are parched.
+    if (kind === "molten") wetness = 0.05;
+    else if (kind === "arid") wetness = Math.min(wetness, 0.3);
     planets.push({
       index: i,
       name: name(r, r.int(2, 3)),
@@ -135,7 +138,7 @@ export function generateSystem(seed: string, homePlanet: Planet): StarSystem {
       locked: !gas && orbit < hz[0] * 0.7 && r.next() < 0.6,
       warmth,
       wetness,
-      landFraction: kind === "ocean" ? r.range(0.12, 0.25) : kind === "arid" ? r.range(0.6, 0.85) : r.range(0.3, 0.6),
+      landFraction: kind === "ocean" ? r.range(0.12, 0.25) : kind === "arid" || kind === "molten" ? r.range(0.6, 0.85) : r.range(0.3, 0.6),
       home: false,
       surface: !gas,
     });

@@ -34,6 +34,8 @@ import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
+import { SystemMap } from "./ui/systemMap";
+import { generateSystem, planetOverrides, type StarSystem } from "./sim/system/system";
 import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
@@ -88,6 +90,13 @@ export class Game {
   private readonly toasts = new Toasts();
   private readonly info: InfoPanel;
   private readonly economyPanel: EconomyPanel;
+  /** The star system of this seed, and which planet is in view (its index; the home planet is the session's). */
+  private system!: StarSystem;
+  private readonly systemMap: SystemMap;
+  private surveys = new Map<number, World>();
+  private homeView: WorldView | null = null;
+  private visitIndex = -1;
+  private readonly warp: HTMLElement;
   private readonly stock = new StockBar();
   readonly tools: Tools;
   readonly audio: Ambience;
@@ -151,6 +160,8 @@ export class Game {
     this.cam = this.makeCamera(canvas);
     this.audio = new Ambience(settings.get().audio);
     this.view = new WorldView(this.world, settings.get().graphics, hashString(seed));
+    this.system = generateSystem(this.world.seed, this.world.planet);
+    this.visitIndex = this.system.home;
     this.view.setViewer(this.session.player, this.fogOn);
     this.scene.add(this.view.group);
     this.focusStart();
@@ -237,7 +248,15 @@ export class Game {
     this.buildBar = new BuildBar(
       (id) => this.tools.set(id),
       () => this.economyPanel.toggle(),
+      () => this.systemMap.toggle(),
     );
+    this.systemMap = new SystemMap(
+      () => this.system,
+      () => this.session.world.tick / ticksPerDay(this.session.world.planet.params.dayLengthHours),
+      () => this.visitIndex,
+      (i) => this.visitPlanet(i),
+    );
+    this.warp = h("div", { class: "warp", "aria-hidden": "true" });
     this.menu = new GameMenu({
       saveNow: (name) => this.saveNow(name),
       listSaves: () => this.listSaves(),
@@ -275,6 +294,8 @@ export class Game {
       this.toasts.root,
       this.info.root,
       this.economyPanel.root,
+      this.systemMap.root,
+      this.warp,
       this.menu.root,
       this.debug.root,
       this.settingsPanel.root,
@@ -316,6 +337,10 @@ export class Game {
 
   /** Issue a player command; failures are explained with a toast. */
   command(cmd: Command): boolean {
+    if (this.world !== this.session.world) {
+      this.toasts.show("Nobody lives on this world yet: settling other planets comes with colonisation. Press O to go home.", "warn");
+      return false;
+    }
     const r = this.session.submit(cmd);
     if (!r.ok && r.reason) this.toasts.show(r.reason, "warn");
     else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
@@ -974,8 +999,14 @@ export class Game {
     this.session.close();
     this.scene.remove(this.view.group);
     this.view.dispose();
+    if (this.homeView && this.homeView !== this.view) this.homeView.dispose();
+    this.homeView = null;
+    this.surveys.clear();
+    document.body.classList.remove("surveying");
     this.session = session;
     this.world = session.world;
+    this.system = generateSystem(this.world.seed, this.world.planet);
+    this.visitIndex = this.system.home;
     this.view = new WorldView(this.world, this.settings.get().graphics, hashString(this.world.seed));
     this.view.setViewer(session.player, this.fogOn);
     this.scene.add(this.view.group);
@@ -990,6 +1021,71 @@ export class Game {
       crash.capture({ kind: "desync", message: detail });
       this.toasts.show("The game went out of sync. A report has been prepared (F8).", "warn");
     };
+  }
+
+  /** While surveying another planet: say where, and how to get home. */
+  private surveyText(): string | null {
+    if (this.world === this.session.world) return null;
+    const p = this.system.planets[this.visitIndex];
+    return p ? `Surveying ${p.name}: nobody lives here yet. O for the system map, to return home.` : null;
+  }
+
+  /**
+   * Go and look at another planet of the system (or come home). Home keeps its full simulation
+   * (the session steps it); the planet in view is simulated too, and planets out of view catch up
+   * their climate when next visited. A short fade and a descent from orbit mark the journey.
+   */
+  visitPlanet(index: number, instant = false): void {
+    const p = this.system.planets[index];
+    if (!p || index === this.visitIndex) return;
+    if (!p.surface) {
+      this.toasts.show(`${p.name} is a gas giant: there is no ground to stand on.`, "warn");
+      return;
+    }
+    const go = () => {
+      const home = this.session.world;
+      let w: World;
+      if (p.home) w = home;
+      else {
+        w = this.surveys.get(index) ?? new World(`${home.seed}~${p.name.toLowerCase()}`, { planet: planetOverrides(p), survey: true });
+        this.surveys.set(index, w);
+        w.tick = Math.max(w.tick, home.tick);
+        w.climate.step(w.tick);
+      }
+      this.scene.remove(this.view.group);
+      if (this.world === home) this.homeView = this.view;
+      else this.view.dispose();
+      this.world = w;
+      this.visitIndex = index;
+      this.view = w === home && this.homeView ? this.homeView : new WorldView(w, this.settings.get().graphics, hashString(w.seed));
+      if (w === home) this.homeView = null;
+      this.view.setViewer(this.session.player, w === home && this.fogOn);
+      this.scene.add(this.view.group);
+      this.cam = this.makeCamera(this.gfx.canvas);
+      this.hoverTile = -1;
+      this.info.select(null);
+      this.following = -1;
+      this.tools.set("select");
+      document.body.classList.toggle("surveying", w !== home);
+      if (w === home) this.focusStart();
+      else this.focusCoast();
+      // Arrive from orbit.
+      const target = this.cam.distance;
+      this.cam.snap(this.cam.maxDistance * 0.9, 0, 0);
+      this.cam.zoomTo(target);
+      this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(w.planet.params.radius * 4));
+      this.systemMap.refresh();
+      this.toasts.show(w === home ? `Home to ${p.name}.` : `Arrived at ${p.name}: ${p.gravity.toFixed(2)} g, ${p.locked ? "a fixed sun" : `${p.dayLengthHours} h days`}.`, "good");
+    };
+    if (instant) {
+      go();
+      return;
+    }
+    this.warp.classList.add("on");
+    setTimeout(() => {
+      go();
+      this.warp.classList.remove("on");
+    }, 450);
   }
 
   /** Programmatic multiplayer entry points (used by the menu and the multiplayer test). */
@@ -1169,6 +1265,8 @@ export class Game {
         this.speed = this.speed === 0 ? 1 : 0;
       } else if (e.key.toLowerCase() === "m") {
         this.menu.toggle();
+      } else if (e.key.toLowerCase() === "o") {
+        this.systemMap.toggle();
       } else if (e.key.toLowerCase() === "g") {
         this.view.setGrid(!this.view.grid);
       } else this.buildBar.key(e.key);
@@ -1188,6 +1286,7 @@ export class Game {
     else if (this.info.visible) this.info.hide();
     else if (this.menu.visible) this.menu.hide();
     else if (this.economyPanel.visible) this.economyPanel.hide();
+    else if (this.systemMap.visible) this.systemMap.hide();
     else this.settingsPanel.toggle();
   }
 
@@ -1347,7 +1446,7 @@ export class Game {
     this.platform.update(dt / 1000);
     this.pollPad(dt);
     this.tickCounter.ticks += steps;
-    this.hud.setBanner(this.session.status() ?? this.victoryText());
+    this.hud.setBanner(this.session.status() ?? this.victoryText() ?? this.surveyText());
     if (this.session.info.mode === "solo") {
       this.autosaveTimer -= dt;
       if (this.autosaveTimer <= 0) {
@@ -1369,7 +1468,16 @@ export class Game {
     this.updateEnvironment(now, dt / 1000);
     this.updateHover();
     this.tools.hoverTile(this.hoverTile);
-    const eco = this.world.economy;
+    // A surveyed planet keeps time with home: stepped while in view, jumped when far behind.
+    if (this.world !== this.session.world) {
+      const home = this.session.world;
+      const w = this.world;
+      if (home.tick - w.tick > 600) {
+        w.tick = home.tick;
+        w.climate.step(w.tick);
+      } else for (let n = 0; w.tick < home.tick && n < 40; n++) w.step();
+    }
+    const eco = this.session.world.economy;
     while (eco.notices.length) {
       const n = eco.notices.shift() as { owner: number; text: string };
       if (n.owner === this.session.player) this.toasts.show(n.text, "good");
@@ -1385,6 +1493,7 @@ export class Game {
       this.stock.update(eco, this.session.player, this.weatherChip());
       this.info.refresh();
       this.economyPanel.refresh();
+      this.systemMap.refresh();
     }
     this.view.updateTerrain(this.camera.position);
     this.gfx.render();

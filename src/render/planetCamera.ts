@@ -81,6 +81,11 @@ export class PlanetCamera {
     if (distance !== undefined) this.distance = this.tDistance = THREE.MathUtils.clamp(distance, this.minDistance, this.maxDistance);
   }
 
+  /** Glide the zoom to a distance (arriving at a planet). */
+  zoomTo(distance: number): void {
+    this.tDistance = THREE.MathUtils.clamp(distance, this.minDistance, this.maxDistance);
+  }
+
   /** Glide the focus toward a direction without snapping (for following a settler). */
   follow(dir: THREE.Vector3): void {
     this.tFocus.copy(dir).normalize();
