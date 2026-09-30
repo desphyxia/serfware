@@ -68,6 +68,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 16b: a stronger day/night terminator on locked planets from orbit (the view fill evens
+  it out); skiffs as real carriers between islands and ropeways; ballast for heavy goods
+  on low-gravity worlds; gliders as a carrier layer over the Skyreef (with the Canopy gliders);
+  peat bogs that regrow; glowcaps lighting roads for carriers beyond the mire; AI use of
+  glowcap farms, ropeways and peat.
 - Batch 15b: a salt trade route with rival settlements (salt as currency); barges carrying goods
   along the coast and up rivers (boats are moored props for now); tide tables in the Almanac;
   the AI raising causeways and siting dew condensers; storm forecasts and shelter orders; glass

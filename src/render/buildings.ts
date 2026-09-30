@@ -497,6 +497,47 @@ function greenhouse(b: Build): void {
   b.add(...kit.pennant(w / 2 - 0.05, 0.36 + h, d / 2 - 0.05, 0.3));
 }
 
+/** Glowcap farm: a low turf-roofed hut on a boardwalk, with raised beds of glowing caps. */
+function glowcapfarm(b: Build): void {
+  const { rng } = b;
+  b.add([kit.box(1.6, 0.06, 1.2, 0, 0.06), kit.C.timberLight]);
+  for (const [x, z] of [[-0.7, -0.5], [0.7, -0.5], [-0.7, 0.5], [0.7, 0.5]] as const) b.add([kit.box(0.06, 0.1, 0.06, x, 0, z), kit.C.timber]);
+  b.place([...kit.logWalls(0.7, 0.6, 0.45, 0.12, rng), ...kit.shingleRoof(0.7, 0.6, 0.28, 0.57, kit.jitter(kit.C.roofMoss, rng, 0.5), rng, { thatch: true })], -0.35, -0.2);
+  b.add(...kit.door(-0.35, 0.12, 0.11, rng));
+  for (let i = 0; i < 2; i++) {
+    const x = 0.3 + i * 0.45;
+    b.add([kit.box(0.36, 0.12, 0.9, x, 0.12, 0), "#4a3a2c"]);
+    for (let k = 0; k < 4; k++) {
+      b.add([kit.cyl(0.02, 0.025, 0.1, 5, x + rng.range(-0.1, 0.1), 0.24, -0.35 + k * 0.23), "#e8e2d0"]);
+      b.add([new THREE.SphereGeometry(0.07, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.6, 1).translate(x + rng.range(-0.1, 0.1), 0.33, -0.35 + k * 0.23), kit.jitter("#8ff0d0", rng, 1)]);
+    }
+  }
+  b.add([kit.box(0.14, 0.2, 0.14, -0.9, 0.06, 0.45), "#3a3a3a"], [kit.box(0.1, 0.14, 0.1, -0.9, 0.09, 0.45), "#8ff0d0"], ...kit.pennant(-0.35, 1.0, -0.2, 0.3));
+  b.meta.flame = new THREE.Vector3(-0.9, 0.16, 0.45);
+}
+
+/** Peat cutter: a turf hut, stacks of drying peat bricks, a cutting spade in the bank. */
+function peatcutter(b: Build): void {
+  const { rng } = b;
+  const c = cottage(rng, 0.9, 0.8, 0.6, { logs: true, thatch: true });
+  b.add(...c.parts);
+  b.meta.chimney = c.chimney;
+  for (let s = 0; s < 3; s++)
+    for (let i = 0; i < 6; i++) b.add([kit.box(0.2, 0.08, 0.1, 0.8 + (i % 2) * 0.1, 0.02 + Math.floor(i / 2) * 0.08, -0.4 + s * 0.35, (i % 2) * 1.2), kit.jitter("#4a3526", rng, 2)]);
+  b.add([kit.box(0.03, 0.6, 0.03, -0.7, 0, 0.55), kit.C.timberLight], [kit.box(0.14, 0.2, 0.02, -0.7, 0, 0.55), "#6a6e76"], ...kit.pennant(0.3, c.top - 0.05, 0, 0.3));
+}
+
+/** Ropeway station: a stone base, a timber tower with a big cable wheel, a gondola waiting. */
+function ropeway(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.2, 1.0, 0.14, rng), ...kit.stoneWalls(1.0, 0.8, 0.5, 0.14, rng));
+  for (const [x, z] of [[-0.35, -0.25], [0.35, -0.25], [-0.35, 0.25], [0.35, 0.25]] as const) b.add([new THREE.BoxGeometry(0.08, 1.9, 0.08).rotateZ(-x * 0.2).rotateX(z * 0.2).translate(x * 0.8, 1.55, z * 0.8), kit.C.timber]);
+  b.add([kit.box(0.7, 0.08, 0.6, 0, 2.45), kit.C.timberLight]);
+  b.add([new THREE.TorusGeometry(0.32, 0.05, 6, 14).translate(0, 2.8, 0), "#4a4e56"], [kit.cyl(0.06, 0.06, 0.2, 8).rotateX(Math.PI / 2).translate(0, 2.8, 0), "#3a3530"]);
+  b.add(...kit.shingleRoof(0.8, 0.7, 0.3, 0.64, kit.jitter(ROOF.slate, rng, 0.5), rng));
+  b.add([kit.box(0.3, 0.24, 0.36, 0.7, 0.14, 0.5), "#8a6444"], ...kit.door(-0.2, 0.14, 0.41, rng), ...kit.pennant(0, 2.5, 0, 0.35));
+}
+
 /** Saltworks: shallow clay pans in a grid, white salt raked into heaps, a rake and a shed. */
 function saltworks(b: Build): void {
   const { rng } = b;
@@ -783,6 +824,9 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   greenhouse,
   saltworks,
   solarkiln,
+  glowcapfarm,
+  peatcutter,
+  ropeway,
   dewcondenser,
   shellfisher,
   tidemill,

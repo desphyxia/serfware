@@ -89,7 +89,13 @@ export class World {
 
   /** Local solar time at a longitude given as a fraction of a full turn (east positive). */
   localDay(lonFraction: number): DayInfo {
-    return dayInfo(this.tick, this.planet.params.dayLengthHours, lonFraction);
+    const d = dayInfo(this.tick, this.planet.params.dayLengthHours, lonFraction);
+    if (!this.planet.params.locked) return d;
+    // The sun never moves: local time is fixed by longitude, noon under the sun.
+    let f = 0.5 - lonFraction;
+    f -= Math.floor(f);
+    const hours = f * 24;
+    return { day: d.day, hour: Math.floor(hours), minute: Math.floor((hours % 1) * 60), fraction: f };
   }
 
   checksum(): number {

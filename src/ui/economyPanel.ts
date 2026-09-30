@@ -20,7 +20,7 @@ const GROUPS: { title: string; ids: string[] }[] = [
 
 const KEY_TITLES: Record<string, string> = {
   food: "Food to the mines",
-  coal: "Coal",
+  fuel: "Fuel (coal, peat)",
   grain: "Grain",
   plank: "Planks",
   iron: "Iron",

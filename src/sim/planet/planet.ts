@@ -1,3 +1,4 @@
+import { mix32 } from "../rng";
 import { StateHasher } from "../hash";
 import type { Rng } from "../rng";
 import { buildPlanetGrid, GRID_SIZES, type GridSize, type PlanetGrid } from "./grid";
@@ -11,6 +12,8 @@ export interface PlanetParams {
   /** Axial tilt in radians. */
   axialTilt: number;
   gravity: number;
+  /** Tidally locked: one face always to the sun (a fixed sun, a twilight ring, a frozen far side). */
+  locked: boolean;
 }
 
 /** A generated planet: parameters, tile grid and terrain. Fully determined by its seed. */
@@ -32,7 +35,10 @@ export class Planet {
       dayLengthHours: pr.int(18, 36),
       axialTilt: pr.range(0.08, 0.48),
       gravity: Math.round(pr.range(0.75, 1.25) * 100) / 100,
+      locked: false,
     };
+    // Decided from the parameters already drawn (not a new draw), so other worlds are unchanged.
+    params.locked = mix32(tiles, Math.round(params.dayLengthHours * 7919 + params.axialTilt * 1e6)) % 7 === 0;
     const grid = buildPlanetGrid(freq, rng.fork("grid"));
     const terrain = generateTerrain(grid, rng.fork("terrain"), params.radius);
     return new Planet(params, grid, terrain);

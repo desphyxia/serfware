@@ -459,6 +459,100 @@ export function stiltsGeometry(): THREE.BufferGeometry {
   return merge(parts);
 }
 
+/**
+ * A patch of glowcaps: a ring of pale-stemmed mushrooms with wide caps. The caps are bright
+ * vertex colours; the renderer adds a teal glow at night.
+ */
+export function glowcapGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(401);
+  const parts: Part[] = [];
+  for (let i = 0; i < 7; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = i === 0 ? 0 : rng.range(0.15, 0.45);
+    const h = rng.range(0.12, 0.3);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    parts.push([cyl(0.025, 0.035, h, 6, x, 0, z), "#e8e2d0"]);
+    const cap = rng.range(0.07, 0.13);
+    parts.push([new THREE.SphereGeometry(cap, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1).translate(x, h, z), kit.jitter(rng.pick(["#7fe8d0", "#9af0c8", "#b0e8f0"]), rng, 1)]);
+  }
+  return merge(parts);
+}
+
+/**
+ * A sky island: a slab of buoyant stone, flat-topped with turf and a few crystals, tapering to a
+ * jagged point below with hanging roots. About three tiles across.
+ */
+export function skyIslandGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(503);
+  const parts: Part[] = [];
+  // The underside: stacked, narrowing rings of rock.
+  for (let i = 0; i < 5; i++) {
+    const r0 = 3.2 * (1 - i * 0.2);
+    const r1 = 3.2 * (1 - (i + 1) * 0.2) + 0.05;
+    const g = new THREE.CylinderGeometry(r0, r1, 0.9, 9).translate(0, -0.45 - i * 0.9, 0);
+    const p = g.getAttribute("position") as THREE.BufferAttribute;
+    for (let k = 0; k < p.count; k++) {
+      const s = 1 + Math.sin(k * 1.7 + i) * 0.12;
+      p.setX(k, p.getX(k) * s);
+      p.setZ(k, p.getZ(k) * s);
+    }
+    parts.push([g, kit.jitter(i % 2 ? "#8a7a6e" : "#9a8a7a", rng, 1.5)]);
+  }
+  parts.push([new THREE.ConeGeometry(0.5, 1.4, 6).rotateX(Math.PI).translate(0.3, -5.1, 0.2), "#7a6a60"]);
+  // The top: turf, a few buoyant-stone crystals, a lone pine.
+  parts.push([new THREE.CylinderGeometry(3.25, 3.2, 0.18, 12).translate(0, 0.02, 0), "#7aa050"]);
+  for (let i = 0; i < 5; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(0.6, 2.4);
+    const h = rng.range(0.4, 1.0);
+    parts.push([new THREE.CylinderGeometry(0.02, 0.14, h, 5).rotateZ(rng.range(-0.3, 0.3)).translate(Math.cos(a) * r, h / 2 + 0.1, Math.sin(a) * r), kit.jitter("#b8d8f0", rng, 1)]);
+  }
+  parts.push([cyl(0.08, 0.1, 0.7, 6, -1.2, 0.1, 0.8), "#6a4a34"], [new THREE.ConeGeometry(0.55, 1.4, 7).translate(-1.2, 1.3, 0.8), "#3f6a44"]);
+  // Hanging roots.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    parts.push([cyl(0.02, 0.04, 1.2, 4, Math.cos(a) * 1.8, -1.9, Math.sin(a) * 1.8), "#5a4632"]);
+  }
+  return merge(parts);
+}
+
+/** A sky skiff: a light boat under a gas bag, with a little sail for steering. Front +Z. */
+export function skiffGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(89);
+  const h = kit.hull(1.0, 0.24, 0.18, rng, "#8a5a3a");
+  const parts = h.parts;
+  parts.push([new THREE.SphereGeometry(0.34, 12, 8).scale(0.8, 0.7, 1.5).translate(0, 0.95, 0), "#e8d8b0"]);
+  for (const [x, z] of [[-0.14, -0.2], [0.14, -0.2], [-0.14, 0.2], [0.14, 0.2]] as const) parts.push([box(0.012, 0.62, 0.012, x, 0.18, z), kit.C.rope]);
+  parts.push([box(0.01, 0.3, 0.26, 0, 0.2, -0.45), "#c8503a"]);
+  return merge(parts);
+}
+
+/** A glider: a pale cloth wing on a light frame, as the Skyreef folk ride the updrafts. */
+export function gliderGeometry(): THREE.BufferGeometry {
+  const wing = new THREE.BufferGeometry();
+  wing.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0.35, -0.6, 0, -0.2, 0, 0.04, -0.1, 0, 0, 0.35, 0, 0.04, -0.1, 0.6, 0, -0.2], 3));
+  return merge([
+    [wing, "#f0e6d0"],
+    [box(0.02, 0.02, 0.5, 0, -0.02, 0.05), kit.C.timber],
+    [box(0.05, 0.14, 0.05, 0, -0.18, 0.02), "#6a5a8a"],
+  ]);
+}
+
+/** A ropeway cable (unit length along +Y, thin) and a gondola, for the renderer to stretch. */
+export function cableGeometry(): THREE.BufferGeometry {
+  return merge([[new THREE.CylinderGeometry(0.02, 0.02, 1, 4).translate(0, 0.5, 0), "#3a3530"]]);
+}
+
+export function gondolaGeometry(): THREE.BufferGeometry {
+  return merge([
+    [box(0.3, 0.24, 0.4, 0, -0.34, 0), "#8a6444"],
+    [box(0.32, 0.03, 0.42, 0, -0.1, 0), "#5f412c"],
+    [box(0.02, 0.1, 0.02, 0, -0.1, 0), "#3a3530"],
+    [new THREE.SphereGeometry(0.05, 6, 4).translate(0, 0, 0), "#3a3530"],
+  ]);
+}
+
 export function flagGeometry(): THREE.BufferGeometry {
   return merge([
     [cyl(0.035, 0.045, 1.05, 5), "#d8cbb0"],
@@ -544,6 +638,15 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
       break;
     case "shellfish":
       parts = basket(lumps("#3a3642", 5, 0.04));
+      break;
+    case "peat":
+      parts = [0, 1, 2].map((i) => [kit.box(0.2, 0.05, 0.08, 0, 0.025 + i * 0.05, (i % 2) * 0.03 - 0.015, i * 0.4), kit.jitter("#4a3526", rng, 2)] as Part);
+      break;
+    case "glowcap":
+      parts = basket([0, 1, 2].map((i) => [new THREE.SphereGeometry(0.045, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).translate((i - 1) * 0.05, 0.1, (i % 2) * 0.03), "#8ff0d0"] as Part));
+      break;
+    case "skystone":
+      parts = [0, 1].map((i) => [new THREE.OctahedronGeometry(0.07 + i * 0.02, 0).scale(1, 1.4, 1).translate((i - 0.5) * 0.08, 0.12, 0), kit.jitter("#b8d8f0", rng, 1)] as Part);
       break;
     case "obsidian":
       // Volcanic glass: black, conchoidal shards with a faint violet sheen.

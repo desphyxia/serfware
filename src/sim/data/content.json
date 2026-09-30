@@ -51,7 +51,8 @@
     },
     {
       "id": "coal",
-      "name": "Coal"
+      "name": "Coal",
+      "group": "fuel"
     },
     {
       "id": "ironore",
@@ -150,6 +151,20 @@
       "id": "shellfish",
       "name": "Shellfish",
       "group": "food"
+    },
+    {
+      "id": "peat",
+      "name": "Peat",
+      "group": "fuel"
+    },
+    {
+      "id": "glowcap",
+      "name": "Glowcaps",
+      "group": "food"
+    },
+    {
+      "id": "skystone",
+      "name": "Skystone"
     }
   ],
   "buildings": [
@@ -331,6 +346,37 @@
       "produces": "glass"
     },
     {
+      "id": "peatcutter",
+      "name": "Peat cutter",
+      "description": "Cuts peat from the mire (thinning the soil). Peat burns in forges in place of coal.",
+      "category": "materials",
+      "cost": {
+        "plank": 2
+      },
+      "job": "peat",
+      "tool": "shovel",
+      "radius": 4,
+      "workTicks": 90,
+      "restTicks": 40,
+      "produces": "peat"
+    },
+    {
+      "id": "ropeway",
+      "name": "Ropeway",
+      "description": "A cable station on the Skyreef heights. When a drifting sky island comes within reach, gondolas haul down skystone: buoyant stone that builds like stone and is carried as if it weighed nothing.",
+      "category": "materials",
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
+      "job": "ropeway",
+      "terrain": "skyreef",
+      "radius": 3,
+      "workTicks": 100,
+      "restTicks": 20,
+      "produces": "skystone"
+    },
+    {
       "id": "farm",
       "name": "Farm",
       "category": "food",
@@ -505,6 +551,21 @@
       "produces": "shellfish"
     },
     {
+      "id": "glowcapfarm",
+      "name": "Glowcap farm",
+      "description": "Grows glowcaps on the wet ground around it. The fungus needs no sun, and the patches glow: they light roads and fields through the dark.",
+      "category": "food",
+      "cost": {
+        "plank": 2,
+        "stone": 1
+      },
+      "job": "fungus",
+      "radius": 3,
+      "workTicks": 60,
+      "restTicks": 40,
+      "produces": "glowcap"
+    },
+    {
       "id": "pasture",
       "name": "Pasture",
       "category": "food",
@@ -645,7 +706,7 @@
       "tool": "tongs",
       "inputs": {
         "ironore": 1,
-        "coal": 1
+        "fuel": 1
       },
       "inputStock": 3,
       "workTicks": 90,
@@ -666,7 +727,7 @@
       "tool": "tongs",
       "inputs": {
         "goldore": 1,
-        "coal": 1
+        "fuel": 1
       },
       "inputStock": 3,
       "workTicks": 100,
@@ -745,7 +806,7 @@
       "tool": "hammer",
       "inputs": {
         "iron": 1,
-        "coal": 1
+        "fuel": 1
       },
       "inputStock": 3,
       "workTicks": 110,
@@ -800,7 +861,7 @@
       "goldmine": 0.5,
       "granitemine": 0.4
     },
-    "coal": {
+    "fuel": {
       "smelter": 1,
       "goldsmith": 0.5,
       "weaponsmith": 0.7

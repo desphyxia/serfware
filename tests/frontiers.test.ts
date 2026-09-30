@@ -50,7 +50,9 @@ describe("Rimefall Tundra", () => {
   });
 
   it("the climate freezes lakes below -3 °C and thaws them above 1 °C", () => {
-    const w = new World("hedge-1", { size: "small" });
+    // A planet with seasons (hedge-1 is tidally locked: no seasons, so its lakes never cycle).
+    const w = new World("lake-1", { size: "small" });
+    expect(w.planet.params.locked).toBe(false);
     const land = w.land;
     // Run through a year and see some lake both frozen and open.
     const seen = new Map<number, Set<number>>();

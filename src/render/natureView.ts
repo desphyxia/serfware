@@ -4,8 +4,9 @@ import { Feature, FIELD_RIPE, ORCHARD, TREE_MATURE, type LandUse } from "../sim/
 import { Region } from "../sim/biomes/regions";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, rockGeometry, signpostGeometry, spireGeometry, stumpGeometry, ventGeometry } from "./models";
-import { PainterlyMaterial } from "./painterly";
+import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, glowcapGeometry, rockGeometry, signpostGeometry, spireGeometry, stumpGeometry, ventGeometry } from "./models";
+import { PAINT, PainterlyMaterial } from "./painterly";
+import { vec3 } from "three/tsl";
 import { bushGeometry } from "./undergrowth";
 import type { Ecology } from "../sim/econ/ecology";
 import { Biome } from "../sim/planet/terrain";
@@ -50,6 +51,8 @@ export class NatureView {
   /** Emberglass vents and Saltglass spires. */
   private readonly vents: THREE.InstancedMesh;
   private readonly spires: THREE.InstancedMesh;
+  /** Lumen Mire glowcaps: they glow teal, strongest at night (emissive plus bloom). */
+  private readonly glowcaps: THREE.InstancedMesh;
   private readonly stumps: THREE.InstancedMesh;
   /** Canopy Deeps giants, orchard trees and hedgerow segments. */
   private readonly giants: THREE.InstancedMesh;
@@ -107,6 +110,10 @@ export class NatureView {
     this.rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)));
     // Spires glow faintly rose after dark.
+    const capMat = new PainterlyMaterial({ vertexColors: true, brush: 0.4 });
+    capMat.emissiveNode = vec3(0.16, 0.55, 0.46).mul(PAINT.night.mul(2.4).add(0.2));
+    this.glowcaps = make(glowcapGeometry(), Math.max(128, Math.ceil(capacity / 6)), capMat);
+    this.glowcaps.castShadow = false;
     this.spires = make(spireGeometry(), Math.max(64, Math.ceil(capacity / 16)), new PainterlyMaterial({ vertexColors: true, flatShading: true, emissive: "#3a1e2c", brush: 0.6 }));
     this.stumps = make(stumpGeometry(), capacity);
     this.stumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
@@ -147,7 +154,7 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0, v: 0, p: 0 };
+    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0, v: 0, p: 0, c: 0 };
     const treeCount = this.trees.map(() => 0);
     const crowns: number[] = [];
     const { temperature, moisture, biome } = land.planet.terrain;
@@ -235,6 +242,13 @@ export class NatureView {
           this.rocks.setColorAt(counts.r, color);
           this.rocks.setMatrixAt(counts.r++, m);
         }
+      } else if (f === Feature.Glowcap) {
+        this.frames.orient(base, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 29) * 6.28));
+        const sc = (0.35 + 0.65 * ((land.amount[t] as number) / 4)) * (1.1 + SurfaceFrames.hash(t, 30) * 0.5);
+        s.set(sc, sc, sc);
+        m.compose(base, q, s);
+        if (counts.c < this.glowcaps.instanceMatrix.count) this.glowcaps.setMatrixAt(counts.c++, m);
       } else if (f === Feature.Spire) {
         this.frames.orient(base, null, q);
         q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 25) * 6.28));
@@ -306,6 +320,7 @@ export class NatureView {
       [this.rocks, counts.r],
       [this.vents, counts.v],
       [this.spires, counts.p],
+      [this.glowcaps, counts.c],
       [this.stumps, counts.s],
       [this.shrubs, counts.h],
       [this.giants, counts.g],
