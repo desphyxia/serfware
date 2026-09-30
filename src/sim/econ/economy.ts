@@ -1,5 +1,7 @@
 import type { StateHasher } from "../hash";
-import { ticksPerDay } from "../clock";
+import { dayInfo, ticksPerDay } from "../clock";
+import { atan2, TAU } from "../dmath";
+import { Region } from "../biomes/regions";
 import { mix32, Rng } from "../rng";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
 import {
@@ -188,6 +190,7 @@ export type Command = (
   | { t: "garrison"; zone: "frontier" | "inland"; value: number }
   | { t: "attack"; target: number; count: number }
   | { t: "hedge"; tile: number }
+  | { t: "causeway"; tile: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -286,7 +289,7 @@ export class Economy {
       this.wellMapVersion = this.structureVersion;
       this.wellMap.fill(0);
       for (const b of this.buildings) {
-        if (!b.alive || !b.built || !b.def.well) continue;
+        if (!b.alive || !b.built || !(b.def.well || b.def.dew)) continue;
         this.wellMap[b.tile] = 1;
         for (const m of this.land.ring(b.tile, WELL_REACH)) this.wellMap[m] = 1;
       }
@@ -451,7 +454,9 @@ export class Economy {
       if (land.feature[n] === Feature.Hedge) hedge = Math.max(hedge, rules.hedgeBonus);
       else if (land.feature[n] === Feature.Tree) hedge = Math.max(hedge, 0.15);
     }
-    const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge;
+    // Dew condensers water the dry Saltglass fields around them.
+    const dew = this.dewNear(t) ? 0.6 : 0;
+    const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge + dew;
     // Bees and other pollinators from wild ground nearby help the crop along.
     return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t) * rules.fieldGrowth));
   }
@@ -523,6 +528,8 @@ export class Economy {
         return this.cmdAttack(cmd.target, cmd.count, p);
       case "hedge":
         return this.cmdHedge(cmd.tile, p);
+      case "causeway":
+        return this.cmdCauseway(cmd.tile, p);
       case "garrison":
         if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
@@ -645,6 +652,7 @@ export class Economy {
     if (def.terrain === "mountain") return `${def.name}s go on mountain slopes inside your border.`;
     if (def.terrain === "coast") return `${def.name}s must be built near water.`;
     if (def.terrain === "aquifer") return "There's too little groundwater here for a well. Try lower, wetter ground near rivers.";
+    if (def.terrain === "saltpan") return `${def.name} pans go on the Saltglass Flats or by the sea.`;
     if (def.terrain === "vent") return `A ${def.name.toLowerCase()} must stand right next to a geothermal vent.`;
     return "You can't build here.";
   }
@@ -689,6 +697,19 @@ export class Economy {
         return { ok: false, reason: "Nothing to demolish here." };
       }
     }
+  }
+
+  /** Raise a causeway on a tidal flat (under a road or ready for one); it takes a stone from storage. */
+  private cmdCauseway(tile: number, p: number): CommandResult {
+    const land = this.land;
+    if (!land.tidal[tile] || land.territory[tile] !== p + 1) return { ok: false, reason: "Causeways go on your own tidal flats." };
+    if (land.causeway[tile]) return { ok: false, reason: "There is a causeway here already." };
+    if (land.use[tile] === Use.Building) return { ok: false, reason: "Buildings on the flats stand on stilts already." };
+    if (this.takeTool(p, goodId("stone")) < 0) return { ok: false, reason: "A causeway needs a stone in storage." };
+    land.causeway[tile] = 1;
+    land.causewayVersion++;
+    this.graphVersion++;
+    return { ok: true };
   }
 
   /** Plant a hedgerow on an open tile of your land; it takes a log from storage. */
@@ -1913,6 +1934,8 @@ export class Economy {
     const a = s.path[s.pi] as number;
     const b = s.path[s.pi + 1] as number;
     const onRoad = this.land.use[b] === Use.Road || this.land.use[b] === Use.Flag;
+    // High water over the flats: wait on the shore for the ebb (causeways and stilts stay dry).
+    if (this.land.flooded[b] && !this.land.causeway[b] && this.land.use[b] !== Use.Building) return false;
     const ticks = (onRoad ? TICKS_PER_TILE_ROAD : TICKS_PER_TILE_OFFROAD) * this.land.stepCost(a, b);
     s.prog += Math.max(20, Math.floor(1000 / ticks));
     if (s.prog >= 1000) {
@@ -1921,6 +1944,11 @@ export class Economy {
       if (!onRoad && this.land.use[b] !== Use.Building) {
         this.land.wear[b] = Math.min(2000, (this.land.wear[b] as number) + 24);
         this.land.wearVersion++;
+      }
+      // Traffic clears blown sand off the road.
+      if (onRoad && (this.land.sand[b] as number) > 0) {
+        this.land.sand[b] = Math.max(0, (this.land.sand[b] as number) - 0.04);
+        this.land.sandVersion++;
       }
       if (s.pi >= s.path.length - 1) {
         s.prog = 0;
@@ -2147,7 +2175,25 @@ export class Economy {
   private speedFactor(s: Settler, trade: string): number {
     const p = this.people[s.person];
     const b = this.buildings[s.building];
-    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60) * (b && b.built ? this.wearSpeed(b) : 1);
+    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60) * (b && b.built ? this.wearSpeed(b) : 1) * (b ? this.heatSpeed(b.tile) : 1);
+  }
+
+  /**
+   * Shift work in the Saltglass heat: slow in the blaze of a hot day, a little quicker in the
+   * cool of the night.
+   */
+  heatSpeed(t: number): number {
+    if (this.land.region[t] !== Region.SaltglassFlats || !this.climate) return 1;
+    if (!this.sunUp(t)) return 0.9;
+    return (this.climate.temp[t] as number) > 30 ? 1.6 : 1;
+  }
+
+  /** Local daytime (07:00 to 19:00 solar) at a tile. */
+  sunUp(t: number): boolean {
+    const c = this.land.planet.grid.center;
+    const lon = atan2(-(c[t * 3 + 2] as number), c[t * 3] as number) / TAU;
+    const h = dayInfo(this.tick, this.land.planet.params.dayLengthHours, lon).hour;
+    return h >= 7 && h < 19;
   }
 
   /** Practice makes perfect: raise skill, record milestones in the person's journal. */
@@ -2283,6 +2329,15 @@ export class Economy {
         }
         return best;
       }
+      case "shellfish": {
+        // Exposed flats with shellfish on them, at low water.
+        for (const t of land.ring(b.tile, def.radius ?? 5)) {
+          if (!land.tidal[t] || land.flooded[t] || (land.shell[t] as number) === 0 || !land.walkable(t)) continue;
+          if (this.settlers.some((o) => o.alive && o.role === "worker" && o.target === t && o.id !== s.id)) continue;
+          return t;
+        }
+        return -1;
+      }
       case "fish": {
         for (const t of land.ring(b.tile, def.radius ?? 5)) {
           if (!land.isLand(t) || !land.walkable(t)) continue;
@@ -2326,6 +2381,11 @@ export class Economy {
           s.state = "drop";
           s.carrying = b.outputTypes[0] ?? -1;
           this.setPath(s, [b.tile, flag.tile]);
+          return;
+        }
+        // Solar kilns and salt pans work by daylight; tide mills while the tide runs.
+        if ((def.daylight && !this.sunUp(b.tile)) || (def.tidal && this.climate && Math.abs(this.climate.tide) > 0.85)) {
+          s.timer = 60;
           return;
         }
         if (def.job === "craft") {
@@ -2459,6 +2519,10 @@ export class Economy {
           land.fish[s.home]!--;
           got = produced;
         } else if (def.job === "hunt" && this.ecology.hunt(t)) got = produced;
+        else if (def.job === "shellfish" && !land.flooded[t] && (land.shell[t] as number) > 0) {
+          land.shell[t]!--;
+          got = produced;
+        }
         s.carrying = got;
         const back = land.findPath(t, b.tile, (x) => land.walkable(x) || x === b.tile, 3000);
         s.state = "back";
@@ -2479,6 +2543,12 @@ export class Economy {
         if (--s.timer > 0) return;
         this.train(s, def.id);
         this.produce(b, s.target);
+        // The kiln's focused heat can set dry growth next door alight.
+        if (def.fireRisk && mix32(b.id, this.tick) % def.fireRisk === 0) {
+          const ns = land.planet.grid.neighborsOf(b.tile);
+          const t = ns[mix32(this.tick, b.tile) % ns.length] as number;
+          if (this.ecology.ignite(t)) this.notify(b.owner, `Sparks from the ${def.name.toLowerCase()} have started a fire!`);
+        }
         s.target = -1;
         s.state = "rest";
         s.timer = def.restTicks ?? 10;
@@ -2711,14 +2781,21 @@ export class Economy {
     const housed = all.filter((p) => p.house >= 0).length;
     const keep = this.buildings[this.keeps[owner] ?? -1];
     let trees = 0;
-    if (keep) for (const t of this.land.ring(keep.tile, 7)) if (this.land.feature[t] === Feature.Tree) trees += this.land.variety[t] === MEMORIAL ? 3 : 1;
+    if (keep) {
+      for (const t of this.land.ring(keep.tile, 7)) {
+        if (this.land.feature[t] === Feature.Tree) trees += this.land.variety[t] === MEMORIAL ? 3 : 1;
+        else if (this.land.feature[t] === Feature.Spire) trees += 2;
+      }
+    }
+    const totals = this.storageTotals(owner);
     const working = adults.filter((p) => p.settler >= 0).length / Math.max(1, adults.length);
     const grieving = (this.griefUntil[owner] ?? -1) > this.tick;
     const parts: GlowParts = {
-      nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4)),
+      // Salt keeps the stores from spoiling: a little more nourishment from the same food.
+      nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4) + Math.min(0.15, (totals[goodId("salt")] as number) / 40)),
       shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
       belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)),
-      beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, (this.storageTotals(owner)[goodId("obsidian")] as number) / 24)) * (grieving ? 0.4 : 1),
+      beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, ((totals[goodId("obsidian")] as number) + (totals[goodId("glass")] as number)) / 24)) * (grieving ? 0.4 : 1),
       rest: Math.max(0.3, Math.min(1, 1.35 - working)),
     };
     this.glowParts[owner] = parts;
@@ -2808,6 +2885,66 @@ export class Economy {
     return this.members(owner);
   }
 
+  // ------------------------------------------------------------------ Saltglass and Tidewater
+
+  /** Sandstorms raging now (Saltglass): centre tile and the tick they blow out. */
+  readonly storms: { tile: number; until: number }[] = [];
+  private saltTiles: number[] | null = null;
+  private dewMap: Uint8Array | null = null;
+  private dewMapVersion = -1;
+
+  /** A working dew condenser within three steps. */
+  dewNear(t: number): boolean {
+    if (!this.dewMap || this.dewMapVersion !== this.structureVersion) {
+      this.dewMapVersion = this.structureVersion;
+      this.dewMap ??= new Uint8Array(this.land.planet.grid.count);
+      this.dewMap.fill(0);
+      for (const b of this.buildings) {
+        if (!b.alive || !b.built || !b.def.dew) continue;
+        this.dewMap[b.tile] = 1;
+        for (const m of this.land.ring(b.tile, 3)) this.dewMap[m] = 1;
+      }
+    }
+    return this.dewMap[t] === 1;
+  }
+
+  /** Daily: storms may rise over the Saltglass; shellfish breed on the flats; old sand settles. */
+  private stepCoasts(): void {
+    const land = this.land;
+    this.saltTiles ??= Array.from({ length: land.region.length }, (_, t) => t).filter((t) => land.region[t] === Region.SaltglassFlats);
+    const salt = this.saltTiles;
+    if (salt.length && mix32(this.tick, 0x5a17) % 3 === 0) this.startStorm(salt[mix32(this.tick, 0x5a18) % salt.length] as number);
+    for (let t = 0; t < land.shell.length; t++) if (land.tidal[t] && (land.shell[t] as number) < 10 && (mix32(t, this.tick) & 1)) land.shell[t]!++;
+    let sand = false;
+    for (let t = 0; t < land.sand.length; t++) {
+      const v = land.sand[t] as number;
+      if (v <= 0) continue;
+      land.sand[t] = v < 0.03 ? 0 : v * 0.92;
+      sand = true;
+    }
+    if (sand) land.sandVersion++;
+  }
+
+  /** A sandstorm rises at a tile and blows for six hours. */
+  startStorm(t: number): void {
+    this.storms.push({ tile: t, until: this.tick + 1800 });
+    for (const o of this.ownersNear(t, 5)) this.notify(o, "A sandstorm is blowing in over the Saltglass! Roads will be buried; carriers clear them as they pass.");
+  }
+
+  /** Hourly while a storm blows: sand drifts over everything within four steps. */
+  private stepStorms(): void {
+    const land = this.land;
+    for (let i = this.storms.length - 1; i >= 0; i--) {
+      const st = this.storms[i]!;
+      if (st.until <= this.tick) {
+        this.storms.splice(i, 1);
+        continue;
+      }
+      for (const t of [st.tile, ...land.ring(st.tile, 4)]) if (land.isLand(t)) land.sand[t] = Math.min(1, (land.sand[t] as number) + 0.25);
+      land.sandVersion++;
+    }
+  }
+
   // ------------------------------------------------------------------ Rimefall and Emberglass
 
   /** Tremors felt at each vent since it last erupted (for the tile panel). */
@@ -2840,8 +2977,12 @@ export class Economy {
       this.climate.thawed = false;
       this.sinkIceRoads();
     }
-    if (tick % 300 === 150) this.stepWarmth();
+    if (tick % 300 === 150) {
+      this.stepWarmth();
+      if (this.storms.length) this.stepStorms();
+    }
     if (tick % this.dayTicks === 3601 % this.dayTicks) this.stepVents();
+    if (tick % this.dayTicks === 1801 % this.dayTicks) this.stepCoasts();
   }
 
   /** Hourly: waystations burn a log when it's bitter nearby; hearths and fires warm the land. */
@@ -3016,6 +3157,9 @@ export class Economy {
     let vents = 0;
     for (const t of this.vents()) vents = (vents * 31 + (this.land.amount[t] as number)) | 0;
     h.int(vents);
+    let coast = 0;
+    for (let t = 0; t < this.land.sand.length; t += 7) coast = (coast * 31 + Math.round((this.land.sand[t] as number) * 100) + (this.land.causeway[t] as number) * 7 + (this.land.shell[t] as number)) | 0;
+    h.int(coast).int(this.storms.length);
     this.ecology.hash(h);
   }
 }

@@ -27,6 +27,8 @@ import { buildSurface } from "./terrainMesh";
 import { TileHighlight } from "./tileHighlight";
 import { makeWaterMaterial } from "./water";
 import { makeWaterUniforms, type WaterUniforms } from "./waterShade";
+import { tideLevel } from "../sim/biomes/tides";
+import { Region } from "../sim/biomes/regions";
 
 /** Everything drawn for one planet. Created per world and disposed when the world changes. */
 export class WorldView {
@@ -60,6 +62,7 @@ export class WorldView {
   private climateVersion = -1;
   private climateTimer = 0;
   private ashVersion = 0;
+  private sandVersion = -1;
   private wearVersion = -1;
   /** Fog of war for the viewing player. */
   readonly mask: FogMask = { explored: undefined, visible: undefined, version: 0 };
@@ -77,7 +80,7 @@ export class WorldView {
     const planet = world.planet;
     const R = planet.params.radius;
     // The sea keeps a coarse surface mesh; the ground is the chunked terrain field.
-    const surface = buildSurface(planet, 0, seed);
+    const surface = buildSurface(planet, 0, seed, world.land.tidal);
     surface.land.dispose();
     this.field = new TerrainField(planet, world.land, seed);
     this.tileData = new TileData(planet.grid.count);
@@ -100,6 +103,28 @@ export class WorldView {
 
     this.waterU = makeWaterUniforms();
     this.water = new THREE.Mesh(surface.water, makeWaterMaterial(this.waterU));
+    {
+      // Where the tide reaches: the flats and the sea just off them, fading over a few tiles.
+      const { grid } = planet;
+      const reach = new Float32Array(grid.count);
+      let front: number[] = [];
+      for (let t = 0; t < grid.count; t++) if (world.land.tidal[t]) {
+        reach[t] = 1;
+        front.push(t);
+      }
+      for (let d = 1; d <= 4 && front.length; d++) {
+        const next: number[] = [];
+        for (const t of front) for (const n of grid.neighborsOf(t)) if (reach[n] === 0 && (!world.land.isLand(n) || world.land.region[n] === Region.TidewaterReach)) {
+          reach[n] = 1 - d / 5;
+          next.push(n);
+        }
+        front = next;
+      }
+      const owner = surface.water.userData.owner as Int32Array;
+      const arr = new Float32Array(owner.length);
+      for (let i = 0; i < owner.length; i++) arr[i] = reach[owner[i] as number] as number;
+      surface.water.setAttribute("aTide", new THREE.BufferAttribute(arr, 1));
+    }
     this.water.renderOrder = 1;
     this.water.name = "water";
 
@@ -274,7 +299,7 @@ export class WorldView {
     this.fauna.update(p.time, p.dt, p.focus, p.closeness, p.daylight, p.pixelRatio, p.particles);
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
-    const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness)];
+    const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness, p.time, this.waterU.tideLift.value)];
     this.particles.update(p.dt, p.closeness > 0.2 ? [...this.econ.emitters(), ...fires] : fires, wind, light, p.pixelRatio, p.particles);
     {
       // Motes in warm, dry daylight, most of all when the sun is low.
@@ -295,8 +320,17 @@ export class WorldView {
     }
     this.updateFog();
     this.updateClimate(p);
+    if (this.world.land.sandVersion !== this.sandVersion) {
+      this.sandVersion = this.world.land.sandVersion;
+      const sand = this.world.land.sand;
+      for (let t = 0; t < sand.length; t++) this.tileData.set(t, "sand", sand[t] as number);
+      this.tileData.commit("c");
+    }
     this.overlays.update(p.time, 1 - p.daylight, this.mask.explored, this.mask.version, playerColor);
     const w = this.water.material.userData.u;
+    // The tide, eased between climate steps.
+    const lift = Math.max(0, tideLevel(this.world.climate.tide));
+    w.tideLift.value += (lift - w.tideLift.value) * Math.min(1, p.dt * 2);
     w.sunDir.value.copy(p.sunDir);
     w.sky.value.copy(p.sky);
     w.day.value = p.daylight;

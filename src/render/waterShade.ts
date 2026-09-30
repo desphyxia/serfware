@@ -37,6 +37,8 @@ export interface WaterUniforms {
   sunDir: THREE.UniformNode<"vec3", THREE.Vector3>;
   sky: THREE.UniformNode<"color", THREE.Color>;
   day: THREE.UniformNode<"float", number>;
+  /** How far the tide lifts the sea over the Tidewater flats, world units. */
+  tideLift: THREE.UniformNode<"float", number>;
   /** 0..1 rain at the camera focus: rings on the water. */
   rain: THREE.UniformNode<"float", number>;
 }
@@ -46,6 +48,7 @@ export function makeWaterUniforms(): WaterUniforms {
     sunDir: uniform(new THREE.Vector3(1, 0, 0)),
     sky: uniform(new THREE.Color("#8fb6d8")),
     day: uniform(1),
+    tideLift: uniform(0),
     rain: uniform(0),
   };
 }

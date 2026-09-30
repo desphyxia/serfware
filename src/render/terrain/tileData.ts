@@ -5,7 +5,8 @@ type N = THREE.Node<"vec4">;
 
 /**
  * Per-tile shading data shared by every terrain chunk and the sea: one texel per tile.
- * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, scorch or -ash).
+ * Channels: A = (wear, fog of war, snow, autumn), B = (mud, soil, shore, scorch or -ash),
+ * C = (blown sand, -, -, -).
  * Shaders look it up by tile index in the vertex stage and interpolate across tiles.
  */
 export class TileData {
@@ -13,13 +14,16 @@ export class TileData {
   readonly height: number;
   readonly a: THREE.DataTexture;
   readonly b: THREE.DataTexture;
+  readonly c: THREE.DataTexture;
   private readonly da: Float32Array;
   private readonly db: Float32Array;
+  private readonly dc: Float32Array;
 
   constructor(readonly count: number) {
     this.height = Math.ceil(count / this.width);
     this.da = new Float32Array(this.width * this.height * 4);
     this.db = new Float32Array(this.width * this.height * 4);
+    this.dc = new Float32Array(this.width * this.height * 4);
     const mk = (d: Float32Array) => {
       const t = new THREE.DataTexture(d, this.width, this.height, THREE.RGBAFormat, THREE.FloatType);
       t.magFilter = THREE.NearestFilter;
@@ -29,11 +33,15 @@ export class TileData {
     };
     this.a = mk(this.da);
     this.b = mk(this.db);
+    this.c = mk(this.dc);
   }
 
-  set(t: number, channel: "wear" | "fog" | "snow" | "autumn" | "mud" | "soil" | "shore" | "scorch", v: number): void {
+  set(t: number, channel: "wear" | "fog" | "snow" | "autumn" | "mud" | "soil" | "shore" | "scorch" | "sand", v: number): void {
     const i = t * 4;
     switch (channel) {
+      case "sand":
+        this.dc[i] = v;
+        break;
       case "wear":
         this.da[i] = v;
         break;
@@ -62,7 +70,11 @@ export class TileData {
   }
 
   /** Mark the textures for upload after a batch of `set` calls. */
-  commit(which: "a" | "b" | "both" = "both"): void {
+  commit(which: "a" | "b" | "c" | "both" = "both"): void {
+    if (which === "c") {
+      this.c.needsUpdate = true;
+      return;
+    }
     if (which !== "b") this.a.needsUpdate = true;
     if (which !== "a") this.b.needsUpdate = true;
   }

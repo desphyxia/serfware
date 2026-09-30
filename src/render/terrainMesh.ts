@@ -25,7 +25,7 @@ export interface SurfaceBuild {
   water: THREE.BufferGeometry;
 }
 
-export function buildSurface(planet: Planet, subdivisions: number, seed: number): SurfaceBuild {
+export function buildSurface(planet: Planet, subdivisions: number, seed: number, tidal?: Uint8Array): SurfaceBuild {
   const { grid, terrain } = planet;
   const R = planet.params.radius;
   const noise = new Noise3(seed);
@@ -110,7 +110,9 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number)
     const a = verts[tris[i] as number] as Vert;
     const b = verts[tris[i + 1] as number] as Vert;
     const c = verts[tris[i + 2] as number] as Vert;
-    if (Math.min(a.h, b.h, c.h) < 0.15) wTris.push(tris[i] as number, tris[i + 1] as number, tris[i + 2] as number);
+    // Tidal flats get water over them too: the tide raises it to cover them.
+    const reach = tidal && (tidal[a.tile] || tidal[b.tile] || tidal[c.tile]) ? 0.3 : 0.15;
+    if (Math.min(a.h, b.h, c.h) < reach) wTris.push(tris[i] as number, tris[i + 1] as number, tris[i + 2] as number);
   }
   const water = makeGeometry(verts, wTris, () => R, false);
   return { land, water };
