@@ -90,6 +90,8 @@ export class AiBuilder {
     want(count("forester") < 2 && count("woodcutter") > 1, near("forester", Feature.Tree));
     want(count("farm") < 2 && count("mill") > 0, near("farm"));
     want(count("hunter") < 1 && count("farm") > 0, near("hunter", Feature.Tree, 10));
+    want(count("orchard") < 1 && count("farm") > 0, near("orchard"));
+    want(count("apiary") < 1 && count("orchard") > 0, near("apiary"));
     // A well (or more, as the settlement grows) against fire.
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));

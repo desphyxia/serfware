@@ -195,6 +195,11 @@ export class WorldView {
       td.set(t, "scorch", sum / k / 255);
     }
     td.commit();
+    // Orchards blossom in spring (at the view).
+    {
+      const f = this.world.planet.grid.nearestTile([p.focus.x, p.focus.y, p.focus.z], 0);
+      this.nature.blossom = w.climate.season(w.tick, w.planet.grid.center[f * 3 + 1] as number) === "spring" ? 1 : 0;
+    }
     // Trees follow a few times a day.
     this.nature.seasonKey = Math.floor(w.climate.version / 40);
   }

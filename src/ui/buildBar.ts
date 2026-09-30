@@ -27,6 +27,15 @@ export const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "lantern", label: "Lanterns", key: "7" },
 ];
 
+/** Hedgerows are planted with the Food tools, though they are not buildings. */
+export const HEDGE: BuildingDef = {
+  id: "hedge",
+  name: "Hedgerow",
+  description: "Plant a hedgerow on open ground (takes a log). Hedgerows shelter the fields beside them, feed the bees and keep the soil. Remove one with Demolish.",
+  category: "food",
+  cost: { log: 1 },
+};
+
 export function costText(def: BuildingDef): string {
   return Object.entries(def.cost)
     .map(([k, v]) => `${GOODS.find((g) => g.id === k)?.name ?? k} ${v}`)
@@ -76,8 +85,9 @@ export class BuildBar {
     }
     this.openCat = cat;
     const defs = BUILDINGS.filter((b) => b.category === cat && b.buildable !== false);
+    const extra = cat === "food" ? [HEDGE] : [];
     this.popover.replaceChildren(
-      ...defs.map((d) =>
+      ...[...defs, ...extra].map((d) =>
         h(
           "button",
           { class: "pop-item", role: "menuitem", title: d.description, onclick: () => this.pick(d.id) },

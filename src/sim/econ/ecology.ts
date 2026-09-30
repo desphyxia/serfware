@@ -22,6 +22,8 @@ export interface EcologyHost {
   scorchBuilding(t: number): void;
   /** A new tree seedling has sprung up and should grow. */
   seedling(t: number): void;
+  /** An apiary's bees work the flowers around this tile. */
+  beesBoost(t: number): boolean;
   /** Temperature (°C) and rain (0..1) right now. */
   temp(t: number): number;
   rain(t: number): number;
@@ -169,6 +171,8 @@ export class Ecology {
     const grass = ((this.cover[t] as number) / 255) * 0.3;
     if (f === Feature.Tree) return 0.35 + 0.65 * ((land.amount[t] as number) / TREE_MATURE);
     if (f === Feature.Shrub) return 0.8;
+    if (f === Feature.Hedge) return 0.6;
+    if (f === Feature.Giant) return 1;
     if (f === Feature.Field) return (land.amount[t] as number) >= 3 ? 0.7 : 0.1;
     if (f === Feature.Rock) return 0;
     return grass;
@@ -252,10 +256,11 @@ export class Ecology {
       // Burnt out: trees become charred stumps, scrub and crops are gone, the ground is black.
       this.fire[t] = 0;
       const f = land.feature[t] as Feature;
-      if (f === Feature.Tree) {
+      if (f === Feature.Tree || f === Feature.Giant) {
         land.feature[t] = Feature.Stump;
-        land.amount[t] = 12;
-      } else if (f === Feature.Shrub || f === Feature.Field) {
+        land.amount[t] = f === Feature.Giant ? 60 : 12;
+        land.variety[t] = 0;
+      } else if (f === Feature.Shrub || f === Feature.Field || f === Feature.Hedge) {
         land.feature[t] = Feature.None;
         land.amount[t] = 0;
       }
@@ -392,7 +397,7 @@ export class Ecology {
     for (let t = 0; t < n; t++) {
       if (!land.isLand(t)) continue;
       const b = terrain.biome[t] as Biome;
-      let cap = gameCap(b) * (1 - 0.5 * (land.snowCover[t] as number));
+      let cap = gameCap(b) * land.regionOf(t).rules.game * (1 - 0.5 * (land.snowCover[t] as number));
       if (land.use[t] !== Use.Free && land.use[t] !== Use.Blocked) cap *= 0.1;
       const g = this.game[t] as number;
       // Herds breed in the warm months and thin out in winter. When the land carries fewer
@@ -421,10 +426,11 @@ export class Ecology {
         k++;
         const f = land.feature[m] as Feature;
         if (!land.isLand(m) || land.use[m] !== Use.Free) continue;
-        if (f === Feature.Shrub || (f === Feature.None && (this.cover[m] as number) > 180) || f === Feature.Tree) wild++;
+        if (f === Feature.Shrub || f === Feature.Hedge || (f === Feature.None && (this.cover[m] as number) > 180) || f === Feature.Tree) wild++;
       }
       const warm = this.host.temp(t) > 10 ? 1 : 0.2;
-      this.bees[t] = Math.round((k ? wild / k : 0) * 255 * warm);
+      const boost = this.host.beesBoost(t) ? 0.45 : 0;
+      this.bees[t] = Math.round(Math.min(1, (k ? wild / k : 0) + boost) * 255 * warm);
     }
   }
 

@@ -40,6 +40,16 @@
       "group": "food"
     },
     {
+      "id": "fruit",
+      "name": "Fruit",
+      "group": "food"
+    },
+    {
+      "id": "honey",
+      "name": "Honey",
+      "group": "food"
+    },
+    {
       "id": "coal",
       "name": "Coal"
     },
@@ -146,7 +156,20 @@
       "cost": {
         "plank": 3,
         "stone": 1
-      }
+      },
+      "home": true
+    },
+    {
+      "id": "treehouse",
+      "name": "Treehouse",
+      "category": "storage",
+      "description": "A home on a platform high in an ancient giant, reached by a rope lift. Houses four, like a house, and leaves the old tree standing. Canopy Deeps only.",
+      "cost": {
+        "plank": 4,
+        "log": 1
+      },
+      "terrain": "giant",
+      "home": true
     },
     {
       "id": "storehouse",
@@ -318,6 +341,35 @@
       "workTicks": 110,
       "restTicks": 60,
       "produces": "meat"
+    },
+    {
+      "id": "orchard",
+      "name": "Orchard",
+      "category": "food",
+      "description": "Plants fruit trees around it and picks the fruit when it ripens. Orchards flower in spring and feed the bees.",
+      "cost": {
+        "plank": 2,
+        "stone": 1
+      },
+      "job": "orchard",
+      "radius": 3,
+      "workTicks": 70,
+      "restTicks": 40,
+      "produces": "fruit"
+    },
+    {
+      "id": "apiary",
+      "name": "Apiary",
+      "category": "food",
+      "description": "Straw skeps of bees. They make honey from the flowers nearby (orchards, hedgerows and wild meadow) and help the crops around them.",
+      "cost": {
+        "plank": 2
+      },
+      "job": "bees",
+      "radius": 3,
+      "workTicks": 220,
+      "restTicks": 40,
+      "produces": "honey"
     },
     {
       "id": "pasture",

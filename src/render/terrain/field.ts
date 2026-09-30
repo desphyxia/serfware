@@ -4,6 +4,9 @@ import type { Planet } from "../../sim/planet/planet";
 import { Biome } from "../../sim/planet/terrain";
 import { Noise3 } from "../noise";
 import { biomeColor, tileHash } from "../palette";
+import { Region } from "../../sim/biomes/regions";
+
+const CANOPY_FLOOR = new THREE.Color("#2c3a22");
 
 /** A levelled patch of ground under a building or flag. */
 export interface Pad {
@@ -100,6 +103,8 @@ export class TerrainField {
       const c = biomeColor(b, tileHash(t), new THREE.Color());
       if (b === Biome.Steppe && (terrain.biome[t] as Biome) === Biome.Beach) c.lerp(biomeColor(Biome.Meadow, tileHash(t), new THREE.Color()), 0.45);
       c.offsetHSL(0, 0, (0.5 - (terrain.moisture[t] as number)) * 0.05);
+      // Canopy Deeps: the floor under the giants is dark, mossy and damp.
+      if (land.region[t] === Region.CanopyDeeps) c.lerp(CANOPY_FLOOR, 0.6).offsetHSL(0, 0, (tileHash(t) - 0.5) * 0.04);
       this.tileCol.push(c);
     }
   }

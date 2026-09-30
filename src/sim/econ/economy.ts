@@ -23,7 +23,7 @@ import { MinHeap } from "./heap";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
-import { Deposit, DEPOSIT_IDS, Feature, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
+import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
 /**
  * The Serf City core: flags, roads with one carrier each, goods handed from flag to flag,
@@ -169,8 +169,10 @@ const LIFE_DAYS = 55;
 const HOUSE_ADULTS = 4;
 const HOUSE_CAPACITY = 6;
 const KEEP_SHELTER = 12;
+/** Ticks between harvests of one orchard tree (about six in-game hours). */
+const FRUIT_TICKS = 1800;
 /** Tree variety used for memorial trees; woodcutters leave them standing. */
-export const MEMORIAL = 7;
+export { MEMORIAL } from "./landuse";
 
 /** Player commands. `player` defaults to 0; in shared-keep co-op everyone acts as player 0. */
 export type Command = (
@@ -183,6 +185,7 @@ export type Command = (
   | { t: "toolprio"; tool: string; value: number }
   | { t: "garrison"; zone: "frontier" | "inland"; value: number }
   | { t: "attack"; target: number; count: number }
+  | { t: "hedge"; tile: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -245,6 +248,7 @@ export class Economy {
     this.ecology = new Ecology(land, {
       dayLength: this.dayTicks,
       wellCovers: (t) => this.wellCovers(t),
+      beesBoost: (t) => this.apiaryNear(t),
       scorchBuilding: (t) => this.scorchBuilding(t),
       seedling: (t) => this.growing.push(t),
       temp: (t) => this.climate?.temp[t] ?? (land.planet.terrain.temperature[t] as number),
@@ -255,6 +259,23 @@ export class Economy {
       },
     });
     land.aquifer = this.ecology.aquifer;
+  }
+
+  /** Apiaries within three steps: their bees make the flowers there busier. */
+  private apiaryMap: Uint8Array | null = null;
+  private apiaryMapVersion = -1;
+  apiaryNear(t: number): boolean {
+    if (!this.apiaryMap || this.apiaryMapVersion !== this.structureVersion) {
+      this.apiaryMapVersion = this.structureVersion;
+      this.apiaryMap ??= new Uint8Array(this.land.planet.grid.count);
+      this.apiaryMap.fill(0);
+      for (const b of this.buildings) {
+        if (!b.alive || !b.built || b.def.job !== "bees") continue;
+        this.apiaryMap[b.tile] = 1;
+        for (const m of this.land.ring(b.tile, 3)) this.apiaryMap[m] = 1;
+      }
+    }
+    return this.apiaryMap[t] === 1;
   }
 
   /** A built well with water in it covers this tile. */
@@ -422,11 +443,26 @@ export class Economy {
    */
   fieldGrowthTicks(t: number): number {
     const land = this.land;
+    const rules = land.regionOf(t).rules;
     let hedge = 0;
-    for (const n of land.planet.grid.neighborsOf(t)) if (land.feature[n] === Feature.Tree) hedge = 0.15;
+    for (const n of land.planet.grid.neighborsOf(t)) {
+      if (land.feature[n] === Feature.Hedge) hedge = Math.max(hedge, rules.hedgeBonus);
+      else if (land.feature[n] === Feature.Tree) hedge = Math.max(hedge, 0.15);
+    }
     const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge;
     // Bees and other pollinators from wild ground nearby help the crop along.
-    return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t)));
+    return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t) * rules.fieldGrowth));
+  }
+
+  /** Ticks per growth stage of a young tree: the Canopy Deeps grow fast, the tundra slow. */
+  treeGrowthTicks(t: number): number {
+    return Math.round(TREE_GROWTH_TICKS / this.land.regionOf(t).rules.treeGrowth);
+  }
+
+  /** A grown orchard tree with fruit ready (only in the growing season). */
+  inFruit(t: number): boolean {
+    const land = this.land;
+    return land.feature[t] === Feature.Tree && land.variety[t] === ORCHARD && land.amount[t] === TREE_MATURE && (land.nextGrowth[t] as number) <= this.tick && (!this.climate || this.climate.growing(t));
   }
 
   /** Soil rests: land that isn't farmed slowly regains its nitrogen. */
@@ -483,6 +519,8 @@ export class Economy {
         return { ok: true };
       case "attack":
         return this.cmdAttack(cmd.target, cmd.count, p);
+      case "hedge":
+        return this.cmdHedge(cmd.tile, p);
       case "garrison":
         if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
@@ -630,9 +668,48 @@ export class Economy {
         this.removeFlag(f);
         return { ok: true };
       }
-      default:
+      default: {
+        // Grubbing up a hedgerow, or marking an ancient giant for the woodcutters.
+        if (land.territory[tile] !== p + 1) return { ok: false, reason: "Nothing to demolish here." };
+        if (land.feature[tile] === Feature.Hedge) {
+          land.feature[tile] = Feature.None;
+          land.featureVersion++;
+          return { ok: true };
+        }
+        if (land.feature[tile] === Feature.Giant) {
+          const marked = land.variety[tile] === 1;
+          land.variety[tile] = marked ? 0 : 1;
+          land.featureVersion++;
+          this.notify(p, marked ? "The ancient tree is spared." : "Marked the ancient tree for felling. A woodcutter in reach will take it down: ten logs, but your people will grieve and the forest will empty.");
+          return { ok: true };
+        }
         return { ok: false, reason: "Nothing to demolish here." };
+      }
     }
+  }
+
+  /** Plant a hedgerow on an open tile of your land; it takes a log from storage. */
+  private cmdHedge(tile: number, p: number): CommandResult {
+    const land = this.land;
+    if (!land.isLand(tile) || land.territory[tile] !== p + 1) return { ok: false, reason: "Hedgerows go on your own land." };
+    if (land.use[tile] !== Use.Free || (land.feature[tile] !== Feature.None && land.feature[tile] !== Feature.Shrub)) return { ok: false, reason: "There's no room for a hedgerow here." };
+    if (land.planet.grid.degree(tile) === 5) return { ok: false, reason: "Star Wells are sacred ground." };
+    if (this.takeTool(p, goodId("log")) < 0) return { ok: false, reason: "A hedgerow needs a log in storage." };
+    land.feature[tile] = Feature.Hedge;
+    land.amount[tile] = 0;
+    land.featureVersion++;
+    return { ok: true };
+  }
+
+  /** Grief after an ancient giant falls: until this tick, Glow's beauty and belonging suffer. */
+  readonly griefUntil: number[] = [];
+
+  /** An ancient giant has come down: its logs are gone from the world forever, and so is its calm. */
+  private ancientFelled(t: number, owner: number): void {
+    const land = this.land;
+    this.griefUntil[owner] = this.tick + this.dayTicks * 3;
+    for (const m of [t, ...land.ring(t, 3)]) this.ecology.game[m] = Math.round((this.ecology.game[m] as number) * 0.35);
+    this.notify(owner, "The ancient tree has fallen. The forest has gone quiet, and your people mourn it (Glow suffers for three days).");
   }
 
   // ------------------------------------------------------------------ creation and removal
@@ -716,7 +793,8 @@ export class Economy {
     const land = this.land;
     land.use[tile] = Use.Building;
     land.ref[tile] = b.id;
-    if (land.feature[tile] !== Feature.None) {
+    // Everything on the ground is cleared, except the giant a treehouse is built into.
+    if (land.feature[tile] !== Feature.None && def.terrain !== "giant") {
       land.feature[tile] = Feature.None;
       land.featureVersion++;
     }
@@ -2169,7 +2247,13 @@ export class Economy {
       land.isLand(t) && land.use[t] === Use.Free && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
     switch (def.job) {
       case "fell":
-        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && land.variety[t] !== MEMORIAL);
+        return this.findWorkTile(b, (t) => fellable(land, t) || (land.feature[t] === Feature.Giant && land.variety[t] === 1 && land.territory[t] === b.owner + 1));
+      case "orchard": {
+        const ripe = this.findWorkTile(b, (t) => this.inFruit(t));
+        if (ripe >= 0) return ripe;
+        const trees = land.ring(b.tile, def.radius ?? 3).filter((t) => land.feature[t] === Feature.Tree && land.variety[t] === ORCHARD).length;
+        return trees < 6 ? this.findWorkTile(b, open) : -1;
+      }
       case "quarry":
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
       case "plant":
@@ -2247,6 +2331,21 @@ export class Economy {
           } else s.timer = 15;
           return;
         }
+        if (def.job === "bees") {
+          // Bees fly in the warm months; the more flowers nearby, the faster the honey.
+          if (this.climate && (this.climate.temp[b.tile] as number) < 8) {
+            s.timer = 120;
+            return;
+          }
+          let bees = 0;
+          const around = [b.tile, ...land.ring(b.tile, 2)];
+          for (const t of around) bees += this.ecology.bees[t] as number;
+          bees /= around.length * 255;
+          s.state = "craft";
+          s.target = goodId(def.produces ?? "honey");
+          s.timer = Math.round(((def.workTicks ?? 200) / (0.35 + bees * 1.4)) * this.speedFactor(s, def.id));
+          return;
+        }
         if (def.job === "mine") {
           if (b.exhausted) {
             s.timer = 200;
@@ -2295,7 +2394,30 @@ export class Economy {
         let got = -1;
         const produced = def.produces ? goodId(def.produces) : -1;
         this.train(s, def.id);
-        if (def.job === "fell" && land.feature[t] === Feature.Tree && land.amount[t] === TREE_MATURE && land.variety[t] !== MEMORIAL) {
+        if (def.job === "fell" && land.feature[t] === Feature.Giant && land.variety[t] === 1) {
+          // An ancient giant takes many trips; the last cut brings it down.
+          land.amount[t] = Math.max(0, (land.amount[t] as number) - 1);
+          got = produced;
+          if (land.amount[t] === 0) {
+            land.feature[t] = Feature.Stump;
+            land.amount[t] = 60;
+            land.variety[t] = 0;
+            this.ancientFelled(t, b.owner);
+          }
+          land.featureVersion++;
+        } else if (def.job === "orchard") {
+          if (this.inFruit(t)) {
+            land.nextGrowth[t] = this.tick + FRUIT_TICKS;
+            got = produced;
+          } else if ((land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
+            land.feature[t] = Feature.Tree;
+            land.amount[t] = 0;
+            land.variety[t] = ORCHARD;
+            land.nextGrowth[t] = this.tick + this.treeGrowthTicks(t);
+            this.growing.push(t);
+            land.featureVersion++;
+          }
+        } else if (def.job === "fell" && fellable(land, t)) {
           land.feature[t] = Feature.Stump;
           land.amount[t] = 12;
           land.featureVersion++;
@@ -2309,7 +2431,7 @@ export class Economy {
           land.feature[t] = Feature.Tree;
           land.amount[t] = 0;
           land.variety[t] = (t * 7 + this.tick) & 3;
-          land.nextGrowth[t] = this.tick + TREE_GROWTH_TICKS;
+          land.nextGrowth[t] = this.tick + this.treeGrowthTicks(t);
           this.growing.push(t);
           land.featureVersion++;
         } else if (def.job === "farm") {
@@ -2474,7 +2596,7 @@ export class Economy {
         land.amount[t]!++;
         changed = true;
         if ((land.amount[t] as number) >= TREE_MATURE) this.growing.splice(i, 1);
-        else land.nextGrowth[t] = this.tick + TREE_GROWTH_TICKS;
+        else land.nextGrowth[t] = this.tick + this.treeGrowthTicks(t);
       }
     }
     for (let i = this.fieldTiles.length - 1; i >= 0; i--) {
@@ -2569,7 +2691,7 @@ export class Economy {
   }
 
   private houses(owner: number): Building[] {
-    return this.buildings.filter((b) => b.alive && b.built && b.owner === owner && b.def.id === "house");
+    return this.buildings.filter((b) => b.alive && b.built && b.owner === owner && !!b.def.home);
   }
 
   private updateGlow(owner: number): void {
@@ -2584,11 +2706,12 @@ export class Economy {
     let trees = 0;
     if (keep) for (const t of this.land.ring(keep.tile, 7)) if (this.land.feature[t] === Feature.Tree) trees += this.land.variety[t] === MEMORIAL ? 3 : 1;
     const working = adults.filter((p) => p.settler >= 0).length / Math.max(1, adults.length);
+    const grieving = (this.griefUntil[owner] ?? -1) > this.tick;
     const parts: GlowParts = {
       nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4)),
       shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
-      belonging: 0.3 + 0.7 * (housed / all.length),
-      beauty: Math.min(1, 0.2 + trees / 30),
+      belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)),
+      beauty: Math.min(1, 0.2 + trees / 30) * (grieving ? 0.4 : 1),
       rest: Math.max(0.3, Math.min(1, 1.35 - working)),
     };
     this.glowParts[owner] = parts;

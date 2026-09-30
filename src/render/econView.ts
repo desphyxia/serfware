@@ -65,6 +65,8 @@ const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
   farm: { hat: Hat.Straw, tool: Tool.Scythe, work: Anim.Sow },
   fisher: { hat: Hat.Straw, tool: Tool.Rod, work: Anim.Fish },
   hunter: { hat: Hat.Hood, tool: Tool.Sword, work: Anim.Dig },
+  orchard: { hat: Hat.Straw, tool: Tool.None, work: Anim.Reap },
+  apiary: { hat: Hat.Straw, tool: Tool.None, work: Anim.Bake },
   bakery: { hat: Hat.Cap, tool: Tool.Peel, work: Anim.Bake },
   mill: { hat: Hat.Cap, tool: Tool.None, work: Anim.Idle },
   butcher: { hat: Hat.Cap, tool: Tool.Cleaver, work: Anim.Chop },
@@ -565,7 +567,7 @@ export class EconView {
       const mesh = this.buildings.get(b.id)?.mesh;
       if (!mesh) continue;
       const c = (mesh.userData.meta as BuildingMeta | undefined)?.chimney;
-      const occupied = b.def.storage || b.worker >= 0 || (b.def.id === "house" && this.eco.people.some((p) => p.alive && p.house === b.id));
+      const occupied = b.def.storage || b.worker >= 0 || (!!b.def.home && this.eco.people.some((p) => p.alive && p.house === b.id));
       if (c && occupied) get(`c${b.id}`, "smoke", b.def.storage ? 3 : 1.6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
       // Forges throw embers up the chimney while they work.
       if (c && (b.def.id === "smelter" || b.def.id === "goldsmith" || b.def.id === "toolsmith") && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")

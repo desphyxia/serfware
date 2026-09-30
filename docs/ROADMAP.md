@@ -64,6 +64,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   strip of scrub and trees); burnt-down buildings leaving ruins; erosion and deltas changing the
   terrain height, not only the soil; a groundwater overlay in build mode; a bow for the hunter's
   figure; AI rivals fighting fires.
+- Batch 13b: gliders riding updrafts between Canopy treehouses; rope lifts and gliders as
+  carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
+  (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
+  (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
 
 ## Picking up work in a new session
 

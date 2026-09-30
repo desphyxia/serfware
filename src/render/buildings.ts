@@ -452,6 +452,79 @@ function hunter(b: Build): void {
   b.add([kit.cyl(0.15, 0.18, 0.24, 9, -0.85, 0, 0.6), "#9b6b45"], ...kit.pennant(0.6, 0, 0.75, 0.9));
 }
 
+/** The orchard: a small cottage, ladders against the trees, and baskets of picked fruit. */
+function orchard(b: Build): void {
+  const { rng } = b;
+  const c = cottage(rng, 1.0, 0.9, 0.72, { roof: ROOF.red });
+  b.add(...c.parts);
+  b.meta.chimney = c.chimney;
+  // A ladder leaning on a trellis, and baskets of apples.
+  b.add([kit.box(0.04, 0.9, 0.04, 0.78, 0.42, 0.55).rotateZ(0.25), kit.C.timberLight], [kit.box(0.04, 0.9, 0.04, 0.95, 0.42, 0.55).rotateZ(0.25), kit.C.timberLight]);
+  for (let i = 0; i < 4; i++) b.add([kit.box(0.2, 0.025, 0.03, 0.87 - i * 0.06, 0.15 + i * 0.2, 0.55), kit.C.timberLight]);
+  for (const [x, z] of [[-0.75, 0.6], [-0.5, 0.72], [0.55, -0.7]] as const) {
+    b.add([kit.cyl(0.11, 0.09, 0.1, 9, x, 0, z), "#a8844e"]);
+    for (let k = 0; k < 4; k++) b.add([new THREE.SphereGeometry(0.035, 6, 4).translate(x + Math.cos(k * 1.7) * 0.05, 0.12, z + Math.sin(k * 1.7) * 0.05), kit.jitter("#c8392e", rng, 1.5)]);
+  }
+  b.add(...kit.pennant(-0.6, 0, -0.6, 0.85));
+}
+
+/** The apiary: a little open shed with straw skeps on a bench, and flowers around. */
+function apiary(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.1, 0.8, 0.06, rng));
+  for (const x of [-0.5, 0.5]) for (const z of [-0.3, 0.3]) b.add([kit.box(0.05, 0.62, 0.05, x, 0.06, z), kit.C.timber]);
+  b.add(...kit.shingleRoof(1.2, 0.8, 0.28, 0.68, kit.jitter(ROOF.brown, rng, 0.5), rng, { thatch: true }));
+  b.add([kit.box(1.0, 0.05, 0.35, 0, 0.26, 0), kit.C.timberLight]);
+  for (let i = 0; i < 4; i++) {
+    const x = -0.36 + i * 0.24;
+    // A skep: coiled straw, a dome with rings.
+    b.add([new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.3, 1).translate(x, 0.29, 0), "#d2b25e"]);
+    for (let r = 0; r < 3; r++) b.add([kit.cyl(0.1 - r * 0.025, 0.1 - r * 0.025, 0.012, 10, x, 0.3 + r * 0.035, 0), "#b8954a"]);
+    b.add([kit.box(0.03, 0.02, 0.01, x, 0.3, 0.1), "#2a2218"]);
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const r = rng.range(0.7, 0.95);
+    b.add([new THREE.SphereGeometry(0.04, 5, 3).translate(Math.cos(a) * r, 0.05, Math.sin(a) * r), kit.jitter(rng.pick(["#f4d35e", "#e56b6f", "#c38bd9", "#ffffff"]), rng, 1)]);
+  }
+}
+
+/**
+ * The treehouse: a round platform high in an ancient giant, with a hut, a railing, struts to the
+ * trunk and a rope lift to the ground. The giant itself is drawn by the nature view.
+ */
+function treehouse(b: Build): void {
+  const { rng } = b;
+  const y = 2.4;
+  b.add([kit.cyl(1.25, 1.2, 0.12, 14, 0, y), kit.jitter("#8a6a48", rng, 1)]);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    b.add([kit.box(0.05, 0.36, 0.05, Math.cos(a) * 1.18, y + 0.12, Math.sin(a) * 1.18), kit.C.timber]);
+  }
+  for (let i = 0; i < 14; i++) {
+    const a0 = (i / 14) * Math.PI * 2;
+    const a1 = ((i + 1) / 14) * Math.PI * 2;
+    const [x0, z0, x1, z1] = [Math.cos(a0) * 1.18, Math.sin(a0) * 1.18, Math.cos(a1) * 1.18, Math.sin(a1) * 1.18];
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    b.add([kit.box(0.04, 0.04, len, (x0 + x1) / 2, y + 0.46, (z0 + z1) / 2, Math.atan2(x1 - x0, z1 - z0)), kit.C.timberLight]);
+  }
+  // Struts from the trunk to the platform's rim.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    b.add([kit.box(0.07, 1.35, 0.07).translate(0, 0.67, 0).rotateZ(-0.78).rotateY(-a).translate(Math.cos(a) * 0.3, y - 1.0, Math.sin(a) * 0.3), kit.C.timber]);
+  }
+  // A hut on the platform, off to one side of the trunk.
+  const hut = cottage(rng, 0.8, 0.7, 0.6, { logs: true, roof: ROOF.moss, chimney: false });
+  b.place(hut.parts, 0.55, -0.45, 0.4, y + 0.06);
+  // Rope lift: two ropes to the ground, a basket halfway, a pulley beam above.
+  const lx = -0.95;
+  b.add([kit.box(0.06, 0.06, 0.7, lx, y + 1.1, 0.1), kit.C.timber], [kit.box(0.06, 1.1, 0.06, lx, y + 0.06, -0.2), kit.C.timber]);
+  for (const z of [-0.05, 0.25]) b.add([kit.cyl(0.012, 0.012, y + 1.1, 4, lx - 0.1, 0, z), "#c8b48a"]);
+  b.add([kit.box(0.3, 0.2, 0.36, lx - 0.1, 1.1, 0.1), "#9a7a55"], [kit.cyl(0.08, 0.08, 0.05, 10).rotateZ(Math.PI / 2).translate(lx - 0.1, y + 1.1, 0.1), kit.C.stoneDark]);
+  b.add(...kit.pennant(0.95, y + 0.1, 0.6, 0.8));
+  b.add(...kit.crate(-0.9, 0.3, rng, 0.2), ...kit.barrel(-0.7, 0.6, rng, 0.2));
+}
+
 /** The Hearthship: a landed ship turned keep, with a cabin, lantern tower, mast and banners. */
 function keep(b: Build): void {
   const { rng } = b;
@@ -529,6 +602,9 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   fisher,
   hunter,
   well,
+  orchard,
+  apiary,
+  treehouse,
   pasture,
   butcher,
   coalmine: (b) => mine(b, "coal"),
