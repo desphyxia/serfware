@@ -42,6 +42,41 @@ const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS_EACH = 2500;
 
+/** Tool goods to the tool a settler holds. */
+const TOOL_OF: Record<string, Tool> = {
+  axe: Tool.Axe,
+  saw: Tool.Saw,
+  pick: Tool.Pick,
+  hammer: Tool.Hammer,
+  shovel: Tool.Spade,
+  scythe: Tool.Scythe,
+  rod: Tool.Rod,
+  cleaver: Tool.Cleaver,
+  crook: Tool.Crook,
+  tongs: Tool.Hammer,
+};
+
+/** Each trade's hat, usual tool and work motion. */
+const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
+  woodcutter: { hat: Hat.Hood, tool: Tool.Axe, work: Anim.Chop },
+  forester: { hat: Hat.Hood, tool: Tool.Spade, work: Anim.Dig },
+  quarry: { hat: Hat.Cap, tool: Tool.Pick, work: Anim.Chop },
+  sawmill: { hat: Hat.Cap, tool: Tool.Saw, work: Anim.Saw },
+  farm: { hat: Hat.Straw, tool: Tool.Scythe, work: Anim.Sow },
+  fisher: { hat: Hat.Straw, tool: Tool.Rod, work: Anim.Fish },
+  bakery: { hat: Hat.Cap, tool: Tool.Peel, work: Anim.Bake },
+  mill: { hat: Hat.Cap, tool: Tool.None, work: Anim.Idle },
+  butcher: { hat: Hat.Cap, tool: Tool.Cleaver, work: Anim.Chop },
+  pasture: { hat: Hat.Straw, tool: Tool.Crook, work: Anim.Idle },
+  coalmine: { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Chop },
+  ironmine: { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Chop },
+  goldmine: { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Chop },
+  granitemine: { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Chop },
+  smelter: { hat: Hat.Cap, tool: Tool.Hammer, work: Anim.Hammer },
+  goldsmith: { hat: Hat.Cap, tool: Tool.Hammer, work: Anim.Hammer },
+  toolsmith: { hat: Hat.Cap, tool: Tool.Hammer, work: Anim.Hammer },
+};
+
 /** Roads, flags, buildings, goods and settlers drawn from the economy each frame. */
 export class EconView {
   readonly group = new THREE.Group();
@@ -55,6 +90,8 @@ export class EconView {
   private readonly flagPoles: THREE.InstancedMesh;
   private readonly pennants: THREE.InstancedMesh;
   private readonly figures = new FigureBatch(MAX_SETTLERS);
+  /** Debug: figures that are not in the simulation (see `showPoses`). */
+  private poseGallery: { p: THREE.Vector3; q: THREE.Quaternion; colour: THREE.Color; anim: Anim; phase: number; hat: Hat; tool: Tool }[] = [];
   private figureCount = 0;
   /** Goods miniatures, one instanced mesh per good type (on flags and carried). */
   private readonly goodMeshes: THREE.InstancedMesh[];
@@ -307,6 +344,35 @@ export class EconView {
     this.group.add(row);
   }
 
+  /** Debug and screenshots: a row of settlers, one per work motion, from `from` toward `to`. */
+  showPoses(from: THREE.Vector3, to: THREE.Vector3, owner = 0): void {
+    const poses: [Anim, Hat, Tool, THREE.Color][] = [
+      [Anim.Walk, Hat.Cap, Tool.None, ROLE_COLORS.carrier],
+      [Anim.Carry, Hat.Cap, Tool.None, ROLE_COLORS.carrier],
+      [Anim.Chop, Hat.Hood, Tool.Axe, ROLE_COLORS.worker],
+      [Anim.Saw, Hat.Cap, Tool.Saw, ROLE_COLORS.worker],
+      [Anim.Hammer, Hat.Straw, Tool.Hammer, ROLE_COLORS.builder],
+      [Anim.Dig, Hat.Hood, Tool.Spade, ROLE_COLORS.worker],
+      [Anim.Sow, Hat.Straw, Tool.None, ROLE_COLORS.worker],
+      [Anim.Reap, Hat.Straw, Tool.Scythe, ROLE_COLORS.worker],
+      [Anim.Fish, Hat.Straw, Tool.Rod, ROLE_COLORS.worker],
+      [Anim.Chop, Hat.Helmet, Tool.Pick, ROLE_COLORS.worker],
+      [Anim.Bake, Hat.Cap, Tool.Peel, ROLE_COLORS.worker],
+      [Anim.Duel, Hat.Helmet, Tool.Sword, playerColor(owner)],
+      [Anim.Wave, Hat.Cap, Tool.None, ROLE_COLORS.carrier],
+      [Anim.Rest, Hat.Cap, Tool.None, ROLE_COLORS.carrier],
+      [Anim.Idle, Hat.Pointed, Tool.Pick, ROLE_COLORS.geologist],
+    ];
+    const dir = to.clone().sub(from).normalize();
+    this.poseGallery = poses.map(([anim, hat, tool, colour], i) => {
+      const d = from.clone().addScaledVector(dir, i * 0.55).normalize();
+      const p = d.multiplyScalar(this.frames.groundAt(d));
+      // Side-on to the row, so arm and tool motions read from the overview camera.
+      const q = this.frames.orient(p, p.clone().add(dir), new THREE.Quaternion());
+      return { p, q, colour, anim, phase: i * 0.7, hat, tool };
+    });
+  }
+
   /** The building rises from its plinth as materials arrive; the roof goes on last. */
   private setClip(mesh: THREE.Mesh, progress: number): void {
     const meta = mesh.userData.meta as BuildingMeta;
@@ -359,8 +425,9 @@ export class EconView {
     });
   }
 
-  /** Hat, tool and work motion for a settler. */
+  /** Hat, tool and work motion for a settler: the tool they carry, the motion of their trade. */
   private looks(s: Settler): { hat: Hat; tool: Tool; work: Anim } {
+    const carried = s.tool >= 0 ? TOOL_OF[GOODS[s.tool]?.id ?? ""] : undefined;
     switch (s.role) {
       case "carrier":
         return { hat: Hat.Cap, tool: Tool.None, work: Anim.Idle };
@@ -373,23 +440,11 @@ export class EconView {
         return { hat: Hat.Helmet, tool: Tool.Sword, work: Anim.Duel };
       default: {
         const b = s.building >= 0 ? this.eco.buildings[s.building] : undefined;
-        switch (b?.def.id) {
-          case "woodcutter":
-            return { hat: Hat.Hood, tool: Tool.Axe, work: Anim.Chop };
-          case "forester":
-            return { hat: Hat.Hood, tool: Tool.Spade, work: Anim.Dig };
-          case "quarry":
-            return { hat: Hat.Cap, tool: Tool.Pick, work: Anim.Hammer };
-          case "farm":
-            return { hat: Hat.Straw, tool: Tool.Spade, work: Anim.Dig };
-          case "coalmine":
-          case "ironmine":
-          case "goldmine":
-          case "granitemine":
-            return { hat: Hat.Helmet, tool: Tool.Pick, work: Anim.Hammer };
-          default:
-            return { hat: Hat.Hood, tool: Tool.None, work: Anim.Idle };
-        }
+        const trade = TRADES[b?.def.id ?? ""] ?? { hat: Hat.Hood, tool: Tool.None, work: Anim.Idle };
+        // Farmers sow half the time and reap the other half.
+        const work = trade.work === Anim.Sow && (s.id + Math.floor(s.timer / 50)) % 2 === 1 ? Anim.Reap : trade.work;
+        const tool = work === Anim.Reap ? Tool.Scythe : work === Anim.Sow ? Tool.None : (carried ?? trade.tool);
+        return { hat: trade.hat, tool, work };
       }
     }
   }
@@ -428,7 +483,13 @@ export class EconView {
       if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || !this.seen(s.path[s.pi] as number, s.owner, true)) continue;
       const look = this.looks(s);
       const carrying = s.carrying >= 0;
-      const anim = s.state === "duel" ? Anim.Duel : moving ? (carrying ? Anim.Carry : Anim.Walk) : s.state === "work" ? look.work : Anim.Idle;
+      let anim = s.state === "duel" ? Anim.Duel : moving ? (carrying ? Anim.Carry : Anim.Walk) : s.state === "work" ? look.work : Anim.Idle;
+      if (anim === Anim.Idle && s.role === "carrier") {
+        // Waiting carriers sit down now and then, and sometimes wave.
+        const beat = Math.floor(time / 9 + s.id * 0.37);
+        const h = ((Math.imul(beat, 2654435761) + s.id * 97) >>> 0) % 10;
+        anim = h < 4 ? Anim.Rest : h === 9 ? Anim.Wave : Anim.Idle;
+      }
       const bob = moving ? Math.abs(Math.sin(time * 11 + s.id * 1.7)) * 0.025 : 0;
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);
       this.frames.orient(p, p.clone().add(heading), q);
@@ -444,6 +505,11 @@ export class EconView {
       }
     }
     for (const id of this.display.keys()) if (!alive.has(id)) this.display.delete(id);
+    // Debug and screenshots: extra figures showing each pose.
+    for (const f of this.poseGallery) {
+      if (n >= MAX_SETTLERS) break;
+      this.figures.set(n++, f.p, f.q, f.colour, f.anim, f.phase, f.hat, f.tool);
+    }
     this.figureCount = n;
     this.figures.flush(n, time);
     this.commitGoods();

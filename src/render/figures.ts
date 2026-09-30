@@ -10,6 +10,7 @@ import {
   normalize,
   select,
   sin,
+  step,
   transformNormalToView,
   uniform,
   varying,
@@ -34,6 +35,13 @@ export const enum Anim {
   Hammer = 4,
   Dig = 5,
   Duel = 6,
+  Saw = 7,
+  Sow = 8,
+  Reap = 9,
+  Fish = 10,
+  Bake = 11,
+  Wave = 12,
+  Rest = 13,
 }
 
 export const enum Hat {
@@ -51,6 +59,12 @@ export const enum Tool {
   Spade = 3,
   Sword = 4,
   Pick = 5,
+  Saw = 6,
+  Scythe = 7,
+  Rod = 8,
+  Peel = 9,
+  Cleaver = 10,
+  Crook = 11,
 }
 
 const enum P {
@@ -126,6 +140,12 @@ function figureGeometry(): THREE.BufferGeometry {
   pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Spade, parts: [[handle(0.34), WOOD], [box(0.07, 0.012, 0.09, hx, hand - 0.017, 0.33), METAL]] });
   pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Sword, parts: [[box(0.02, 0.012, 0.3, hx, hand - 0.006, 0.18), "#dde3ea"], [box(0.08, 0.018, 0.018, hx, hand - 0.01, 0.03), "#c9a24a"]] });
   pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Pick, parts: [[handle(0.28), WOOD], [box(0.012, 0.16, 0.025, hx, hand - 0.08, 0.23), "#6a6e76"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Saw, parts: [[box(0.03, 0.05, 0.08, hx, hand - 0.03, 0.02), WOOD], [box(0.006, 0.07, 0.3, hx, hand - 0.05, 0.2), "#c9cdd4"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Scythe, parts: [[handle(0.42), WOOD], [box(0.2, 0.01, 0.035, hx - 0.09, hand - 0.012, 0.36), "#c9cdd4"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Rod, parts: [[box(0.012, 0.012, 0.6, hx, hand - 0.006, 0.27).rotateX(-0.5).translate(0, 0.16, 0), WOOD], [box(0.003, 0.3, 0.003, hx, hand - 0.12, 0.57), "#e8e0d0"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Peel, parts: [[handle(0.4), WOOD], [box(0.12, 0.01, 0.14, hx, hand - 0.012, 0.42), "#b08a5c"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Cleaver, parts: [[handle(0.1), WOOD], [box(0.01, 0.08, 0.09, hx, hand - 0.05, 0.1), "#b8bec8"]] });
+  pieces.push({ part: P.ArmR, pivot: [hx, SHOULDER, 0], sel: 20 + Tool.Crook, parts: [[box(0.018, 0.5, 0.018, hx, hand - 0.2, 0.05), WOOD], [new THREE.TorusGeometry(0.04, 0.009, 4, 8, Math.PI * 1.3).translate(hx, hand + 0.33, 0.09), WOOD]] });
 
   const geos: THREE.BufferGeometry[] = [];
   for (const pc of pieces) {
@@ -227,9 +247,16 @@ export class FigureBatch {
     const dig = sin(t.mul(3.2));
     const duel = sin(t.mul(9));
     const idle = sin(t.mul(1.3)).mul(0.05);
+    const saw = sin(t.mul(6.5));
+    const cast = sin(t.mul(2.6));
+    const reap = sin(t.mul(3.4));
+    const bob = sin(t.mul(0.9));
+    const push = sin(t.mul(2.2));
+    const wave = sin(t.mul(8));
+    const sowing = is(Anim.Sow).mul(0.5);
     // Angles per limb (negative swings forward).
-    const legL = w.mul(0.55).mul(walking).add(is(Anim.Duel).mul(-0.3));
-    const legR = w.mul(-0.55).mul(walking).add(is(Anim.Duel).mul(0.25));
+    const legL = w.mul(0.55).mul(walking.add(sowing)).add(is(Anim.Duel).mul(-0.3)).add(is(Anim.Rest).mul(-1.45)).add(is(Anim.Reap).mul(-0.25));
+    const legR = w.mul(-0.55).mul(walking.add(sowing)).add(is(Anim.Duel).mul(0.25)).add(is(Anim.Rest).mul(-1.5)).add(is(Anim.Reap).mul(0.2));
     const armSwing = w.mul(0.5).mul(is(Anim.Walk));
     const armL = armSwing
       .negate()
@@ -238,6 +265,12 @@ export class FigureBatch {
       .add(is(Anim.Hammer).mul(-0.6))
       .add(is(Anim.Dig).mul(float(-0.9).add(dig.mul(0.35))))
       .add(is(Anim.Duel).mul(-0.5))
+      .add(is(Anim.Saw).mul(float(-1.1).add(saw.mul(0.2))))
+      .add(is(Anim.Sow).mul(-0.55))
+      .add(is(Anim.Reap).mul(float(-1.0).add(reap.mul(0.45))))
+      .add(is(Anim.Fish).mul(-0.9))
+      .add(is(Anim.Bake).mul(float(-1.1).add(push.mul(0.25))))
+      .add(is(Anim.Rest).mul(-0.4))
       .add(is(Anim.Idle).mul(idle));
     const armR = armSwing
       .add(is(Anim.Carry).mul(-3.2))
@@ -245,12 +278,24 @@ export class FigureBatch {
       .add(is(Anim.Hammer).mul(float(-2.1).add(strike.mul(1.3))))
       .add(is(Anim.Dig).mul(float(-0.7).add(dig.mul(0.35))))
       .add(is(Anim.Duel).mul(float(-1.4).add(duel.mul(0.9))))
+      .add(is(Anim.Saw).mul(float(-1.3).add(saw.mul(0.35))))
+      .add(is(Anim.Sow).mul(float(-0.9).add(cast.mul(0.8))))
+      .add(is(Anim.Reap).mul(float(-1.1).add(reap.mul(0.55))))
+      .add(is(Anim.Fish).mul(float(-1.2).add(bob.mul(0.08))))
+      .add(is(Anim.Bake).mul(float(-1.2).add(push.mul(0.3))))
+      .add(is(Anim.Wave).mul(float(-2.9).add(wave.mul(0.25))))
+      .add(is(Anim.Rest).mul(-0.3))
       .add(is(Anim.Idle).mul(idle.negate()));
     const lean = is(Anim.Chop)
       .mul(chop.mul(0.18).add(0.1))
       .add(is(Anim.Dig).mul(dig.mul(0.18).add(0.3)))
       .add(is(Anim.Hammer).mul(strike.mul(0.12).add(0.05)))
-      .add(is(Anim.Carry).mul(0.08));
+      .add(is(Anim.Carry).mul(0.08))
+      .add(is(Anim.Saw).mul(saw.mul(0.06).add(0.18)))
+      .add(is(Anim.Reap).mul(reap.mul(0.12).add(0.28)))
+      .add(is(Anim.Bake).mul(push.mul(0.08).add(0.12)))
+      .add(is(Anim.Sow).mul(0.06))
+      .add(is(Anim.Rest).mul(-0.12));
     const limb = isPart(P.LegL)
       .mul(legL)
       .add(isPart(P.LegR).mul(legR))
@@ -260,7 +305,8 @@ export class FigureBatch {
     const upper = float(1).sub(isPart(P.LegL)).sub(isPart(P.LegR));
 
     // Hide hats and tools this figure doesn't use.
-    const hatOn = select(sel.lessThan(10), float(1), float(1).sub(abs(sel.sub(10).sub(iAnim.z)).min(1)));
+    const isHat = step(10, sel).mul(float(1).sub(step(20, sel)));
+    const hatOn = select(isHat.greaterThan(0.5), float(1).sub(abs(sel.sub(10).sub(iAnim.z)).min(1)), float(1));
     const toolOn = select(sel.lessThan(20), float(1), float(1).sub(abs(sel.sub(20).sub(iAnim.w)).min(1)));
     const show = hatOn.mul(toolOn);
 
@@ -272,7 +318,9 @@ export class FigureBatch {
     };
     const p0 = pose(attribute("position", "vec3").mul(show), pivot);
     const n0 = rotX(rotX(attribute("normal", "vec3"), limb.negate()), lean.mul(upper));
-    mat.positionNode = rotQ(p0, iQuat).add(attribute("iPos", "vec3"));
+    // Resting settlers sit on the ground.
+    const seated = p0.add(vec3(0, is(Anim.Rest).mul(-0.15), 0));
+    mat.positionNode = rotQ(seated, iQuat).add(attribute("iPos", "vec3"));
     const nView = varying(transformNormalToView(rotQ(n0, iQuat)));
     mat.normalNode = normalize(nView);
     const tint = attribute("aTint", "float");

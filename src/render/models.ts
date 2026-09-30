@@ -312,8 +312,28 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
     case "mount":
       parts = [[kit.box(0.18, 0.06, 0.14, 0, 0, 0), "#7a5236"], [kit.box(0.04, 0.05, 0.14, 0.07, 0.05, 0), "#6a4428"], [kit.box(0.04, 0.035, 0.14, -0.07, 0.05, 0), "#6a4428"]];
       break;
-    default:
-      parts = kit.crate(0, 0, rng, 0.16);
+    default: {
+      // Tools: a small cradle with the tool lying on it.
+      const head = (w: number, h: number, d: number, x: number, z: number, c = "#9aa1ab"): Part => [kit.box(w, h, d, x, 0.07, z), c];
+      const handle: Part = [kit.box(0.26, 0.022, 0.022, 0, 0.075, 0), "#8a6444"];
+      const cradle: Part[] = [
+        [kit.box(0.22, 0.05, 0.12, 0, 0, 0), "#b08a5c"],
+        [kit.box(0.22, 0.02, 0.02, 0, 0.05, -0.05), "#8a6444"],
+      ];
+      const tools: Record<string, Part[]> = {
+        axe: [handle, head(0.05, 0.02, 0.07, 0.12, 0.02)],
+        saw: [[kit.box(0.26, 0.008, 0.06, 0.02, 0.07, 0), "#c9cdd4"], [kit.box(0.05, 0.03, 0.05, -0.12, 0.07, 0), "#8a6444"]],
+        pick: [handle, head(0.03, 0.02, 0.18, 0.12, 0)],
+        hammer: [handle, head(0.05, 0.035, 0.06, 0.12, 0, "#6a6e76")],
+        shovel: [handle, head(0.08, 0.01, 0.07, 0.15, 0)],
+        scythe: [handle, head(0.03, 0.008, 0.18, 0.13, 0.07, "#c9cdd4")],
+        rod: [[kit.box(0.34, 0.012, 0.012, 0, 0.07, 0), "#8a6444"], [kit.box(0.02, 0.02, 0.02, -0.08, 0.07, 0.015), "#6a6e76"]],
+        cleaver: [[kit.box(0.08, 0.02, 0.02, -0.05, 0.07, 0), "#8a6444"], head(0.1, 0.01, 0.07, 0.04, 0)],
+        crook: [[kit.box(0.3, 0.018, 0.018, 0, 0.075, 0), "#8a6444"], [new THREE.TorusGeometry(0.035, 0.008, 4, 8, Math.PI * 1.3).rotateX(Math.PI / 2).translate(0.17, 0.075, 0.02), "#8a6444"]],
+        tongs: [[kit.box(0.24, 0.015, 0.015, 0, 0.07, 0.012, 0.08), "#4a4e56"], [kit.box(0.24, 0.015, 0.015, 0, 0.07, -0.012, -0.08), "#4a4e56"]],
+      };
+      parts = tools[id] ? [...cradle, ...tools[id]!] : kit.crate(0, 0, rng, 0.16);
+    }
   }
   g = kit.assemble(parts, false);
   cache.set(key, g);
