@@ -1,7 +1,8 @@
 # Seedfall art direction
 
-Status: **agreed**. A1–A5 are built (renderer, target scene, terrain everywhere, water/sky/
-weather, building kit); the debug dialog's **Visit hamlet** opens the target scene.
+Status: **agreed**. A1–A6 are built (renderer, target scene, terrain everywhere, water/sky/
+weather, building kit, settlers and animals); the debug dialog's **Visit hamlet** opens the
+target scene.
 
 Reference: the original *Serf City* (*The Settlers*, 1993), rebuilt with 2026 techniques.
 Decisions taken: **stylised painterly** look, **everything procedural** (no bought or downloaded
@@ -183,7 +184,7 @@ detail, and it covers most of the screen, so it gets its own batch (A3).
 | A3 ✓ | Terrain everywhere | Chunked detail levels for the whole planet; procedural sculpting, cliffs, riverbeds, shores; blended materials; levelled pads under buildings; paths and roads pressed into the ground; near-camera scatter |
 | A4 ✓ | Water, sky and weather | Sea, lakes and rivers; physically based sky and painted clouds; haze and light shafts; rain, snow, mud and seasons in the new style |
 | A5 ✓ | Building kit | All buildings and construction stages rebuilt from the kit; player colours; stranded and captured variants |
-| A6 | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
+| A6 ✓ | Settlers, animals and goods | Articulated settlers with all work animations; goods miniatures; animals |
 | A7 | Vegetation, effects and polish | Tree species per biome, undergrowth, particles, shot-list pass, performance tuning on the presets |
 
 ### What A2 delivered
@@ -244,5 +245,15 @@ gentle grassy banks and a wet edge.
 - **Owner's colour** on pennants and banners (captured buildings change colour with their
   owner); **stranded** buildings are dark, faded and overgrown.
 - Smoke, lantern flames and windmill sails take their positions from each model.
+
+### What A6 delivered
+
+- **Work motions:** walk, carry, chop, saw, hammer, dig, sow, reap, fish, mine (pick swing),
+  bake, duel, wave and rest (sitting), all in the vertex shader.
+- **Trades:** each has its hat, tool and motion; settlers hold the tool good they carry; wardens
+  wear helmets and the owner's colour.
+- **Animals:** deer, sheep and cows as articulated figures (legs, grazing heads, tails); herds in
+  the pastures; deer bolt from settlers; fish leap near the shore.
+- **Goods:** tools are miniatures too.
 
 After A7 we return to batch 11. The later biome batches (13–16) follow this document.
