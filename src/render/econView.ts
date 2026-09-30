@@ -17,6 +17,7 @@ import {
   flagGeometry,
   pennantGeometry,
   sledgeGeometry,
+  stiltsGeometry,
 } from "./models";
 
 export const GOOD_COLORS: Record<string, string> = {
@@ -119,6 +120,7 @@ export class EconView {
   readonly night = PAINT.night;
   private readonly emitterCache = new Map<string, Emitter>();
   private rotorGeo: THREE.BufferGeometry | null = null;
+  private stiltGeo: THREE.BufferGeometry | null = null;
 
   constructor(
     private readonly eco: Economy,
@@ -283,10 +285,19 @@ export class EconView {
       mesh.userData.tint = playerColor(b.owner);
       mesh.userData.weather = new THREE.Vector3(b.wear, b.moss, b.soot);
       mesh.userData.meta = meta;
-      const p = this.frames.pos(b.tile, -0.05);
+      // On the tidal flats buildings stand on stilts, clear of high water.
+      const stilts = this.eco.land.tidal[b.tile] === 1 && b.def.id !== "shellfisher";
+      const p = this.frames.pos(b.tile, stilts ? 0.4 : -0.05);
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
       mesh.position.copy(p);
       this.frames.orient(p, flagPos, mesh.quaternion);
+      if (stilts) {
+        this.stiltGeo ??= stiltsGeometry();
+        const legs = new THREE.Mesh(this.stiltGeo, this.buildingMat);
+        legs.scale.set(Math.max(0.8, meta.size.x * 0.95), 1, Math.max(0.8, meta.size.z * 1.05));
+        legs.castShadow = true;
+        mesh.add(legs);
+      }
       mesh.userData.building = b.id;
       mesh.userData.site = !b.built;
       if (stage !== "built") {

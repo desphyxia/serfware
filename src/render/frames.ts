@@ -1,10 +1,13 @@
 import * as THREE from "three/webgpu";
 import type { Planet } from "../sim/planet/planet";
 import type { TerrainField } from "./terrain/field";
+import { TIDE_MEAN, TIDE_RANGE } from "../sim/biomes/tides";
 
 const UP = new THREE.Vector3(0, 1, 0);
 /** Ice stands this far proud of the open-water surface. */
 export const ICE_LIFT = 0.05;
+/** Height of a causeway's deck above sea level: clear of the highest tide. */
+export const CAUSEWAY_TOP = TIDE_MEAN + TIDE_RANGE + 0.06;
 const _tmp = new THREE.Vector3();
 
 /** Helpers to place objects upright on the planet surface, on the detailed ground. */
@@ -12,6 +15,8 @@ export class SurfaceFrames {
   private readonly tileR: Float32Array;
   /** Lakes that freeze: walkers, flags and roads stand on the ice rather than the lake bed. */
   ice: { frozen: Uint8Array; lake: Uint8Array; level: Float32Array } | null = null;
+  /** Causeways over the tidal flats: walkers and flags stand on the raised stone. */
+  causeway: Uint8Array | null = null;
 
   constructor(
     readonly planet: Planet,
@@ -42,6 +47,7 @@ export class SurfaceFrames {
 
   /** Radius of the ice surface on a frozen lake tile, else 0. */
   iceTop(t: number): number {
+    if (this.causeway?.[t]) return this.field.R + CAUSEWAY_TOP;
     const ice = this.ice;
     return ice && ice.frozen[t] && ice.lake[t] ? this.field.R + (ice.level[t] as number) + ICE_LIFT : 0;
   }

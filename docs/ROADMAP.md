@@ -68,6 +68,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 15b: a salt trade route with rival settlements (salt as currency); barges carrying goods
+  along the coast and up rivers (boats are moored props for now); tide tables in the Almanac;
+  the AI raising causeways and siting dew condensers; storm forecasts and shelter orders; glass
+  windows and lamps made from the kiln's glass; gulls over the flats; spires as a quarry of
+  salt crystal.
 - Batch 14b: coal as waystation fuel (a "fuel" input group without touching log distribution);
   settlers caught by an eruption fleeing; lava flows and new land from big eruptions; ice fishing
   holes on frozen lakes; warm clothing from a tailor for Rimefall walkers; the AI siting

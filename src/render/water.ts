@@ -1,5 +1,5 @@
 import * as THREE from "three/webgpu";
-import { attribute, mrt, vec4 } from "three/tsl";
+import { attribute, mrt, normalize, positionLocal, vec4 } from "three/tsl";
 import { waterNodes, type WaterUniforms } from "./waterShade";
 
 export type { WaterUniforms } from "./waterShade";
@@ -9,6 +9,8 @@ export function makeWaterMaterial(u: WaterUniforms): THREE.MeshBasicNodeMaterial
   const mat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
   const { color, glint } = waterNodes(u, { fog: attribute("aFog", "float"), scale: 1 });
   mat.colorNode = color;
+  // Tides lift the sea near the Tidewater flats (aTide weights it, 0 on other coasts).
+  mat.positionNode = positionLocal.add(normalize(positionLocal).mul(u.tideLift.mul(attribute("aTide", "float"))));
   // Sun glints sparkle through bloom.
   mat.mrtNode = mrt({ emissive: vec4(glint.mul(0.6), 1) });
   const out = mat as THREE.MeshBasicNodeMaterial & { userData: { u: WaterUniforms } };

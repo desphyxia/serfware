@@ -5,7 +5,7 @@ export interface Emitter {
   pos: THREE.Vector3;
   /** Particles per second. */
   rate: number;
-  kind: "smoke" | "steam" | "dust" | "spark" | "ember" | "soot";
+  kind: "smoke" | "steam" | "dust" | "spark" | "ember" | "soot" | "sand";
 }
 
 const MAX = 700;
@@ -63,17 +63,17 @@ export class Particles {
       const t = this.age[i]! / this.life[i]!;
       up.set(this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!).normalize();
       const k = this.kind[i]!;
-      const rise = k === 2 ? 0.2 : k === 3 ? -0.4 : k === 4 ? 0.9 : 0.55;
+      const rise = k === 2 ? 0.2 : k === 3 ? -0.4 : k === 4 ? 0.9 : k === 5 ? 0.05 : 0.55;
       for (let j = 0; j < 3; j++) {
         this.pos[i * 3 + j]! += (this.vel[i * 3 + j]! + up.getComponent(j) * rise + wind.getComponent(j) * t * 0.8) * dt;
         this.vel[i * 3 + j]! *= 0.98;
       }
-      const base = k === 0 ? 0.5 : k === 1 ? 0.35 : k >= 3 ? 1 : 0.45;
+      const base = k === 0 ? 0.5 : k === 1 ? 0.35 : k === 5 ? 0.6 : k >= 3 ? 1 : 0.45;
       // Embers flicker as they climb.
       if (k === 4) for (let j = 0; j < 3; j++) this.vel[i * 3 + j]! += (this.rand() - 0.5) * dt * 1.2;
-      this.size[i] = k === 4 ? 0.14 * (1 - t * 0.6) : k === 3 ? 0.35 * (1 - t) : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
+      this.size[i] = k === 4 ? 0.14 * (1 - t * 0.6) : k === 3 ? 0.35 * (1 - t) : k === 5 ? 2.5 + t * 3 : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
       this.alpha[i] = base * Math.sin(Math.min(1, t) * Math.PI) * (1 - t * 0.4);
-      if (k >= 3) {
+      if (k === 3 || k === 4) {
         if (ns >= sp.capacity) continue;
         sp.pos.set([this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!], ns * 3);
         if (k === 4) sp.color.set([1.8, 0.75 + (1 - t) * 0.35, 0.25], ns * 3);
@@ -84,7 +84,9 @@ export class Particles {
       } else {
         sm.pos.set([this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!], n * 3);
         const s = this.shade[i]!;
-        sm.color.set([s * light.r, s * light.g, s * light.b], n * 3);
+        // Blown sand is tinted; everything else is grey smoke or white steam.
+        if (k === 5) sm.color.set([0.78 * light.r, 0.6 * light.g, 0.38 * light.b], n * 3);
+        else sm.color.set([s * light.r, s * light.g, s * light.b], n * 3);
         // Old point sizes were in pixels at a reference distance; about a tenth of a unit each.
         sm.size[n] = this.size[i]! * 0.55;
         sm.alpha[n] = this.alpha[i]!;
@@ -107,8 +109,10 @@ export class Particles {
     this.vel[i * 3 + 1] = j() * burst;
     this.vel[i * 3 + 2] = j() * burst;
     this.age[i] = 0;
-    this.kind[i] = e.kind === "smoke" || e.kind === "soot" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : 4;
-    this.life[i] = e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : e.kind === "ember" ? 1.1 + this.rand() * 0.8 : 3.5 + this.rand() * 2;
+    this.kind[i] = e.kind === "smoke" || e.kind === "soot" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : e.kind === "sand" ? 5 : 4;
+    this.life[i] = e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : e.kind === "ember" ? 1.1 + this.rand() * 0.8 : e.kind === "sand" ? 2.5 + this.rand() : 3.5 + this.rand() * 2;
+    // Sand streams sideways with the storm.
+    if (e.kind === "sand") for (let j = 0; j < 3; j++) this.vel[i * 3 + j]! *= 25;
     this.shade[i] = e.kind === "soot" ? 0.22 + this.rand() * 0.1 : e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : e.kind === "spark" ? 2.4 : 0.75;
   }
 

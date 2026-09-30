@@ -41,6 +41,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const edge = attribute("aEdge", "float");
   const A = varying(tiles.lookup(tiles.a, tile));
   const B = varying(tiles.lookup(tiles.b, tile));
+  const blown = varying(tiles.lookup(tiles.c, tile).x);
   const wear = A.x;
   const fog = A.y;
   const snow = A.z;
@@ -128,6 +129,10 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const ashCover = smoothstep(0.05, 0.45, ash.add(mid.mul(0.25)).add(fine.mul(0.12)));
   const cinders = smoothstep(0.55, 0.75, tuft).mul(0.35);
   c = mix(c, mix(vec3(0.6, 0.58, 0.55), vec3(0.2, 0.18, 0.17), cinders).mul(float(0.9).add(fine.mul(0.12))), ashCover.mul(0.9));
+  // Blown sand from Saltglass storms: pale drifts with wind ripples, over roads too.
+  const drift = smoothstep(0.08, 0.5, blown.add(mid.mul(0.2)).add(fine.mul(0.1)));
+  const ripple = sin(p.x.mul(9).add(p.z.mul(5)).add(mid.mul(6))).mul(0.5).add(0.5);
+  c = mix(c, mix(vec3(0.86, 0.76, 0.56), vec3(0.74, 0.62, 0.44), ripple.mul(0.5)), drift.mul(0.9));
   // Snow drifts: patchy edges, deeper in hollows, sliding off steep ground.
   const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08)))
     .mul(float(1).sub(smoothstep(0.35, 0.6, slope)))

@@ -78,7 +78,7 @@ export class Tools {
     ov.setGhost(null, -1, -1, false);
 
     const pl = this.host.player();
-    const key = `${this.tool}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}`;
+    const key = `${this.tool}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}:${land.causewayVersion}`;
     if (key !== this.markerKey) {
       this.markerKey = key;
       const tiles: number[] = [];
@@ -90,8 +90,10 @@ export class Tools {
         }
       } else if (this.tool === "hedge") {
         for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && hedgeable(land, i)) tiles.push(i);
+      } else if (this.tool === "causeway") {
+        for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && land.tidal[i] && !land.causeway[i] && land.use[i] !== Use.Building) tiles.push(i);
       }
-      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : "#b8f08c");
+      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : this.tool === "causeway" ? "#c8c0b0" : "#b8f08c");
     }
     if (t < 0) return;
 
@@ -137,6 +139,9 @@ export class Tools {
         return;
       case "hedge":
         if (this.host.command({ t: "hedge", tile: t })) this.refresh();
+        return;
+      case "causeway":
+        if (this.host.command({ t: "causeway", tile: t })) this.refresh();
         return;
       case "road": {
         if (this.roadStart < 0) {

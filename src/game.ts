@@ -18,6 +18,9 @@ import { WorldView } from "./render/worldView";
 import { formatDay, ticksPerDay } from "./sim/clock";
 import { Biome, BIOME_NAMES } from "./sim/planet/terrain";
 import { Feature, Use } from "./sim/econ/landuse";
+import { BUILDINGS } from "./sim/econ/defs";
+import { Region } from "./sim/biomes/regions";
+import { tideAt } from "./sim/biomes/tides";
 import { speciesAt } from "./render/natureView";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
@@ -458,7 +461,7 @@ export class Game {
     let bestN = 0;
     for (let t = 0; t < land.region.length; t += 3) {
       if (land.region[t] !== region) continue;
-      const n = land.ring(t, 3).filter((m) => land.region[m] === region).length + land.ring(t, 2).filter((m) => land.feature[m] === Feature.Giant).length * 2;
+      const n = land.ring(t, 3).filter((m) => land.region[m] === region).length + land.ring(t, 2).filter((m) => land.feature[m] === Feature.Giant || land.feature[m] === Feature.Spire).length * 3;
       if (n > bestN) {
         bestN = n;
         best = t;
@@ -537,6 +540,102 @@ export class Game {
       return mid;
     }
     return -1;
+  }
+
+  /**
+   * Screenshot hook: a little Tidewater hamlet on the flats nearest the Hearthship: a house on
+   * stilts, a shellfisher, and a road over a causeway. `high` moves the clock to high (or low)
+   * water. Returns the flat's tile or -1.
+   */
+  debugTidewater(high: boolean, distance = 14): number {
+    const w = this.world;
+    const land = w.land;
+    const eco = w.economy;
+    const p = this.session.player;
+    const grid = w.planet.grid;
+    const keep = eco.buildings[eco.keeps[p] ?? -1];
+    if (!keep) return -1;
+    const kc = grid.centerOf(keep.tile);
+    const dist = (t: number) => {
+      const c = grid.centerOf(t);
+      return (c[0] - kc[0]) ** 2 + (c[1] - kc[1]) ** 2 + (c[2] - kc[2]) ** 2;
+    };
+    // The flat with most flats around it, favouring ones near home.
+    let best = -1;
+    let bestScore = -Infinity;
+    for (let t = 0; t < grid.count; t++) {
+      if (!land.tidal[t]) continue;
+      const score = land.ring(t, 2).filter((x) => land.tidal[x]).length - dist(t) * 0.02;
+      if (score > bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    if (best < 0) return -1;
+    for (const t of [best, ...land.ring(best, 4)]) if (land.territory[t] === 0) land.territory[t] = p + 1;
+    land.territoryVersion++;
+    const build = (type: string, ok: (t: number) => boolean) => {
+      const def = BUILDINGS.find((b) => b.id === type);
+      if (!def) return;
+      for (const t of land.ring(best, 3)) {
+        if (!ok(t)) continue;
+        const f = land.bestFlagTile(t, p);
+        if (f < 0 || !land.canBuildDef(t, f, def, p)) continue;
+        if (!w.command({ t: "build", type, tile: t, flagTile: f, player: p }).ok) continue;
+        const b = eco.buildingAt(t);
+        if (b) b.built = true;
+        return;
+      }
+    };
+    build("house", (t) => land.tidal[t] === 1);
+    build("shellfisher", () => true);
+    // A causeway road across the flats: from a flat to another three or four steps away.
+    const flat = (t: number) => land.tidal[t] === 1 && land.use[t] === Use.Free && land.roadable(t, p);
+    let route: number[] | null = null;
+    for (const a of [best, ...land.ring(best, 2)].filter((x) => flat(x) && land.canPlaceFlag(x, p))) {
+      for (const b of land.ring(a, 4).filter((x) => flat(x) && land.canPlaceFlag(x, p) && !land.ring(a, 2).includes(x))) {
+        const path = land.findPath(a, b, flat, 400);
+        if (path && path.length >= 4 && (!route || path.length > route.length)) route = path;
+      }
+      if (route) break;
+    }
+    if (route) {
+      for (const t of route) land.causeway[t] = 1;
+      land.causewayVersion++;
+      w.command({ t: "flag", tile: route[0]!, player: p });
+      w.command({ t: "flag", tile: route[route.length - 1]!, player: p });
+      w.command({ t: "road", tiles: route, player: p });
+    }
+    // Move the clock to high or low water, in daylight at the flats.
+    const lon = Math.atan2(-grid.center[best * 3 + 2]!, grid.center[best * 3]!) / (Math.PI * 2);
+    const perHour = ticksPerDay(w.planet.params.dayLengthHours) / 24;
+    let tick = w.tick;
+    for (let i = 0; i < 4000; i++) {
+      tick += 10;
+      const tide = tideAt(w.climate.moons, tick);
+      const hour = w.localDay(lon).hour + (tick - w.tick) / perHour;
+      const h = ((hour % 24) + 24) % 24;
+      if ((high ? tide > 0.9 : tide < -0.9) && h > 9 && h < 16) break;
+    }
+    w.tick = tick;
+    w.climate.step(tick);
+    this.focusTile(best, distance);
+    return best;
+  }
+
+  /** Screenshot hook: a sandstorm over the Saltglass tile nearest the view, blown for a few hours. */
+  debugStorm(hours = 3, distance = 20): number {
+    const w = this.world;
+    const land = w.land;
+    const f = this.cam.focus;
+    const at = w.planet.grid.nearestTile([f.x, f.y, f.z], 0);
+    const salt = land.ring(at, 40).find((t) => land.region[t] === Region.SaltglassFlats && land.isLand(t));
+    if (salt === undefined) return -1;
+    w.economy.tick = w.tick;
+    w.economy.startStorm(salt);
+    for (let i = 0; i < hours * 300; i++) w.step();
+    this.focusTile(salt, distance);
+    return salt;
   }
 
   /** Screenshot hook: the vent nearest the Hearthship, optionally erupting now. Returns its tile or -1. */
@@ -1417,6 +1516,13 @@ export class Game {
       rows.push(["Vent", p > 190 ? "pressure high: may erupt" : p > 100 ? "rumbling" : "steaming quietly"]);
       rows.push(["Tremors", `${this.world.economy.tremors.get(tile) ?? 0} since the last eruption`]);
     }
+    else if (land.feature[tile] === Feature.Spire) rows.push(["Salt spire", "a landmark: lifts Glow's beauty near home"]);
+    if (land.tidal[tile]) {
+      const c = this.world.climate;
+      rows.push(["Tidal flat", `${land.flooded[tile] ? "under water" : "dry"}${land.causeway[tile] ? " · causeway" : ""} · ${land.shell[tile]} shellfish`]);
+      rows.push(["Tide", `${c.tide > 0.6 ? "high" : c.tide < -0.6 ? "low" : "mid"}, ${c.tideFlow >= 0 ? "rising" : "falling"}`]);
+    }
+    if ((land.sand[tile] as number) > 0.1) rows.push(["Sand", "blown over by a storm: slows roads until carriers clear it"]);
     if (land.hydro.lake[tile]) rows.push(["Lake", land.frozen[tile] ? "frozen: roads may cross the ice" : "open water"]);
     else if ((land.ash[tile] as number) > 0.05) rows.push(["Ash", "volcanic: enriching the soil"]);
     if (land.chill[tile]) rows.push(["Cold", land.warm[tile] ? "bitter, but a hearth is near" : "bitter: walkers slow down"]);

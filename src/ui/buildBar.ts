@@ -36,6 +36,18 @@ export const HEDGE: BuildingDef = {
   cost: { log: 1 },
 };
 
+/** Causeways are raised with the Materials tools: a stone deck over the tidal flats. */
+export const CAUSEWAY: BuildingDef = {
+  id: "causeway",
+  name: "Causeway",
+  description: "Raise a stone causeway on a tidal flat (takes a stone). Roads over it stay dry at high tide; lay the road first or after.",
+  category: "materials",
+  cost: { stone: 1 },
+};
+
+/** Tools listed with a category's buildings that are not buildings themselves. */
+export const EXTRA_TOOLS: Partial<Record<Category, BuildingDef[]>> = { food: [HEDGE], materials: [CAUSEWAY] };
+
 export function costText(def: BuildingDef): string {
   return Object.entries(def.cost)
     .map(([k, v]) => `${GOODS.find((g) => g.id === k)?.name ?? k} ${v}`)
@@ -85,7 +97,7 @@ export class BuildBar {
     }
     this.openCat = cat;
     const defs = BUILDINGS.filter((b) => b.category === cat && b.buildable !== false);
-    const extra = cat === "food" ? [HEDGE] : [];
+    const extra = EXTRA_TOOLS[cat] ?? [];
     this.popover.replaceChildren(
       ...[...defs, ...extra].map((d) =>
         h(

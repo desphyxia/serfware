@@ -1,5 +1,5 @@
 import { BUILDINGS, type Category } from "../sim/econ/defs";
-import { CATEGORIES, costText, HEDGE, ICONS, type ToolId } from "./buildBar";
+import { CATEGORIES, costText, EXTRA_TOOLS, ICONS, type ToolId } from "./buildBar";
 import { h } from "./dom";
 
 /** Slice a stick direction points at, for `n` slices starting at the top, clockwise; -1 near the centre. */
@@ -90,7 +90,7 @@ export class RadialMenu {
   private choose(it: Item): void {
     if (it.category) {
       this.level = it.category;
-      this.items = [...BUILDINGS.filter((b) => b.category === it.category && b.buildable !== false), ...(it.category === "food" ? [HEDGE] : [])].map((b) => ({ id: b.id, label: b.name, hint: `${costText(b)} · ${b.description}` }));
+      this.items = [...BUILDINGS.filter((b) => b.category === it.category && b.buildable !== false), ...(EXTRA_TOOLS[it.category] ?? [])].map((b) => ({ id: b.id, label: b.name, hint: `${costText(b)} · ${b.description}` }));
       this.sel = -1;
       this.render();
       return;

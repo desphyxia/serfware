@@ -497,6 +497,93 @@ function greenhouse(b: Build): void {
   b.add(...kit.pennant(w / 2 - 0.05, 0.36 + h, d / 2 - 0.05, 0.3));
 }
 
+/** Saltworks: shallow clay pans in a grid, white salt raked into heaps, a rake and a shed. */
+function saltworks(b: Build): void {
+  const { rng } = b;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 2; j++) {
+      const x = -0.55 + i * 0.55;
+      const z = -0.3 + j * 0.62;
+      b.add([kit.box(0.5, 0.06, 0.56, x, 0, z), kit.jitter("#b89a74", rng, 1)]);
+      // Brine, then crust: some pans shine wet, some are white.
+      b.add([kit.box(0.42, 0.012, 0.48, x, 0.055, z), (i + j) % 2 ? "#eef0ee" : "#a9c4c6"]);
+    }
+  for (let i = 0; i < 4; i++) b.add([new THREE.ConeGeometry(rng.range(0.1, 0.15), rng.range(0.14, 0.22), 8).translate(0.95 + (i % 2) * 0.22, 0.08, -0.4 + Math.floor(i / 2) * 0.3), kit.jitter("#f4f4f0", rng, 0.5)]);
+  b.add([kit.box(0.02, 0.02, 0.7, 0.95, 0.18, 0.45, 0.4), kit.C.timberLight], [kit.box(0.2, 0.05, 0.03, 0.83, 0.18, 0.75, 0.4), kit.C.timberLight]);
+  b.place([...kit.plinth(0.55, 0.45, 0.06, rng), ...kit.timberWalls(0.5, 0.4, 0.42, 0.06, rng), ...kit.shingleRoof(0.5, 0.4, 0.2, 0.48, kit.jitter(ROOF.brown, rng, 0.5), rng)], -0.3, -0.95);
+  b.add(...kit.sack(0.6, -0.85, rng, "#f0ece0"), ...kit.pennant(-0.55, 0.68, -0.95, 0.3));
+}
+
+/** Solar kiln: a curved fan of mirrors on a timber frame, focusing on a squat clay furnace. */
+function solarkiln(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.3, 1.1, 0.1, rng));
+  b.add(...kit.roundTower(0.26, 0.55, 0.1, rng, "#b8764e", 0.8));
+  b.add([kit.box(0.14, 0.12, 0.05, 0, 0.24, 0.24), "#ffb050"], [kit.cyl(0.14, 0.1, 0.25, 8, 0, 0.65), "#8a5a3a"]);
+  b.meta.chimney = new THREE.Vector3(0, 0.95, 0);
+  // Mirrors on an arc behind the furnace, each tilted toward it.
+  for (let i = 0; i < 9; i++) {
+    const a = -Math.PI / 2 - 0.9 + (i / 8) * 1.8;
+    const r = 0.85;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    b.add([kit.box(0.04, 0.5, 0.04, x, 0.1, z), kit.C.timber]);
+    const m = new THREE.BoxGeometry(0.26, 0.3, 0.02).rotateX(0.5).rotateY(-a - Math.PI / 2).translate(x, 0.7, z);
+    b.add([m, "#dfe8ee"]);
+  }
+  b.add(...kit.logStack(0.8, 0.5, 1, 0.4, rng), ...kit.pennant(0.3, 0.1, 0.45, 0.4));
+  for (let i = 0; i < 3; i++) b.add([kit.box(0.1, 0.08, 0.1, -0.7 + i * 0.13, 0.1, 0.55), "#9fd4d0"]);
+}
+
+/** Dew condenser: tall stone fins with mesh nets between them over a cistern. */
+function dewcondenser(b: Build): void {
+  const { rng } = b;
+  b.add([kit.cyl(0.5, 0.55, 0.22, 12), kit.jitter(kit.C.stone, rng, 1)], [kit.cyl(0.42, 0.42, 0.02, 12, 0, 0.21), "#6a8a9a"]);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    b.add([kit.box(0.08, 1.4, 0.28, Math.cos(a) * 0.62, 0, Math.sin(a) * 0.62, -a), kit.jitter("#c9bca0", rng, 1.5)]);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a0 = (i / 5) * Math.PI * 2;
+    const a1 = ((i + 1) / 5) * Math.PI * 2;
+    const x = (Math.cos(a0) + Math.cos(a1)) * 0.31;
+    const z = (Math.sin(a0) + Math.sin(a1)) * 0.31;
+    b.add([kit.box(0.7, 0.9, 0.01, x, 0.45, z, -(a0 + a1) / 2 + Math.PI / 2), "#e6ecee"]);
+  }
+  b.add([new THREE.ConeGeometry(0.5, 0.25, 10).translate(0, 1.52, 0), kit.jitter(ROOF.slate, rng, 0.5)]);
+  b.add(...kit.barrel(0.75, 0.45, rng, 0.24), ...kit.pennant(0, 1.64, 0, 0.3));
+}
+
+/** The shellfisher's hut, raised on stilts, with baskets, a rake and nets drying. */
+function shellfisher(b: Build): void {
+  const { rng } = b;
+  for (const [x, z] of [[-0.45, -0.35], [0.45, -0.35], [-0.45, 0.35], [0.45, 0.35]] as const) b.add([kit.box(0.07, 0.42, 0.07, x, 0, z), kit.C.timber]);
+  b.add([kit.box(1.05, 0.06, 0.85, 0, 0.42), kit.C.timberLight]);
+  b.place([...kit.logWalls(0.8, 0.62, 0.5, 0, rng), ...kit.shingleRoof(0.8, 0.62, 0.3, 0.5, kit.jitter(kit.C.roofThatch, rng, 0.5), rng, { thatch: true })], 0, -0.05, 0, 0.48);
+  b.add([kit.box(0.26, 0.04, 0.5, 0, 0.2, 0.62), kit.C.timber]);
+  for (let i = 0; i < 3; i++) b.add([kit.cyl(0.09, 0.07, 0.12, 8, 0.75, 0, -0.3 + i * 0.25), "#a8844e"], [new THREE.IcosahedronGeometry(0.06, 0).scale(1, 0.5, 1).translate(0.75, 0.12, -0.3 + i * 0.25), "#3a3642"]);
+  b.add([kit.box(0.02, 0.5, 0.5, -0.75, 0.1, 0.1), "#c9bfa8"], [kit.box(0.03, 0.62, 0.03, -0.75, 0, -0.18), kit.C.timber], [kit.box(0.03, 0.62, 0.03, -0.75, 0, 0.38), kit.C.timber]);
+  b.add(...kit.pennant(0.35, 1.1, -0.1, 0.3));
+}
+
+/** The tide mill: a stone mill house on the water's edge with an undershot wheel on the sea side. */
+function tidemill(b: Build): void {
+  const { rng } = b;
+  const c = cottage(rng, 1.15, 0.95, 0.9, { stone: true, roof: ROOF.slate });
+  b.add(...c.parts);
+  b.meta.chimney = c.chimney;
+  // The wheel, on the -z (sea) side, half down in its race.
+  const wheel: Part[] = [[new THREE.TorusGeometry(0.45, 0.04, 6, 16).rotateY(Math.PI / 2), kit.C.timber]];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    wheel.push([new THREE.BoxGeometry(0.2, 0.03, 0.14).translate(0, 0.45, 0).rotateX(a), kit.C.timberLight]);
+  }
+  wheel.push([new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8).rotateZ(Math.PI / 2), "#4a4e56"]);
+  b.place(wheel, 0.2, -0.75, Math.PI / 2, 0.3);
+  b.add([kit.box(0.9, 0.12, 0.3, 0.2, 0, -0.75), kit.C.stoneDark], [kit.box(0.08, 0.5, 0.35, -0.28, 0, -0.75), kit.C.stone], [kit.box(0.08, 0.5, 0.35, 0.68, 0, -0.75), kit.C.stone]);
+  b.add(...kit.sack(0.7, 0.6, rng), ...kit.sack(0.85, 0.45, rng, "#f1e6cc"), ...kit.pennant(-0.5, c.top - 0.05, 0, 0.35));
+}
+
 /** The well: a round stone curb under a little shingled roof, with a windlass and bucket. */
 function well(b: Build): void {
   const { rng } = b;
@@ -694,6 +781,11 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   treehouse,
   waystation,
   greenhouse,
+  saltworks,
+  solarkiln,
+  dewcondenser,
+  shellfisher,
+  tidemill,
   pasture,
   butcher,
   coalmine: (b) => mine(b, "coal"),

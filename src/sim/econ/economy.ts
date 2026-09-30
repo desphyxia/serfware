@@ -707,7 +707,7 @@ export class Economy {
     if (land.use[tile] === Use.Building) return { ok: false, reason: "Buildings on the flats stand on stilts already." };
     if (this.takeTool(p, goodId("stone")) < 0) return { ok: false, reason: "A causeway needs a stone in storage." };
     land.causeway[tile] = 1;
-    land.floodVersion++;
+    land.causewayVersion++;
     this.graphVersion++;
     return { ok: true };
   }

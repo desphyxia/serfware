@@ -129,6 +129,7 @@ export class LandUse {
   floodVersion = 0;
   /** Raised causeways over the flats: roads that stay dry at high tide. */
   readonly causeway: Uint8Array;
+  causewayVersion = 0;
   /** Shellfish on the flats, gathered at low tide. */
   readonly shell: Uint8Array;
   /** Sand blown over the ground by storms (0..1): slows roads until traffic clears it. */

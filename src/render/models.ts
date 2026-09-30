@@ -422,6 +422,43 @@ export function sledgeGeometry(): THREE.BufferGeometry {
   return merge(parts);
 }
 
+/**
+ * A salt-crystal spire: a cluster of long six-sided prisms, pale rose to white, leaning out from
+ * a crusted base. They catch the evening light and glow faintly at night (the renderer tints them).
+ */
+export function spireGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(307);
+  const parts: Part[] = [[new THREE.CylinderGeometry(0.55, 0.7, 0.18, 8).translate(0, 0.09, 0), "#d8cfc6"]];
+  for (let i = 0; i < 7; i++) {
+    const h = i === 0 ? 2.6 : rng.range(0.7, 1.8);
+    const r = i === 0 ? 0.2 : rng.range(0.08, 0.15);
+    const g = new THREE.CylinderGeometry(r * 0.25, r, h, 6).translate(0, h / 2, 0);
+    const a = rng.range(0, Math.PI * 2);
+    const lean = i === 0 ? 0.05 : rng.range(0.15, 0.5);
+    g.rotateZ(lean).rotateY(a).translate(i === 0 ? 0 : Math.cos(a) * 0.25, 0.05, i === 0 ? 0 : Math.sin(a) * 0.25);
+    parts.push([g, kit.jitter(rng.pick(["#f3e6e8", "#e8d2da", "#fbf6f2", "#dcc8e0"]), rng, 1)]);
+  }
+  return merge(parts);
+}
+
+/** A small rowing boat (front +Z), moored by the shellfisher, fisher and tide mill. */
+export function rowboatGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(71);
+  const h = kit.hull(1.3, 0.3, 0.22, rng, "#6e4a34");
+  const parts = h.parts;
+  parts.push([kit.box(0.5, 0.03, 0.12, 0, 0.16, -0.05), kit.C.timberLight], [kit.box(0.02, 0.02, 0.9, 0.18, 0.24, 0, 0.1), kit.C.timberLight]);
+  return merge(parts);
+}
+
+/** Stilts under a building on the tidal flats: posts at the corners and cross-braces. */
+export function stiltsGeometry(): THREE.BufferGeometry {
+  const parts: Part[] = [];
+  for (const [x, z] of [[-0.55, -0.45], [0.55, -0.45], [-0.55, 0.45], [0.55, 0.45], [0, -0.45], [0, 0.45]] as const) parts.push([box(0.08, 0.5, 0.08, x, -0.45, z), TIMBER]);
+  for (const z of [-0.45, 0.45]) parts.push([new THREE.BoxGeometry(1.2, 0.04, 0.04).rotateZ(0.35).translate(0, -0.2, z), TIMBER]);
+  parts.push([box(1.25, 0.06, 1.0, 0, -0.05, 0), "#8a6444"]);
+  return merge(parts);
+}
+
 export function flagGeometry(): THREE.BufferGeometry {
   return merge([
     [cyl(0.035, 0.045, 1.05, 5), "#d8cbb0"],
@@ -498,6 +535,15 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
       break;
     case "ironore":
       parts = lumps("#a0583f", 4, 0.055);
+      break;
+    case "salt":
+      parts = sack("#f4f2ec");
+      break;
+    case "glass":
+      parts = [0, 1, 2].map((i) => [kit.box(0.14, 0.012, 0.18, 0, 0.02 + i * 0.014, 0, i * 0.2), "#bfe4e2"] as Part);
+      break;
+    case "shellfish":
+      parts = basket(lumps("#3a3642", 5, 0.04));
       break;
     case "obsidian":
       // Volcanic glass: black, conchoidal shards with a faint violet sheen.

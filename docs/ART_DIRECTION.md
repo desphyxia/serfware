@@ -295,3 +295,21 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
   shards.
 - New kit: the waystation (stone hut, turf cone roof, fat chimney, guiding lantern, parked
   sledge) and the greenhouse (glass over warm beds, fed by a clay steam pipe).
+
+### Saltglass and Tidewater (batch 15)
+
+- Saltglass ground is salt crust over pale clay: near white with a rose cast. Crystal spires are
+  clusters of long six-sided prisms, rose to white, that glow faintly after dark.
+- Sandstorms send low ochre plumes streaming across the flats. Sand drifts lie over the ground
+  and roads, with wind ripples, until traffic clears them (a third tile-data texture).
+- Tides: the sea near the Tidewater flats rises and falls with the moons, so the flats really go
+  under at high water. The sea mesh extends over the flats, and `tideLift` raises it there.
+- Causeways are stone decks on six-sided piers, clear of the highest tide. Buildings on the
+  flats stand on stilts. Rowing boats are moored by the shellfisher, fisher and tide mill, and
+  ride the tide.
+- New kit:
+  - the saltworks: clay pans, brine and white crust, salt heaps
+  - the solar kiln: a fan of mirrors on a clay furnace
+  - the dew condenser: stone fins with nets over a cistern
+  - the shellfisher: a hut on stilts with baskets
+  - the tide mill: a stone mill with an undershot wheel
