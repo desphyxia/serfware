@@ -414,6 +414,19 @@ export class Game {
     this.toasts.show(`Hamlet: ${n} buildings placed.`, "good");
   }
 
+  /** Screenshot hook: a row of building models near the camera focus (see EconView.showcase). */
+  showcase(ids: string[], distance = 12, progress?: number[]): void {
+    const R = this.world.planet.params.radius;
+    const east = new THREE.Vector3(0, 1, 0).cross(this.cam.focus).normalize();
+    const north = this.cam.focus.clone().normalize().cross(east).normalize();
+    // A few tiles north of the focus, clear of the Hearthship.
+    const f = this.cam.focus.clone().normalize().multiplyScalar(R).addScaledVector(north, 9).normalize();
+    const spacing = 3.2;
+    const start = f.clone().multiplyScalar(R).addScaledVector(east, (-(ids.length - 1) * spacing) / 2);
+    this.view.econ.showcase(ids, start, start.clone().addScaledVector(east, 1), this.session.player, spacing, progress);
+    this.cam.lookAt(f.clone().multiplyScalar(R), distance);
+  }
+
   /** Screenshot hook: push every weather front to the far side of the planet. */
   clearWeather(): void {
     const f = this.cam.focus;

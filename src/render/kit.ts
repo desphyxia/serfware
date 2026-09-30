@@ -57,6 +57,8 @@ export const C = {
   logEnd: "#c9a36e",
   plank: "#d9b27a",
   rope: "#c9bfa8",
+  /** Marker for the owner's colour: replaced per building by the material. */
+  player: "#ff00ff",
 } as const;
 
 export const box = (w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0): THREE.BufferGeometry => {
@@ -306,6 +308,147 @@ export function flowerBox(x: number, y: number, z: number, rng: Rng): Part[] {
   return parts;
 }
 
+/** Walls of coursed stone blocks around a rectangle. */
+export function stoneWalls(w: number, d: number, h: number, y: number, rng: Rng, tone: Colour = C.stone): Part[] {
+  const parts: Part[] = [[box(w - 0.04, h, d - 0.04, 0, y), new THREE.Color(tone).multiplyScalar(0.8)]];
+  const course = 0.13;
+  const rows = Math.max(2, Math.round(h / course));
+  const rh = h / rows;
+  for (let r = 0; r < rows; r++) {
+    const yy = y + r * rh;
+    for (const [len, along, off] of [
+      [w, "x", d / 2],
+      [w, "x", -d / 2],
+      [d, "z", w / 2],
+      [d, "z", -w / 2],
+    ] as const) {
+      let s0 = -len / 2 + (r % 2 ? rng.range(0.05, 0.12) : 0);
+      if (r % 2) parts.push([along === "x" ? box(s0 + len / 2, rh - 0.012, 0.06, (-len / 2 + s0) / 2, yy, off) : box(0.06, rh - 0.012, s0 + len / 2, off, yy, (-len / 2 + s0) / 2), jitter(tone, rng, 2)]);
+      while (s0 < len / 2 - 0.01) {
+        const l = Math.min(len / 2 - s0, rng.range(0.14, 0.26));
+        const c = s0 + l / 2;
+        const g = along === "x" ? box(l - 0.012, rh - 0.012, 0.06, c, yy, off) : box(0.06, rh - 0.012, l - 0.012, off, yy, c);
+        parts.push([g, jitter(tone, rng, 2)]);
+        s0 += l;
+      }
+    }
+  }
+  return parts;
+}
+
+/** A round stone tower of coursed blocks. */
+export function roundTower(r: number, h: number, y: number, rng: Rng, tone: Colour = C.stone, taper = 0.9): Part[] {
+  const parts: Part[] = [[cyl(r * taper - 0.02, r - 0.02, h, 12, 0, y), new THREE.Color(tone).multiplyScalar(0.8)]];
+  const course = 0.14;
+  const rows = Math.max(2, Math.round(h / course));
+  const rh = h / rows;
+  for (let i = 0; i < rows; i++) {
+    const f = i / rows;
+    const rr = r * (1 - (1 - taper) * f);
+    const n = Math.max(8, Math.round((Math.PI * 2 * rr) / 0.22));
+    const off = i % 2 ? Math.PI / n : 0;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + off;
+      const len = ((Math.PI * 2 * rr) / n) * 0.96;
+      const g = box(len, rh - 0.012, 0.06, 0, 0, 0).rotateY(-a + Math.PI / 2).translate(Math.cos(a) * rr, y + i * rh, Math.sin(a) * rr);
+      parts.push([g, jitter(tone, rng, 2)]);
+    }
+  }
+  return parts;
+}
+
+/** A conical roof of shingle rings with a finial. */
+export function coneRoof(r: number, h: number, y: number, colour: Colour, rng: Rng): Part[] {
+  const parts: Part[] = [[new THREE.ConeGeometry(r * 0.97, h * 0.97, 16).translate(0, y + h / 2, 0), new THREE.Color(colour).multiplyScalar(0.7)]];
+  const rings = Math.max(3, Math.round(h / 0.13));
+  const base = new THREE.Color(colour);
+  for (let i = 0; i < rings; i++) {
+    const f0 = i / rings;
+    const rr = r * (1 - f0) + 0.03;
+    const n = Math.max(6, Math.round((Math.PI * 2 * rr) / 0.16));
+    const slant = Math.atan2(h, r);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + (i % 2 ? Math.PI / n : 0);
+      const len = h / rings / Math.sin(slant) * 1.4;
+      const g = new THREE.BoxGeometry(((Math.PI * 2 * rr) / n) * 1.02, 0.025, len).rotateX(slant + 0.08).translate(0, 0, 0).rotateY(-a + Math.PI / 2);
+      const c = base.clone();
+      c.offsetHSL(rng.range(-0.01, 0.01), rng.range(-0.04, 0.04), rng.range(-0.06, 0.06));
+      parts.push([g.translate(Math.cos(a) * rr * 0.93, y + f0 * h + 0.02, Math.sin(a) * rr * 0.93), c]);
+    }
+  }
+  parts.push([new THREE.SphereGeometry(0.045, 6, 4).translate(0, y + h + 0.02, 0), "#3a3a3a"]);
+  return parts;
+}
+
+/** A small pennant in the owner's colour on a pole, rising from (x, y, z). */
+export function pennant(x: number, y: number, z: number, h = 0.5): Part[] {
+  const flag = new THREE.BufferGeometry();
+  flag.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 0.28, -0.05, 0, 0, -0.14, 0, 0, 0, 0, 0, -0.14, 0, 0.28, -0.05, 0], 3));
+  flag.computeVertexNormals();
+  return [
+    [cyl(0.018, 0.022, h, 5, x, y, z), C.timber],
+    [flag.translate(x + 0.02, y + h - 0.02, z), C.player],
+  ];
+}
+
+/** A hanging banner in the owner's colour on a wall facing +Z. */
+export function banner(x: number, y: number, z: number, w = 0.26, h = 0.42): Part[] {
+  return [
+    [box(w + 0.08, 0.03, 0.03, x, y, z + 0.02), C.timber],
+    [box(w, h, 0.015, x, y - h, z + 0.03), C.player],
+    [box(w, 0.04, 0.02, x, y - h - 0.02, z + 0.035), "#d8b25a"],
+  ];
+}
+
+export function hayBale(x: number, z: number, rng: Rng, ry = 0): Part[] {
+  const c = jitter("#d8b95c", rng, 1.5);
+  return [[box(0.34, 0.2, 0.22, x, 0, z, ry), c], [box(0.35, 0.02, 0.23, x, 0.08, z, ry), new THREE.Color(c).multiplyScalar(0.75)]];
+}
+
+export function sack(x: number, z: number, rng: Rng, c: Colour = "#cdbb95"): Part[] {
+  return [
+    [new THREE.SphereGeometry(0.09, 8, 6).scale(1, 1.1, 0.8).translate(x, 0.09, z), jitter(c, rng)],
+    [cyl(0.03, 0.045, 0.05, 6, x, 0.17, z), jitter(c, rng)],
+  ];
+}
+
+/** Scaffolding around a footprint: poles, ledgers and a couple of plank decks. */
+export function scaffolding(w: number, d: number, h: number): Part[] {
+  const parts: Part[] = [];
+  const wood = "#b08a5c";
+  const xs = [-w / 2 - 0.12, w / 2 + 0.12];
+  const zs = [-d / 2 - 0.12, d / 2 + 0.12];
+  const nx = Math.max(2, Math.round(w / 0.7) + 1);
+  const nz = Math.max(2, Math.round(d / 0.7) + 1);
+  for (let i = 0; i < nx; i++) for (const z of zs) parts.push([cyl(0.025, 0.025, h, 5, xs[0]! + ((xs[1]! - xs[0]!) * i) / (nx - 1), 0, z), wood]);
+  for (let i = 1; i < nz - 1; i++) for (const x of xs) parts.push([cyl(0.025, 0.025, h, 5, x, 0, zs[0]! + ((zs[1]! - zs[0]!) * i) / (nz - 1)), wood]);
+  for (let y = 0.45; y < h; y += 0.45) {
+    for (const z of zs) parts.push([box(w + 0.3, 0.03, 0.03, 0, y, z), wood]);
+    for (const x of xs) parts.push([box(0.03, 0.03, d + 0.3, x, y, 0), wood]);
+    for (const z of zs) parts.push([box(w + 0.28, 0.025, 0.14, 0, y + 0.03, z + Math.sign(z) * -0.05), "#c8a06a"]);
+  }
+  // Diagonal braces on the long sides.
+  for (const z of zs) {
+    const len = Math.hypot(w, h * 0.8);
+    parts.push([new THREE.BoxGeometry(len, 0.025, 0.025).rotateZ(Math.atan2(h * 0.8, w)).translate(0, h * 0.4, z), wood]);
+  }
+  return parts;
+}
+
+/** Marked-out ground: corner pegs joined by string, and a few tools. */
+export function markedGround(w: number, d: number): Part[] {
+  const parts: Part[] = [];
+  const cs = [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]] as const;
+  for (const [x, z] of cs) parts.push([box(0.04, 0.22, 0.04, x, 0, z), "#b08a5c"]);
+  for (let i = 0; i < 4; i++) {
+    const [ax, az] = cs[i]!;
+    const [bx, bz] = cs[(i + 1) % 4]!;
+    const len = Math.hypot(bx - ax, bz - az);
+    parts.push([box(len, 0.008, 0.008, (ax + bx) / 2, 0.16, (az + bz) / 2, -Math.atan2(bz - az, bx - ax)), "#efe6d2"]);
+  }
+  return parts;
+}
+
 function colourOf(c: Colour): THREE.Color {
   return c instanceof THREE.Color ? c : new THREE.Color(c);
 }
@@ -342,7 +485,7 @@ function bakeAO(geo: THREE.BufferGeometry): void {
     const r = col.getX(i);
     const g = col.getY(i);
     const b = col.getZ(i);
-    if (isWindow(r, g, b)) continue;
+    if (isWindow(r, g, b) || (r > 0.95 && g < 0.05 && b > 0.95)) continue;
     const y = pos.getY(i);
     const ground = 0.62 + 0.38 * smooth(0, 0.45, y);
     const down = nor.getY(i) < -0.5 ? 0.55 : 1;

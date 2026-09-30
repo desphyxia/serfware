@@ -1,6 +1,8 @@
 import * as THREE from "three/webgpu";
 import {
   BRDF_Lambert,
+  Discard,
+  Fn,
   clamp,
   cos,
   diffuseColor,
@@ -42,6 +44,8 @@ import {
  */
 
 /** Look controls, shared by all painterly materials; the renderer tunes them per time of day. */
+const WHITE = new THREE.Color(1, 1, 1);
+
 export const PAINT = {
   /** 0 smooth .. 1 hard bands. */
   banding: uniform(0.45),
@@ -111,6 +115,12 @@ export interface PainterlyOptions {
   windows?: boolean;
   /** Snow settles on upward faces (roofs) as PAINT.snow rises. */
   snowy?: boolean;
+  /** Parts in the kit's player marker colour take the object's `userData.tint`. */
+  playerTint?: boolean;
+  /** Left behind: dark, faded, with moss and creepers growing over it. */
+  overgrown?: boolean;
+  /** Construction: nothing above the object's `userData.clip` height (model space) is drawn. */
+  clip?: boolean;
   emissive?: THREE.ColorRepresentation;
   transparent?: boolean;
   opacity?: number;
@@ -139,14 +149,36 @@ export class PainterlyMaterial extends THREE.MeshStandardNodeMaterial {
       const n = big.mul(0.6).add(fine.mul(0.4));
       this.colorNode = materialColor.mul(float(1).add(n.mul(0.09 * brush)));
     }
-    if (o.snowy) {
-      // Fold the vertex colour in here (so the material doesn't multiply it again), then lay
-      // snow on faces that look up, patchy at the edges.
-      const base = vec3((this.colorNode ?? materialColor) as THREE.Node<"vec3">).mul(o.vertexColors ? vec3(vertexColor()) : vec3(1, 1, 1));
-      const upness = dot(normalize(normalWorld), normalize(positionWorld));
+    if (o.snowy || o.playerTint || o.overgrown || o.clip) {
+      // Fold the vertex colour in here (so the material doesn't multiply it again), then apply
+      // the per-object touches.
+      const raw = vec3(vertexColor());
+      let col: THREE.Node<"vec3"> = vec3((this.colorNode ?? materialColor) as THREE.Node<"vec3">).mul(o.vertexColors ? raw : vec3(1, 1, 1));
+      const wUp = dot(normalize(normalWorld), normalize(positionWorld));
       const patch = mx_noise_float(positionWorld.mul(3.1)).mul(0.25);
-      const cover = smoothstep(0.5, 0.8, upness.add(patch)).mul(smoothstep(0.05, 0.6, PAINT.snow.add(patch.mul(0.5))));
-      this.colorNode = vec4(mix(base, vec3(0.9, 0.93, 0.97), cover), 1);
+      if (o.playerTint) {
+        const tint = uniform(new THREE.Color(1, 1, 1)).onObjectUpdate(({ object }) => (object?.userData.tint as THREE.Color | undefined) ?? WHITE);
+        const isPlayer = step(0.95, raw.x).mul(step(raw.y, 0.05)).mul(step(0.95, raw.z));
+        col = mix(col, rgb(tint).mul(float(0.92).add(patch.mul(0.2))), isPlayer);
+      }
+      if (o.overgrown) {
+        const grey = dot(col, vec3(0.3, 0.59, 0.11));
+        col = mix(col, vec3(grey), 0.55).mul(0.55);
+        const moss = smoothstep(0.1, 0.45, mx_noise_float(positionWorld.mul(1.7)).add(float(0.35).sub(positionGeometry.y.mul(0.3))).add(wUp.mul(0.2)));
+        col = mix(col, vec3(0.16, 0.24, 0.1).mul(float(0.8).add(patch)), moss.mul(0.8));
+      }
+      if (o.snowy) {
+        const cover = smoothstep(0.5, 0.8, wUp.add(patch)).mul(smoothstep(0.05, 0.6, PAINT.snow.add(patch.mul(0.5))));
+        col = mix(col, vec3(0.9, 0.93, 0.97), cover);
+      }
+      if (o.clip) {
+        const clipAt = uniform(1e9).onObjectUpdate(({ object }) => (object?.userData.clip as number | undefined) ?? 1e9);
+        const body = col;
+        this.colorNode = Fn(() => {
+          Discard(positionGeometry.y.greaterThan(clipAt));
+          return vec4(body, 1);
+        })();
+      } else this.colorNode = vec4(col, 1);
       this.vertexColors = false;
     }
     if (o.wind) {
