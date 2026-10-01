@@ -797,3 +797,67 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
   cache.set(key, g);
   return g;
 }
+
+/** Offset a list of parts (shift each geometry). */
+function shifted(parts: Part[], x: number, z: number, ry = 0): Part[] {
+  return parts.map(([g, c]) => [g.rotateY(ry).translate(x, 0, z), c] as Part);
+}
+
+/**
+ * A nomad caravan's wagon: a long bed on four spoked wheels, a hooped canvas cover patched in
+ * faded dyes, bundles and pots lashed on behind, and a lantern on a pole at the front.
+ * Points along +z (the ox walks ahead of it).
+ */
+export function wagonGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(41);
+  const parts: Part[] = [];
+  parts.push([kit.box(0.5, 0.06, 0.95, 0, 0.2, 0), C_WAGON]);
+  for (const x of [-0.24, 0.24]) parts.push([kit.box(0.03, 0.12, 0.95, x, 0.26, 0), C_WAGON]);
+  for (const [x, z] of [[-0.29, 0.3], [0.29, 0.3], [-0.29, -0.3], [0.29, -0.3]] as const) {
+    parts.push([new THREE.TorusGeometry(0.15, 0.022, 5, 12).rotateY(Math.PI / 2).translate(x, 0.16, z), "#4a3220"]);
+    parts.push([new THREE.CylinderGeometry(0.03, 0.03, 0.06, 6).rotateZ(Math.PI / 2).translate(x, 0.16, z), "#3a2818"]);
+  }
+  // Canvas: half a cylinder over the bed, patched.
+  const canvas = new THREE.CylinderGeometry(0.27, 0.27, 0.8, 10, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, 0.32, 0);
+  parts.push([canvas, "#d9c7a0"]);
+  for (const [z, c] of [[-0.18, "#b86a4a"], [0.12, "#6a8a9a"], [0.28, "#c9a35a"]] as const) parts.push([new THREE.CylinderGeometry(0.275, 0.275, 0.14, 10, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, 0.32, z), kit.jitter(c, rng, 0.5)]);
+  // Bundles and pots behind, a pole and lantern ahead, a shaft for the ox.
+  parts.push(...kit.sack(0.1, -0.52, rng, "#a88a5a").map(([g, c]) => [g.translate(0, 0.2, 0), c] as Part));
+  parts.push([new THREE.SphereGeometry(0.07, 7, 5).translate(-0.12, 0.3, -0.5), "#9a5a3a"]);
+  parts.push([kit.cyl(0.012, 0.012, 0.55, 5, 0.2, 0.26, 0.45), "#4a3220"]);
+  parts.push([new THREE.SphereGeometry(0.04, 6, 4).translate(0.2, 0.83, 0.45), kit.C.window]);
+  for (const x of [-0.12, 0.12]) parts.push([kit.box(0.025, 0.025, 0.55, x, 0.2, 0.72), "#5a3c26"]);
+  return merge(parts);
+}
+
+const C_WAGON = "#7a5638";
+
+/**
+ * A hamlet in the wild: three small cottages, thatched or turfed, around a well and a
+ * vegetable patch, with a fence of hurdles and a stack of firewood. Smoke rises from one
+ * chimney (the renderer adds it).
+ */
+export function hamletGeometry(): THREE.BufferGeometry {
+  const rng = new kit.Rng(73);
+  const parts: Part[] = [];
+  const cottage = (x: number, z: number, ry: number, w: number, d: number, roof: string) => {
+    const c: Part[] = [...kit.timberWalls(w, d, 0.42, 0, rng), ...kit.shingleRoof(w, d, 0.36, 0.42, roof, rng, { thatch: roof === kit.C.roofThatch }), ...kit.door(0, 0, d / 2 + 0.01, rng), ...kit.windowPart(w / 4, 0.24, d / 2 + 0.01, rng, kit.C.shutterGreen)];
+    parts.push(...shifted(c, x, z, ry));
+  };
+  cottage(-0.7, -0.3, 0.4, 0.7, 0.55, kit.C.roofThatch);
+  cottage(0.75, -0.45, -0.5, 0.6, 0.5, kit.C.roofMoss);
+  cottage(0.1, 0.8, Math.PI, 0.65, 0.5, kit.C.roofThatch);
+  parts.push(...kit.chimney(-0.85, -0.35, 0.95, 0.42, rng));
+  // Well, garden, woodpile, hurdles.
+  parts.push([kit.cyl(0.14, 0.15, 0.16, 10, 0.05, 0, 0.05), kit.C.stone]);
+  for (const x of [-0.1, 0.2]) parts.push([kit.box(0.025, 0.36, 0.025, x, 0.16, 0.05), kit.C.timber]);
+  parts.push([kit.box(0.42, 0.04, 0.04, 0.05, 0.5, 0.05), kit.C.timber]);
+  parts.push([kit.box(0.6, 0.03, 0.4, -0.8, 0, 0.55), "#5a4430"]);
+  for (let i = 0; i < 5; i++) parts.push([new THREE.SphereGeometry(0.05, 5, 4).translate(-1.0 + i * 0.1, 0.06, 0.55 + (i % 2) * 0.1), "#5f8a3e"]);
+  parts.push(...kit.logStack(1.0, 0.45, 2, 0.4, rng, 0.3));
+  for (let i = 0; i < 7; i++) {
+    const a = 2.4 + i * 0.32;
+    parts.push([kit.box(0.34, 0.16, 0.03, Math.cos(a) * 1.45, 0, Math.sin(a) * 1.45, -a + Math.PI / 2), "#8a6a44"]);
+  }
+  return merge(parts);
+}

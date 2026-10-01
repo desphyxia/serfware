@@ -899,3 +899,20 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .panel.almanac .alm-by { margin: 0 0 4px; font-size: 0.85em; font-style: italic; opacity: 0.8; }
 .panel.almanac .alm-unlocks { margin: 8px 0 0; font-size: 0.88em; color: #6a3a10; font-weight: 600; }
 .bb-pop .pop-item.locked { opacity: 0.45; cursor: not-allowed; }
+
+/* Diplomacy (J) */
+.panel.diplomacy .panel-body { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
+.panel.diplomacy .dip-rep { margin: 0; font-style: italic; opacity: 0.85; }
+.panel.diplomacy .dip-offer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; background: rgba(240, 190, 90, 0.16); border: 1px solid rgba(240, 190, 90, 0.45); }
+.panel.diplomacy .dip-offer span { flex: 1; font-size: 0.92em; }
+.panel.diplomacy .dip-card { padding: 10px 12px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); }
+.panel.diplomacy .dip-card.fallen { opacity: 0.55; }
+.panel.diplomacy .dip-card h3 { margin: 0 0 4px; font-size: 1.05em; display: flex; align-items: center; gap: 8px; }
+.panel.diplomacy .dip-temper { font-size: 0.72em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 10px; background: rgba(255, 255, 255, 0.12); }
+.panel.diplomacy .dip-temper.builder { background: rgba(120, 180, 110, 0.35); }
+.panel.diplomacy .dip-temper.trader { background: rgba(220, 170, 70, 0.35); }
+.panel.diplomacy .dip-temper.warden { background: rgba(200, 90, 80, 0.4); }
+.panel.diplomacy .dip-line { margin: 2px 0; font-size: 0.9em; opacity: 0.9; }
+.panel.diplomacy .dip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.panel.diplomacy .dip-actions .btn { font-size: 0.85em; padding: 4px 9px; }
+.panel.diplomacy .btn:disabled { opacity: 0.45; cursor: default; }

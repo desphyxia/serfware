@@ -346,6 +346,20 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
 - Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
   gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.
 
+### Diplomacy and the wild (batch 22)
+
+- **The Diplomacy panel** (J) is a plain ledger: an offer waiting is a warm amber strip with
+  Accept and Decline; each settlement is a card with its name, a small temperament badge
+  (Builder green, Trader ochre, Warden red), its reputation in a word, the treaties in force
+  with days left, prisoners held either way, and buttons to offer or to break.
+- **Nomad caravans** are covered wagons with a canvas of faded stripes (sand, slate blue,
+  madder), a lantern on a pole and bundles lashed behind, drawn by an ox in the shafts.
+- **Hamlets** are three small cottages, thatched or turfed, round a well and a vegetable
+  patch inside a ring of hurdles, with a woodpile and smoke from one chimney. They vanish into
+  the settlement when they join.
+- **Native beasts** (mossbacks; glassbacks on worlds with native life) are big, slow,
+  moss-coated grazers in small herds that wander the open land and shy away from settled ground.
+
 ### Adversity (batch 21)
 
 - **Warnings** appear in the weather chip ("⚠ Flood in 6 h", "⚠ Falling stars now") as well

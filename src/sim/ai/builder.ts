@@ -4,6 +4,8 @@ import { frontierTiles, placeConnected, placeOn } from "../econ/planner";
 import { goodId } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
+import type { TreatyKind } from "../econ/diplomacy";
+import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
 
@@ -20,6 +22,8 @@ export class AiBuilder {
   constructor(
     readonly player: number,
     private readonly rng: Rng,
+    readonly personality: Personality = "builder",
+    readonly level: AiLevel = "normal",
   ) {}
 
   private started = false;
@@ -35,7 +39,7 @@ export class AiBuilder {
       const pool = eco.attackersFor(pl, t).length;
       if (pool < 2) continue;
       for (let n = 2; n <= pool; n++) {
-        if (eco.attackOdds(pl, t, n) >= 0.7) return w.command({ t: "attack", target: t.id, count: Math.min(pool, n + 1), player: pl }).ok;
+        if (eco.attackOdds(pl, t, n) >= AI_LEVELS[this.level].odds) return w.command({ t: "attack", target: t.id, count: Math.min(pool, n + 1), player: pl }).ok;
       }
     }
     return false;
@@ -47,9 +51,11 @@ export class AiBuilder {
     if (!this.started) {
       // Lighter garrisons than a cautious player: this rival would rather grow.
       this.started = true;
-      w.command({ t: "garrison", zone: "frontier", value: 0.4, player: pl });
-      w.command({ t: "garrison", zone: "inland", value: 0.2, player: pl });
+      const [frontier, inland] = this.personality === "warden" ? [0.7, 0.4] : this.personality === "trader" ? [0.3, 0.15] : [0.4, 0.2];
+      w.command({ t: "garrison", zone: "frontier", value: frontier, player: pl });
+      w.command({ t: "garrison", zone: "inland", value: inland, player: pl });
     }
+    const lv = AI_LEVELS[this.level];
     const mine = eco.buildings.filter((b) => b.alive && b.owner === pl);
     const sites = mine.filter((b) => !b.built).length;
     const stock = eco.storageTotals(pl);
@@ -57,8 +63,12 @@ export class AiBuilder {
     const stone = stock[goodId("stone")] ?? 0;
     const log = stock[goodId("log")] ?? 0;
     this.thoughts++;
-    if (this.thoughts % 4 === 0 && this.attack(w)) return;
-    if (sites >= 3 || (sites >= 1 && plank < 2)) return;
+    if (this.thoughts % lv.every !== 0) return;
+    if (this.thoughts % 6 === 3) this.talk(w);
+    // Wardens look for a fight often, Traders seldom, Builders hardly ever.
+    const temper = this.personality === "warden" ? 3 : this.personality === "trader" ? 8 : 12;
+    if (this.thoughts % temper === 0 && this.attack(w)) return;
+    if (sites >= lv.sites || (sites >= 1 && plank < 2)) return;
     // Keep enough hands free: when nobody is idle, build homes before anything else.
     const idle = eco.population(pl).idle;
     const count = (id: string) => mine.filter((b) => b.def.id === id).length;
@@ -96,8 +106,36 @@ export class AiBuilder {
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));
     want(count("butcher") < 1 && count("pasture") > 0, near("butcher"));
+    // Temperament: Builders make their town pleasant; Wardens arm.
+    want(this.personality === "builder" && count("flowerbed") < Math.floor(mine.length / 10), near("flowerbed"));
+    want(this.personality === "builder" && count("bench") < Math.floor(mine.length / 14), near("bench"));
+    want(this.personality === "warden" && count("toolsmith") > 0 && count("weaponsmith") < 1, near("weaponsmith"));
     want(lanterns < 3 + Math.floor(mine.length / 3), () => this.expand(w, plank, stone));
-    for (const fn of wants.slice(0, 5)) if (fn()) return;
+    for (const fn of wants.slice(0, lv.wants)) if (fn()) return;
+  }
+
+  /** Diplomacy: offer what this temperament wants, and get its prisoners home. */
+  private talk(w: World): void {
+    const eco = w.economy;
+    const pl = this.player;
+    const dip = eco.diplomacy;
+    const offer = (q: number, kind: TreatyKind) => {
+      const last = [...dip.proposals].reverse().find((x) => x.from === pl && x.to === q && x.kind === kind);
+      if (last && (last.open || w.tick - last.at < 4 * eco.dayTicks)) return false;
+      return w.command({ t: "propose", to: q, kind, player: pl }).ok;
+    };
+    for (let q = 0; q < eco.keeps.length; q++) {
+      if (q === pl || eco.keeps[q] === undefined || eco.defeated[q]) continue;
+      const held = eco.people.some((x) => x.alive && x.captive !== undefined && ((x.owner === pl && x.captive === q) || (x.owner === q && x.captive === pl)));
+      if (held && offer(q, "prisoners")) return;
+      if (dip.rep(q) < 30) continue;
+      if (this.personality === "trader") {
+        if (!dip.between(pl, q, "trade").length && offer(q, "trade")) return;
+        if (!dip.between(pl, q, "roads").length && dip.rep(q) >= 45 && offer(q, "roads")) return;
+      } else if (this.personality === "builder" && w.tick >= eco.peaceUntil - eco.dayTicks) {
+        if (!dip.truce(pl, q) && offer(q, "truce")) return;
+      }
+    }
   }
 
   /** Where to build next: home at first, later around a random lit lantern. */

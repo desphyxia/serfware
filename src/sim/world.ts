@@ -4,6 +4,7 @@ import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { Feature, LandUse } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
+import { answerOffer, rivalFor, type AiLevel, type Personality } from "./ai/personality";
 import { Climate, CLIMATE_STEP } from "./climate/climate";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
@@ -25,6 +26,10 @@ export interface WorldOptions {
   stakes?: "wounded" | "mortal";
   /** How hard adversity bites: floods, blight, cold snaps, meteors, pests, fire (default Honest). */
   difficulty?: Difficulty;
+  /** How sharp the AI rivals play (default Normal). */
+  aiLevel?: AiLevel;
+  /** Each rival's temperament, in order (otherwise the seed decides). */
+  personalities?: Personality[];
   /** Game days before anyone may attack. */
   peaceDays?: number;
   /** Another planet of the star system: its physics and climate (see sim/system). */
@@ -89,7 +94,18 @@ export class World implements WorldHost {
     this.rivals = bare ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
     this.players = this.humans + this.rivals;
     if (!bare) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
-    for (let p = this.humans; p < this.players; p++) this.ai.push(new AiBuilder(p, this.rng.fork(`ai-${p}`)));
+    for (let p = this.humans; p < this.players; p++) {
+      const r = rivalFor(seed, p);
+      const ai = new AiBuilder(p, this.rng.fork(`ai-${p}`), opts.personalities?.[p - this.humans] ?? r.personality, opts.aiLevel ?? "normal");
+      this.ai.push(ai);
+      this.economy.aiPlayers.add(p);
+      this.economy.names[p] = r.name;
+    }
+    this.economy.diplomacy.aiAnswer = (p, prop) => {
+      const ai = this.ai.find((a) => a.player === p);
+      return ai ? answerOffer(this.economy, ai.personality, p, prop) : false;
+    };
+    this.economy.wanderers.setup(seed, { hamlets: !bare, creatures: !opts.survey && (!opts.barren || !!opts.native), native: !!opts.native });
     // Start the clock so it is early morning at the first Hearthship.
     const keep = this.economy.buildings[this.economy.keeps[0] ?? -1];
     if (keep) {

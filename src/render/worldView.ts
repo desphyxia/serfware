@@ -15,6 +15,8 @@ import { FireView } from "./fireView";
 import { FrontierView } from "./frontierView";
 import { SkyView } from "./skyView";
 import { VoyageView } from "./voyageView";
+import { AdversityView } from "./adversityView";
+import { WanderersView } from "./wanderersView";
 import { Particles } from "./smoke";
 import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
@@ -63,6 +65,8 @@ export class WorldView {
   readonly frontier: FrontierView;
   readonly sky: SkyView;
   readonly voyages: VoyageView;
+  readonly adversity: AdversityView;
+  readonly wanderers: WanderersView;
   private climateVersion = -1;
   private climateTimer = 0;
   private ashVersion = 0;
@@ -149,7 +153,10 @@ export class WorldView {
     this.frontier = new FrontierView(world.economy, this.frames, this.rivers, this.mask);
     this.sky = new SkyView(world.economy, this.frames, this.mask);
     this.voyages = new VoyageView(world.economy, this.frames);
+    this.adversity = new AdversityView(world.economy, this.frames);
+    this.wanderers = new WanderersView(world.economy, this.frames);
     this.nature.ecology = world.economy.ecology;
+    this.nature.blight = world.economy.adversity;
     this.grass.cover = world.economy.ecology;
     this.undergrowth.cover = world.economy.ecology;
     this.group.add(
@@ -159,6 +166,8 @@ export class WorldView {
       this.frontier.group,
       this.sky.group,
       this.voyages.group,
+      this.adversity.group,
+      this.wanderers.group,
       this.weather.group,
       this.ambient.group,
       this.fire.flames.mesh,
@@ -310,7 +319,7 @@ export class WorldView {
     const light = new THREE.Color().setScalar(0.25 + 0.75 * p.daylight);
     const wind = p.focus.clone().cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(0.35);
     this.voyages.update(p.time, p.dt, p.focus);
-    const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness, p.time, this.waterU.tideLift.value), ...this.sky.update(p.time, p.dt, p.focus)];
+    const fires = [...this.fire.update(p.time, p.focus), ...this.frontier.update(p.dt, p.focus, p.closeness, p.time, this.waterU.tideLift.value), ...this.sky.update(p.time, p.dt, p.focus), ...this.adversity.update(p.time, this.world.tick), ...this.wanderers.update(p.time, this.world.tick)];
     this.particles.update(p.dt, p.closeness > 0.2 ? [...this.econ.emitters(), ...fires] : fires, wind, light, p.pixelRatio, p.particles);
     {
       // Motes in warm, dry daylight, most of all when the sun is low.
@@ -420,6 +429,8 @@ export class WorldView {
     this.frontier.dispose();
     this.sky.dispose();
     this.voyages.dispose();
+    this.adversity.dispose();
+    this.wanderers.dispose();
     this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();

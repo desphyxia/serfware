@@ -138,6 +138,8 @@ export class LandUse {
   /** Tidewater flats: land the highest tides cover (1), and whether the sea covers it now. */
   readonly tidal: Uint8Array;
   readonly flooded: Uint8Array;
+  /** Shared roads (diplomacy): per player, a bit per partner whose land they may lay roads on. */
+  readonly roadShare: number[] = [];
   floodVersion = 0;
   /** Raised causeways over the flats: roads that stay dry at high tide. */
   readonly causeway: Uint8Array;
@@ -400,10 +402,10 @@ export class LandUse {
   /** A flag or road of `owner` may go here. */
   roadable(t: number, owner = 0): boolean {
     // Ice roads: frozen lakes can be crossed (until they thaw).
-    if (this.isIce(t)) return this.territory[t] === owner + 1 && this.use[t] === Use.Free;
+    if (this.isIce(t)) return this.mayRoad(t, owner) && this.use[t] === Use.Free;
     return (
       this.isLand(t) &&
-      this.territory[t] === owner + 1 &&
+      this.mayRoad(t, owner) &&
       (this.use[t] === Use.Free || this.use[t] === Use.Blocked) &&
       this.feature[t] !== Feature.Tree &&
       this.feature[t] !== Feature.Rock &&
@@ -415,6 +417,12 @@ export class LandUse {
       this.feature[t] !== Feature.Glowcap &&
       this.slope(t) < 2.2
     );
+  }
+
+  /** Own land, or a partner's under a shared-roads treaty. */
+  mayRoad(t: number, owner: number): boolean {
+    const o = this.territory[t] as number;
+    return o === owner + 1 || (o > 0 && ((this.roadShare[owner] ?? 0) & (1 << (o - 1))) !== 0);
   }
 
   canPlaceFlag(t: number, owner = 0): boolean {
