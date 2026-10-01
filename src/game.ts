@@ -260,6 +260,7 @@ export class Game {
       visit: (i) => this.visitPlanet(i),
       command: (cmd) => this.command(cmd),
       charted: (i) => this.charted(i),
+      air: (i) => (i === this.system.home ? this.session.world : (this.session.world.colonies[i] ?? this.surveys.get(i) ?? this.surveyWorld(i))).atmosphere,
     });
     this.warp = h("div", { class: "warp", "aria-hidden": "true" });
     this.menu = new GameMenu({
@@ -878,6 +879,50 @@ export class Game {
     return to;
   }
 
+  /**
+   * Screenshots and testing: a colony and its terraforming. "barren": just landed on bare
+   * ground; "works": every work built around the keep; "green": decades in, lichen, moss and
+   * grass spreading under a changing sky; "bloom": a bloomed world.
+   */
+  terraDemo(stage: "barren" | "works" | "green" | "bloom"): number {
+    const to = this.colonyDemo("colony");
+    const w = this.session.world.colonies[to];
+    if (!w) return -1;
+    const eco = w.economy;
+    const me = this.session.player;
+    eco.rooted[me] = true;
+    if (stage === "barren") return to;
+    for (const type of ["mirrorworks", "greenhouseworks", "cometcatcher", "cloudseeder", "lakebasin", "seedhouse", "seedhouse", "genebank", "reserve"]) placeConnected(w, type, { minDist: 3, maxDist: 10, player: me });
+    for (const b of eco.buildings) if (b.alive && b.owner === me) b.built = true;
+    const a = w.atmosphere;
+    if (stage === "works") {
+      a.apply();
+      return to;
+    }
+    const seeds = eco.buildings.filter((b) => b.alive && b.def.terra === "life").map((b) => b.tile);
+    const days = stage === "green" ? 18 : 40;
+    for (let d = 1; d <= days; d++) {
+      for (let k = 0; k < 6; k++) a.work("mirror", 0);
+      for (let k = 0; k < 4; k++) a.work("greenhouse", 0);
+      for (let k = 0; k < 3; k++) a.work("comet", 0);
+      a.work("seeding", 0);
+      a.work("basin", 0);
+      for (const t of seeds) for (let k = 0; k < 4; k++) a.work("life", t);
+      if (stage === "bloom") a.oxygen = Math.max(a.oxygen, 0.2 * (d / days));
+      w.climate.step(w.tick);
+      a.day(1000 + d);
+    }
+    if (stage === "bloom") {
+      for (let t = 0; t < w.land.life.length; t++) if (w.land.isLand(t) && (w.land.life[t] as number) < 3) w.land.life[t] = 3;
+      w.land.lifeVersion++;
+      a.day(2000);
+      a.checkBloom();
+    }
+    w.climate.step(w.tick);
+    this.sky.snapAir(a);
+    return to;
+  }
+
   visitHamlet(): void {
     const n = demoSettlement(this.world);
     for (let i = 0; i < 6000; i++) this.world.step();
@@ -1097,6 +1142,7 @@ export class Game {
     this.view = new WorldView(this.world, this.settings.get().graphics, hashString(this.world.seed));
     this.view.setViewer(session.player, this.fogOn);
     this.bindVoyages();
+    this.sky.snapAir(this.world.atmosphere);
     this.scene.add(this.view.group);
     this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
@@ -1134,7 +1180,7 @@ export class Game {
 
   /** What a probe charted on a planet: its regions, which carry its hazards and riches. */
   private charted(index: number): string[] {
-    const w = this.session.world.colonies[index] ?? this.surveyWorld(index);
+    const w = this.session.world.colonies[index] ?? this.surveys.get(index) ?? this.surveyWorld(index);
     const counts = new Map<number, number>();
     for (let t = 0; t < w.land.region.length; t++) if (w.land.isLand(t)) counts.set(w.land.region[t] as number, (counts.get(w.land.region[t] as number) ?? 0) + 1);
     const land = [...counts.values()].reduce((a, b) => a + b, 0);
@@ -1209,6 +1255,7 @@ export class Game {
       this.following = -1;
       this.tools.set("select");
       this.bindVoyages();
+      this.sky.snapAir(w.atmosphere);
       const colony = home.colonies.includes(w);
       document.body.classList.toggle("surveying", w !== home && !colony);
       if (w === home || (colony && w.economy.keeps[this.session.player] !== undefined)) this.focusStart();
@@ -1752,6 +1799,7 @@ export class Game {
     this.skyFill.color.copy(this.sky.zenith).lerp(new THREE.Color("#c8d6ee"), 0.6);
 
     this.sky.planetRadius = this.world.planet.params.radius;
+    this.sky.setAir(this.world.atmosphere);
     this.sky.update(this.camera, this.sunDir, up, air, time, this.gfx.renderer.getPixelRatio(), this.settings.get().graphics.atmosphere === "scattering" ? 1 : 0.4);
     if (air > 0.02) {
       this.fog.color.copy(this.sky.horizon);

@@ -19,6 +19,9 @@ export class SkyDome {
     aurora: uniform(0),
     /** Sine of the horizon's dip below level at the camera's height (0 on the ground). */
     dip: uniform(0),
+    /** Daytime zenith and horizon colours: blue for breathable air, other skies elsewhere. */
+    dayZenith: uniform(new THREE.Vector3(0.16, 0.36, 0.78)),
+    dayHorizon: uniform(new THREE.Vector3(0.62, 0.76, 0.9)),
   };
   private readonly stars: SpriteBatch;
   private readonly starDir: Float32Array;
@@ -29,6 +32,20 @@ export class SkyDome {
   /** Horizon colour of the last update, used for fog and water reflections. */
   readonly horizon = new THREE.Color();
   readonly zenith = new THREE.Color();
+  /** Set the daytime sky from the planet's air (see skyColours). */
+  setAir(air: { pressure: number; oxygen: number; water: number }): void {
+    const c = skyColours(air);
+    this.u.dayZenith.value.lerp(c2v(c.zenith), 0.05);
+    this.u.dayHorizon.value.lerp(c2v(c.horizon), 0.05);
+  }
+
+  /** Jump straight to a planet's sky (arriving, not changing). */
+  snapAir(air: { pressure: number; oxygen: number; water: number }): void {
+    const c = skyColours(air);
+    this.u.dayZenith.value.copy(c2v(c.zenith));
+    this.u.dayHorizon.value.copy(c2v(c.horizon));
+  }
+
   /** Planet radius, for the horizon's dip (set by the game). */
   planetRadius = 0;
   /** Debug and screenshots: show the aurora at any latitude (1), not only near the poles. */
@@ -44,8 +61,8 @@ export class SkyDome {
     const mu = dot(d, L);
     const day = smoothstep(-0.18, 0.25, u.sunUp);
     const dusk = exp(pow(u.sunUp.mul(4), 2).negate());
-    const zenith = mix(vec3(0.012, 0.02, 0.06), vec3(0.16, 0.36, 0.78), day);
-    let horizon = mix(vec3(0.03, 0.045, 0.1), vec3(0.62, 0.76, 0.9), day);
+    const zenith = mix(vec3(0.012, 0.02, 0.06), u.dayZenith, day);
+    let horizon = mix(vec3(0.03, 0.045, 0.1), u.dayHorizon, day);
     const sunSide = pow(max(mu.mul(0.5).add(0.5), 0), 3).mul(0.85).add(0.15);
     horizon = mix(horizon, vec3(1.0, 0.52, 0.28), dusk.mul(0.8).mul(sunSide));
     const h = pow(clamp(float(1).sub(max(e, 0)), 0, 1), 4);
@@ -165,7 +182,32 @@ export class SkyDome {
     }
     // CPU copy of the horizon colour for fog and water.
     const dusk = Math.exp(-Math.pow(sunUp * 4, 2));
-    this.horizon.setRGB(0.03, 0.045, 0.1).lerp(new THREE.Color(0.62, 0.76, 0.9), day).lerp(new THREE.Color(1, 0.6, 0.38), dusk * 0.45);
-    this.zenith.setRGB(0.012, 0.02, 0.06).lerp(new THREE.Color(0.16, 0.36, 0.78), day);
+    this.horizon.setRGB(0.03, 0.045, 0.1).lerp(v2c(this.u.dayHorizon.value), day).lerp(new THREE.Color(1, 0.6, 0.38), dusk * 0.45);
+    this.zenith.setRGB(0.012, 0.02, 0.06).lerp(v2c(this.u.dayZenith.value), day);
   }
 }
+
+/**
+ * The daytime sky of an atmosphere: deep blue over breathable air; near-black and dusty over
+ * thin air; butterscotch over dry, oxygen-less air; yellow haze over thick, hot air; pale over a
+ * wet sky. Terraforming shifts it toward blue.
+ */
+export function skyColours(air: { pressure: number; oxygen: number; water: number }): { zenith: THREE.Color; horizon: THREE.Color } {
+  const cl = (x: number) => Math.max(0, Math.min(1, x));
+  const thick = cl(air.pressure / 0.9);
+  const earth = cl(Math.min(air.oxygen / 0.18, 1.2 - Math.abs(air.pressure - 1) / 1.5, air.water / 0.6));
+  const dust = cl((1 - air.water) * 1.2) * (1 - earth);
+  const haze = cl((air.pressure - 1.6) / 1.5) * (1 - earth);
+  const zenith = new THREE.Color(0.03, 0.035, 0.07).lerp(new THREE.Color(0.2, 0.3, 0.52), thick);
+  const horizon = new THREE.Color(0.24, 0.22, 0.24).lerp(new THREE.Color(0.66, 0.7, 0.74), thick);
+  zenith.lerp(new THREE.Color(0.52, 0.4, 0.3), dust * 0.8 * thick);
+  horizon.lerp(new THREE.Color(0.82, 0.64, 0.46), dust * 0.85);
+  zenith.lerp(new THREE.Color(0.72, 0.6, 0.34), haze);
+  horizon.lerp(new THREE.Color(0.92, 0.78, 0.48), haze);
+  zenith.lerp(new THREE.Color(0.16, 0.36, 0.78), earth);
+  horizon.lerp(new THREE.Color(0.62, 0.76, 0.9), earth);
+  return { zenith, horizon };
+}
+
+const v2c = (v: THREE.Vector3) => new THREE.Color(v.x, v.y, v.z);
+const c2v = (c: THREE.Color) => new THREE.Vector3(c.r, c.g, c.b);

@@ -169,7 +169,7 @@ export class Undergrowth {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${this.cover?.groundVersion ?? 0}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${this.land.lifeVersion}:${density}:${this.mask.version}:${this.cover?.groundVersion ?? 0}`;
     if (this.centerTile >= 0 && key === this.key) {
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
       if (d > Math.cos(this.land.spacing * 5)) return;
@@ -196,7 +196,7 @@ export class Undergrowth {
     let nd = 0;
     let nf = 0;
     for (const t of tiles) {
-      if (!land.isLand(t) || land.hydro.lake[t] || land.use[t] === Use.Building || land.use[t] === Use.Flag || hiddenAt(this.mask, t)) continue;
+      if (!land.isLand(t) || land.hydro.lake[t] || land.use[t] === Use.Building || land.use[t] === Use.Flag || (land.life[t] as number) < 3 || hiddenAt(this.mask, t)) continue;
       const b = terrain.biome[t] as Biome;
       const feature = land.feature[t] as Feature;
       const road = land.use[t] === Use.Road;
