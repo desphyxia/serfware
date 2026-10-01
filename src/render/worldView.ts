@@ -67,6 +67,7 @@ export class WorldView {
   private climateTimer = 0;
   private ashVersion = 0;
   private sandVersion = -1;
+  private lifeVersion = -1;
   private glowVersion = -1;
   private wearVersion = -1;
   /** Fog of war for the viewing player. */
@@ -331,12 +332,16 @@ export class WorldView {
     this.updateFog();
     this.updateClimate(p);
     const land = this.world.land;
-    if (land.sandVersion !== this.sandVersion || land.glowVersion !== this.glowVersion) {
+    if (land.sandVersion !== this.sandVersion || land.glowVersion !== this.glowVersion || land.lifeVersion !== this.lifeVersion) {
       this.sandVersion = land.sandVersion;
       this.glowVersion = land.glowVersion;
+      this.lifeVersion = land.lifeVersion;
       for (let t = 0; t < land.sand.length; t++) {
         this.tileData.set(t, "sand", land.sand[t] as number);
         this.tileData.set(t, "glow", land.glow[t] as number);
+        // Sea tiles count as living, so shores do not turn to dust.
+        this.tileData.set(t, "life", land.isLand(t) ? (land.life[t] as number) / 4 : 1);
+        this.tileData.set(t, "native", land.native[t] as number);
       }
       this.tileData.commit("c");
     }
@@ -345,6 +350,7 @@ export class WorldView {
     // The tide, eased between climate steps.
     const lift = Math.max(0, tideLevel(this.world.climate.tide));
     w.tideLift.value += (lift - w.tideLift.value) * Math.min(1, p.dt * 2);
+    w.seaRise.value += (this.world.climate.seaRise - w.seaRise.value) * Math.min(1, p.dt);
     w.sunDir.value.copy(p.sunDir);
     w.sky.value.copy(p.sky);
     w.day.value = p.daylight;

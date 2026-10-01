@@ -232,6 +232,145 @@
       "rail": true
     },
     {
+      "id": "mirrorworks",
+      "name": "Mirror works",
+      "category": "terra",
+      "description": "Grinds great sheets of polished metal and sends them up to hang in orbit, turning more sunlight onto the planet. Each cycle warms the world a little; mirrors drift and dull, so keep it working.",
+      "large": true,
+      "cost": {
+        "plank": 6,
+        "stone": 6,
+        "iron": 4
+      },
+      "job": "craft",
+      "inputs": {
+        "iron": 1,
+        "plank": 1
+      },
+      "workTicks": 400,
+      "restTicks": 60,
+      "terra": "mirror"
+    },
+    {
+      "id": "greenhouseworks",
+      "name": "Greenhouse works",
+      "category": "terra",
+      "description": "Burns fuel in tall stacks to thicken the air with warming gases: the air grows denser and the world warmer.",
+      "large": true,
+      "cost": {
+        "stone": 8,
+        "plank": 4,
+        "iron": 2
+      },
+      "job": "craft",
+      "inputs": {
+        "fuel": 2
+      },
+      "workTicks": 300,
+      "restTicks": 40,
+      "forge": true,
+      "terra": "greenhouse"
+    },
+    {
+      "id": "cometcatcher",
+      "name": "Comet catcher",
+      "category": "terra",
+      "description": "A great dish that nudges passing ice comets down into the planet. Each one brings water and air; the seas grow.",
+      "large": true,
+      "cost": {
+        "iron": 6,
+        "stone": 4,
+        "plank": 4
+      },
+      "job": "craft",
+      "inputs": {
+        "iron": 1
+      },
+      "workTicks": 500,
+      "restTicks": 80,
+      "terra": "comet"
+    },
+    {
+      "id": "cloudseeder",
+      "name": "Cloud seeder",
+      "category": "terra",
+      "description": "Fires smoke rockets into the clouds so they rain. Wetter ground lets life spread faster; the effect fades unless kept up.",
+      "cost": {
+        "plank": 4,
+        "stone": 2,
+        "iron": 1
+      },
+      "job": "craft",
+      "inputs": {
+        "fuel": 1
+      },
+      "workTicks": 250,
+      "restTicks": 40,
+      "terra": "seeding"
+    },
+    {
+      "id": "lakebasin",
+      "name": "Lake basin",
+      "category": "terra",
+      "description": "Diggers shape a basin with a stone rim that holds water on the land. The planet keeps more of its water instead of losing it to the sky.",
+      "cost": {
+        "stone": 4,
+        "plank": 2
+      },
+      "job": "craft",
+      "tool": "shovel",
+      "workTicks": 400,
+      "restTicks": 40,
+      "terra": "basin"
+    },
+    {
+      "id": "seedhouse",
+      "name": "Seed house",
+      "category": "terra",
+      "description": "Raises lichen, moss, grasses and saplings from seed and sows them on the ground around it, as far as the air and warmth allow. From there, life spreads by itself.",
+      "cost": {
+        "plank": 4,
+        "stone": 2
+      },
+      "job": "craft",
+      "inputs": {
+        "grain": 1
+      },
+      "workTicks": 250,
+      "restTicks": 40,
+      "radius": 5,
+      "terra": "life"
+    },
+    {
+      "id": "genebank",
+      "name": "Gene bank",
+      "category": "terra",
+      "description": "Gathers and keeps the planet's native life near it. Once its species are banked, they are safe whatever the new air does to them.",
+      "cost": {
+        "stone": 4,
+        "plank": 3,
+        "iron": 1
+      },
+      "job": "craft",
+      "inputs": {
+        "iron": 1
+      },
+      "workTicks": 400,
+      "restTicks": 60,
+      "radius": 6,
+      "terra": "bank"
+    },
+    {
+      "id": "reserve",
+      "name": "Reserve",
+      "category": "terra",
+      "description": "Posts marking a reserve: native life within four steps is left as it is, however the air and warmth change.",
+      "cost": {
+        "plank": 2
+      },
+      "reserve": 4
+    },
+    {
       "id": "well",
       "name": "Well",
       "category": "storage",

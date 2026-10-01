@@ -49,6 +49,13 @@ export class Climate {
   tide = 0;
   /** Tide change per climate step (positive while flooding). */
   tideFlow = 0;
+  /**
+   * From the planet's atmosphere (terraforming): warming in °C, the sea's rise above its old
+   * shore (elevation units), and extra rain from cloud seeding (a fraction). Zero at home.
+   */
+  tempOffset = 0;
+  seaRise = 0;
+  rainBoost = 0;
 
   constructor(
     private readonly land: LandUse,
@@ -124,9 +131,11 @@ export class Climate {
     this.tide = tide;
     const level = tideLevel(tide);
     const elev = land.planet.terrain.elevation;
+    // Rising seas (a terraformed world's melt and comets) drown the lowest shores for good.
+    const risen = this.seaRise > 0 ? 0.05 + this.seaRise : -1;
     for (let t = 0; t < grid.count; t++) {
-      if (!land.tidal[t]) continue;
-      const wet = (elev[t] as number) < level ? 1 : 0;
+      if (!land.tidal[t] && !(risen > 0 && land.isLand(t) && (elev[t] as number) < risen)) continue;
+      const wet = (elev[t] as number) < Math.max(land.tidal[t] ? level : -1, risen) ? 1 : 0;
       if (land.flooded[t] !== wet) {
         land.flooded[t] = wet;
         land.floodVersion++;
@@ -136,9 +145,9 @@ export class Climate {
     const terrain = land.planet.terrain;
     for (let t = 0; t < grid.count; t++) {
       const ty = c[t * 3 + 1] as number;
-      const rain = this.rainAt(t);
+      const rain = this.rainBoost > 0 ? Math.min(1, this.rainAt(t) * (1 + this.rainBoost)) : this.rainAt(t);
       this.rain[t] = rain;
-      const temp = (terrain.temperature[t] as number) + this.offsetAt(tick, t, ty) - rain * 4;
+      const temp = (terrain.temperature[t] as number) + this.offsetAt(tick, t, ty) - rain * 4 + this.tempOffset;
       this.temp[t] = temp;
       land.chill[t] = temp < -2 ? 1 : 0;
       if (land.hydro.lake[t]) {

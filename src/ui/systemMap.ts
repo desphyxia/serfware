@@ -3,6 +3,7 @@ import { ROOTED_BUILDINGS } from "../sim/econ/economy";
 import { launchWindow, orbitAngle, type PlanetKind, type StarSystem, type SystemPlanet } from "../sim/system/system";
 import { goodMass, HEARTHSHIP_FRAME, HEARTHSHIP_MASS, MIN_FOUNDERS, ORBIT_SPEED, PROBE_COST, SETTLER_MASS, SKYSHIP_CARGO, WINDOW_DAYS, type Voyage } from "../sim/system/voyages";
 import type { World, WorldCommand } from "../sim/world";
+import type { Atmosphere } from "../sim/climate/atmosphere";
 import { h, Panel } from "./dom";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -63,6 +64,8 @@ export interface SystemMapHost {
   command: (cmd: WorldCommand) => boolean;
   /** What a probe found on a planet: its regions and hazards (from the survey world). */
   charted: (index: number) => string[];
+  /** A planet's air and life (its colony's, or as the probe found it). */
+  air: (index: number) => Atmosphere | null;
 }
 
 /**
@@ -203,6 +206,19 @@ export class SystemMap extends Panel {
       const w = launchWindow(homeP, p, day);
       const d = (x: number) => days(Math.max(1, Math.round(x / ORBIT_SPEED)));
       rows.push(["Window from home", w.daysUntil <= WINDOW_DAYS || w.daysUntil >= w.synodic - WINDOW_DAYS ? `open now · ${d(w.transferDays)} to arrive` : `in ${d(w.daysUntil - WINDOW_DAYS)} · ${d(w.transferDays)} to arrive`]);
+    }
+    const air = p.surface && known ? this.host.air(p.index) : null;
+    if (air) {
+      const pct = (x: number) => `${Math.round(x * 100)}%`;
+      rows.push(["Air", `${air.pressure.toFixed(2)} bar · oxygen ${(air.oxygen * 100).toFixed(1)}% · water ${pct(Math.min(1.5, air.water))}`]);
+      rows.push(["Warmth", `mean ${Math.round(air.meanTemp())} °C${air.warming > 0.5 ? ` (+${Math.round(air.warming)} from the works)` : ""}`]);
+      if (!p.home) {
+        const c = air.check();
+        const mark = (ok: boolean, label: string) => `${ok ? "✓" : "✗"} ${label}`;
+        rows.push(["Life", `${pct(air.cover)} green${air.native ? ` · native life${air.banked ? " (banked)" : ""}` : ""}`]);
+        rows.push(["Bloom", air.bloom ? "bloomed: a living world" : [mark(c.pressure, "air"), mark(c.oxygen, "oxygen"), mark(c.temp, "warmth"), mark(c.water, "water"), mark(c.life, "life"), mark(c.native, "native")].join(" ")]);
+        if (air.years > 0) rows.push(["Planet time", `${air.years} years of terraforming`]);
+      }
     }
     const eco = this.host.home().economyAt(p.index);
     const me = this.host.player();

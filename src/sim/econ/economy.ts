@@ -247,12 +247,14 @@ export class Economy {
   winReason = "";
   /** Per player: tick since they have held enough Star Wells, or -1. */
   readonly wellsSince: number[] = [];
-  private readonly dayTicks: number;
+  readonly dayTicks: number;
   private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
   tick = 0;
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
   colony = false;
+  /** Terraforming works finished a cycle (the world passes it to the planet's atmosphere). */
+  onTerraform: ((b: Building) => void) | null = null;
   /** Colony worlds, per player: taken root (enough built that newcomers arrive). */
   readonly rooted: boolean[] = [];
   /** Colony worlds, per player: how far its ways have drifted from home, 0..1. */
@@ -428,7 +430,8 @@ export class Economy {
         land.variety[n] = rng.int(0, 3);
       }
     }
-    for (let i = 0; count(Feature.Tree) < 18 && i < 80 && far.length; i++) {
+    // Colonists find what the planet has: no woods are planted for them on bare worlds.
+    for (let i = 0; !founders && count(Feature.Tree) < 18 && i < 80 && far.length; i++) {
       const n = rng.pick(far);
       if (land.feature[n] === Feature.None) {
         land.feature[n] = Feature.Tree;
@@ -694,6 +697,8 @@ export class Economy {
     const type = buildingType(typeId);
     const def = BUILDINGS[type] as BuildingDef;
     if (def.buildable === false) return { ok: false, reason: `${def.name} can't be built.` };
+    if ((def.terra || def.reserve) && !this.colony) return { ok: false, reason: "Your home world already blooms: terraforming works are for the worlds you colonise." };
+    if ((def.terra || def.reserve) && !this.rooted[p]) return { ok: false, reason: `Terraforming needs a colony that has taken root (${ROOTED_BUILDINGS} buildings standing).` };
     if (def.rail && this.colony && !this.rooted[p]) return { ok: false, reason: `A colony needs ${ROOTED_BUILDINGS} buildings standing (it must take root) before it can build a launch rail.` };
     const land = this.land;
     if (!land.canBuildDef(tile, flagTile, def, p)) return { ok: false, reason: this.placementHint(def) };
@@ -2385,12 +2390,14 @@ export class Economy {
       case "quarry":
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
       case "plant":
-        return this.findWorkTile(b, open);
+        // Saplings need living soil: grassland at least.
+        return this.findWorkTile(b, (t) => open(t) && (land.life[t] as number) >= 3);
       case "farm": {
         const ripe = this.findWorkTile(b, (t) => land.feature[t] === Feature.Field && (land.amount[t] as number) >= FIELD_RIPE);
         if (ripe >= 0) return ripe;
         const fields = land.ring(b.tile, def.radius ?? 3).filter((t) => land.feature[t] === Feature.Field).length;
-        return fields < 8 ? this.findWorkTile(b, open) : -1;
+        // Fields need living soil: moss at least (terraformed worlds).
+        return fields < 8 ? this.findWorkTile(b, (t) => open(t) && (land.life[t] as number) >= 2) : -1;
       }
       case "hunt": {
         // The richest ground within reach that nobody else is stalking.
@@ -2475,8 +2482,9 @@ export class Economy {
           return;
         }
         if (def.job === "craft") {
-          const out = this.producedType(b);
-          if (out >= 0 && this.consumeInputs(b)) {
+          // Terraforming works make no goods: each cycle works on the planet itself.
+          const out = def.terra ? -1 : this.producedType(b);
+          if ((out >= 0 || def.terra) && this.consumeInputs(b)) {
             s.state = "craft";
             s.target = out;
             s.timer = Math.round((def.workTicks ?? 60) * this.speedFactor(s, def.id));
@@ -2656,6 +2664,7 @@ export class Economy {
         if (--s.timer > 0) return;
         this.train(s, def.id);
         this.produce(b, s.target);
+        if (def.terra) this.onTerraform?.(b);
         // The kiln's focused heat can set dry growth next door alight.
         if (def.fireRisk && mix32(b.id, this.tick) % def.fireRisk === 0) {
           const ns = land.planet.grid.neighborsOf(b.tile);
@@ -2896,6 +2905,17 @@ export class Economy {
       this.notify(owner, "The colony has taken root: newcomers will now settle here, and it may build its own launch rail.");
     }
     this.drift[owner] = Math.min(1, (this.drift[owner] ?? 0) + 0.02);
+  }
+
+  /** A wild sapling takes on open ground (a terraformed world's new woodland). */
+  sprout(t: number): void {
+    const land = this.land;
+    land.feature[t] = Feature.Tree;
+    land.amount[t] = 0;
+    land.variety[t] = mix32(t, 3) & 3;
+    land.nextGrowth[t] = this.tick + TREE_GROWTH_TICKS * 2;
+    land.featureVersion++;
+    this.growing.push(t);
   }
 
   /** A skyship from home calls: news, letters and goods pull the colony's ways back a little. */

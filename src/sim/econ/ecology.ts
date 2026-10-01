@@ -321,7 +321,8 @@ export class Ecology {
     const land = this.land;
     if (!growing || (land.use[t] !== Use.Free && land.use[t] !== Use.Blocked) || (land.wear[t] as number) > 20) return;
     const w = woody(b);
-    if (w <= 0) return;
+    // Scrub needs grassland under it, and trees need a woodland soil (terraformed worlds).
+    if (w <= 0 || (land.life[t] as number) < 3) return;
     const f = land.feature[t] as Feature;
     if (f !== Feature.None && f !== Feature.Shrub) return;
     // Ground next to roads, flags and buildings is kept clear by the people who pass.
@@ -338,7 +339,7 @@ export class Ecology {
         land.amount[t] = 0;
         land.featureVersion++;
       }
-    } else if (seed && r < w * 0.03) {
+    } else if (seed && r < w * 0.03 && (land.life[t] as number) >= 4) {
       land.feature[t] = Feature.Tree;
       land.amount[t] = 0;
       land.variety[t] = mix32(t, 3) & 3;

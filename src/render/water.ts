@@ -10,7 +10,8 @@ export function makeWaterMaterial(u: WaterUniforms): THREE.MeshBasicNodeMaterial
   const { color, glint } = waterNodes(u, { fog: attribute("aFog", "float"), scale: 1 });
   mat.colorNode = color;
   // Tides lift the sea near the Tidewater flats (aTide weights it, 0 on other coasts).
-  mat.positionNode = positionLocal.add(normalize(positionLocal).mul(u.tideLift.mul(attribute("aTide", "float"))));
+  // A terraformed world's seas rise everywhere.
+  mat.positionNode = positionLocal.add(normalize(positionLocal).mul(u.tideLift.mul(attribute("aTide", "float")).add(u.seaRise)));
   // Sun glints sparkle through bloom.
   mat.mrtNode = mrt({ emissive: vec4(glint.mul(0.6), 1) });
   const out = mat as THREE.MeshBasicNodeMaterial & { userData: { u: WaterUniforms } };

@@ -1,7 +1,7 @@
 import { dayInfo, START_FRACTION, ticksPerDay, type DayInfo } from "./clock";
 import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
-import { LandUse } from "./econ/landuse";
+import { Feature, LandUse } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
 import { Climate, CLIMATE_STEP } from "./climate/climate";
@@ -9,7 +9,8 @@ import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet, type PlanetOverrides } from "./planet/planet";
 import { Rng } from "./rng";
-import { generateSystem, planetOverrides, type StarSystem } from "./system/system";
+import { generateSystem, HOME_AIR, worldFor, type StarSystem } from "./system/system";
+import { Atmosphere, type AirStart } from "./climate/atmosphere";
 import { VOYAGE_COMMANDS, Voyages, type VoyageCommand, type WorldHost } from "./system/voyages";
 
 export interface WorldOptions {
@@ -31,6 +32,10 @@ export interface WorldOptions {
   colony?: boolean;
   /** Start the clock here (colonies keep time with home). */
   startTick?: number;
+  /** Another planet's bare ground (no life yet), its air, and whether it had native life. */
+  barren?: boolean;
+  native?: boolean;
+  air?: AirStart;
 }
 
 /** Any command: to a world's economy (optionally on another planet of the system), or a voyage. */
@@ -61,6 +66,8 @@ export class World implements WorldHost {
   /** Voyages between planets and the colony worlds they have founded, by planet index. */
   readonly voyages: Voyages | null = null;
   readonly colonies: (World | undefined)[] = [];
+  /** The planet's air, water and life (what terraforming works on). */
+  readonly atmosphere: Atmosphere;
   tick = 0;
   private readonly rng: Rng;
 
@@ -70,6 +77,7 @@ export class World implements WorldHost {
     this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet);
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
+    if (opts.barren) World.makeBarren(this.land, opts.native ? new Rng(`${seed}:native`) : null);
     this.economy = new Economy(this.land);
     this.climate = new Climate(this.land, this.rng.fork("climate"));
     this.economy.climate = this.climate;
@@ -95,8 +103,36 @@ export class World implements WorldHost {
     // The system is drawn from its own stream: it never changes the home world.
     this.system = generateSystem(seed, this.planet);
     if (!bare) this.voyages = new Voyages(this);
+    this.atmosphere = new Atmosphere(this.economy, this.climate, opts.air ?? HOME_AIR, { native: !!opts.native, bloomed: !opts.barren });
+    this.atmosphere.apply();
+    this.economy.onTerraform = (b) => b.def.terra && this.atmosphere.work(b.def.terra, b.tile);
     this.economy.stakes = opts.stakes ?? "wounded";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
+  }
+
+  /**
+   * Another planet as first found: bare rock and dust, no trees or scrub (life comes with
+   * terraforming), and on some worlds mats of native life in patches.
+   */
+  private static makeBarren(land: LandUse, native: Rng | null): void {
+    const grid = land.planet.grid;
+    for (let t = 0; t < grid.count; t++) {
+      if (!land.isLand(t)) continue;
+      land.life[t] = 0;
+      const f = land.feature[t] as Feature;
+      if (f === Feature.Tree || f === Feature.Shrub || f === Feature.Hedge || f === Feature.Giant || f === Feature.Glowcap) {
+        land.feature[t] = Feature.None;
+        land.amount[t] = 0;
+      }
+    }
+    land.featureVersion++;
+    if (!native) return;
+    const land_ = Array.from({ length: grid.count }, (_, t) => t).filter((t) => land.isLand(t));
+    for (let k = 0; k < 6 + Math.round(grid.count / 1500) && land_.length; k++) {
+      const c = native.pick(land_);
+      for (const t of [c, ...land.ring(c, 3)]) if (land.isLand(t) && native.next() < 0.7) land.native[t] = 1;
+    }
+    land.lifeVersion++;
   }
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
@@ -135,7 +171,7 @@ export class World implements WorldHost {
     if (existing) return existing.economy;
     const p = this.system.planets[planet];
     if (!p) throw new Error(`No planet ${planet}`);
-    const w = new World(planetSeed(this.seed, p.name), { planet: planetOverrides(p), colony: true, players: this.humans, startTick: this.tick });
+    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.humans, startTick: this.tick });
     this.colonies[planet] = w;
     return w.economy;
   }
@@ -145,6 +181,11 @@ export class World implements WorldHost {
     if (this.tick % CLIMATE_STEP === 0) this.climate.step(this.tick);
     this.economy.step(this.tick);
     for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
+    // A rooted colony's planet changes by decades a day (see Atmosphere).
+    if (this.economy.colony && this.tick % this.economy.dayTicks === 7 && this.economy.rooted.some(Boolean)) {
+      this.atmosphere.day(Math.floor(this.tick / this.economy.dayTicks));
+      this.atmosphere.checkBloom();
+    }
     if (this.voyages) {
       this.voyages.step(this.tick);
       for (const c of this.colonies) if (c) c.step();
@@ -175,6 +216,7 @@ export class World implements WorldHost {
     let snow = 0;
     for (let t = 0; t < this.land.snowCover.length; t += 7) snow += this.land.snowCover[t] as number;
     h.int(Math.round(snow * 1000)).int(this.climate.version);
+    if (this.economy.colony) this.atmosphere.hash(h);
     if (this.voyages) {
       this.voyages.hash(h);
       for (const c of this.colonies) if (c) h.int(c.checksum());

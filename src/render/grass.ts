@@ -106,7 +106,7 @@ export class GrassPatch {
     if (!visible) return;
     const grid = this.land.planet.grid;
     const t = grid.nearestTile([focus.x, focus.y, focus.z], this.centerTile >= 0 ? this.centerTile : 0);
-    const key = `${this.land.useVersion}:${this.land.featureVersion}:${density}:${this.mask.version}:${Math.round(this.autumnAt(t) * 4)}:${this.cover?.groundVersion ?? 0}`;
+    const key = `${this.land.useVersion}:${this.land.featureVersion}:${this.land.lifeVersion}:${density}:${this.mask.version}:${Math.round(this.autumnAt(t) * 4)}:${this.cover?.groundVersion ?? 0}`;
     if (this.centerTile >= 0 && key === this.key) {
       // Only rebuild once the focus has moved a few tiles.
       const d = this.frames.dir(t).dot(this.frames.dir(this.centerTile));
@@ -153,6 +153,9 @@ export class GrassPatch {
       }
       if (land.use[t] === Use.Road || land.use[t] === Use.Flag) per = Math.floor(per / 4);
       if (land.feature[t] === Feature.Rock) per = Math.floor(per / 2);
+      // Bare worlds grow no grass until terraforming brings it (moss gives a few tufts).
+      const life = land.life[t] as number;
+      if (life < 3) per = life === 2 ? Math.floor(per / 4) : 0;
       per = Math.round(per * density * (this.cover ? Math.min(1, 0.1 + (this.cover.cover[t] as number) / 230) : 1));
       const up = this.frames.dir(t);
       const tA = new THREE.Vector3(0, 1, 0).cross(up);

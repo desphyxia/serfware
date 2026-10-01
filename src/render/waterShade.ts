@@ -39,6 +39,8 @@ export interface WaterUniforms {
   day: THREE.UniformNode<"float", number>;
   /** How far the tide lifts the sea over the Tidewater flats, world units. */
   tideLift: THREE.UniformNode<"float", number>;
+  /** Rise of the whole sea on a terraformed world (melt and comets), world units. */
+  seaRise: THREE.UniformNode<"float", number>;
   /** 0..1 rain at the camera focus: rings on the water. */
   rain: THREE.UniformNode<"float", number>;
 }
@@ -49,6 +51,7 @@ export function makeWaterUniforms(): WaterUniforms {
     sky: uniform(new THREE.Color("#8fb6d8")),
     day: uniform(1),
     tideLift: uniform(0),
+    seaRise: uniform(0),
     rain: uniform(0),
   };
 }

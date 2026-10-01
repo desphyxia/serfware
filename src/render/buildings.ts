@@ -570,6 +570,111 @@ function launchrail(b: Build): void {
   b.add(...kit.pennant(0.35, 0.2 + Math.sin(tilt) * len + 0.1, 0.55 - Math.cos(tilt) * len, 0.4));
 }
 
+/** Mirror works: a workshop, stacked mirror panels, and a polished dish on a lattice mast aimed at the sky. */
+function mirrorworks(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(2.4, 1.8, 0.14, rng));
+  b.place([...kit.stoneWalls(1.2, 1.0, 0.8, 0.14, rng), ...kit.shingleRoof(1.2, 1.0, 0.45, 0.94, kit.jitter(ROOF.slate, rng, 0.5), rng)], -0.55, 0.3);
+  b.add(...kit.door(-0.55, 0.14, 0.81, rng), ...kit.windowPart(-0.9, 0.6, 0.81, rng, rng.pick(SHUTTERS)));
+  // Lattice mast and the great mirror, tilted up toward the sun's path.
+  for (const [x, z] of [[0.55, -0.45], [0.95, -0.45], [0.55, -0.05], [0.95, -0.05]] as const) b.add([kit.box(0.06, 1.9, 0.06, x, 0.14, z), "#5a5e66"]);
+  for (let i = 0; i < 4; i++) b.add([kit.box(0.46, 0.04, 0.04, 0.75, 0.5 + i * 0.4, -0.45), "#5a5e66"], [kit.box(0.46, 0.04, 0.04, 0.75, 0.5 + i * 0.4, -0.05), "#5a5e66"]);
+  b.add([new THREE.CylinderGeometry(0.75, 0.75, 0.05, 24).rotateX(0.9).translate(0.75, 2.35, -0.25), "#dfe6ee"], [new THREE.CylinderGeometry(0.8, 0.8, 0.04, 24).rotateX(0.9).translate(0.75, 2.33, -0.28), "#8a7a5a"]);
+  // Mirror panels waiting to go up.
+  for (let i = 0; i < 3; i++) b.add([kit.box(0.5, 0.5, 0.03, -0.4 + i * 0.1, 0.14, -0.55 - i * 0.08, 0.2), "#d8e0ea"]);
+  b.add(...kit.crate(0.7, 0.75, rng, 0.24), ...kit.pennant(0.75, 2.05, -0.25, 0.4));
+}
+
+/** Greenhouse works: a long brick hall with three tall stacks breathing warm gases into the sky. */
+function greenhouseworks(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(2.4, 1.6, 0.14, rng));
+  b.add(...kit.stoneWalls(1.9, 1.1, 0.9, 0.14, rng, "#9a5a44"), ...kit.shingleRoof(1.9, 1.1, 0.4, 1.04, kit.jitter(ROOF.brown, rng, 0.5), rng));
+  for (let i = 0; i < 3; i++) {
+    const x = -0.65 + i * 0.65;
+    b.add([kit.cyl(0.13, 0.17, 2.3, 10, x, 0.5, -0.35), "#8a4a38"], [kit.cyl(0.16, 0.16, 0.1, 10, x, 2.8, -0.35), "#3a2a24"]);
+  }
+  b.meta.chimney = new THREE.Vector3(0, 2.95, -0.35);
+  b.add(...kit.door(0, 0.14, 0.56, rng), ...kit.windowPart(-0.6, 0.6, 0.56, rng, rng.pick(SHUTTERS)), ...kit.windowPart(0.6, 0.6, 0.56, rng, rng.pick(SHUTTERS)));
+  b.add(...kit.logStack(-1.1, 0.7, 2, 0.7, rng), ...kit.barrel(1.05, 0.75, rng));
+}
+
+/** Comet catcher: a great white dish on a turning base, a brass feed horn, and a control hut. */
+function cometcatcher(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(2.4, 2.0, 0.14, rng));
+  b.add([kit.cyl(0.55, 0.7, 0.5, 16, 0.2, 0.14, -0.2), kit.C.stone], [kit.box(0.2, 1.1, 0.2, 0.2, 0.6, -0.2), "#5a5e66"]);
+  const dish = new THREE.SphereGeometry(1.1, 20, 10, 0, Math.PI * 2, 0, 0.9).scale(1, 0.45, 1).rotateX(Math.PI - 0.7).translate(0.2, 2.0, -0.25);
+  b.add([dish, "#eef0f0"], [kit.cyl(0.03, 0.03, 1.0, 6, 0.2, 1.9, 0.15).rotateX(0), "#b8903a"], [new THREE.SphereGeometry(0.1, 8, 6).translate(0.2, 2.75, 0.2), "#b8903a"]);
+  b.place([...kit.plinth(0.7, 0.6, 0.08, rng), ...kit.timberWalls(0.64, 0.54, 0.5, 0.08, rng), ...kit.shingleRoof(0.64, 0.54, 0.26, 0.58, kit.jitter(ROOF.slate, rng, 0.5), rng)], -0.85, 0.55);
+  b.add(...kit.door(-0.85, 0.08, 0.83, rng), ...kit.pennant(-0.85, 1.0, 0.55, 0.35));
+}
+
+/** Cloud seeder: a launch tower with rockets in their rack, and a shed of smoke canisters. */
+function cloudseeder(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.3, 1.1, 0.1, rng));
+  for (const [x, z] of [[-0.1, -0.35], [0.3, -0.35], [-0.1, 0.05], [0.3, 0.05]] as const) b.add([kit.box(0.05, 1.7, 0.05, x, 0.1, z), kit.C.timber]);
+  for (let i = 0; i < 3; i++) b.add([kit.box(0.46, 0.04, 0.46, 0.1, 0.5 + i * 0.5, -0.15), kit.C.timberLight]);
+  for (let i = 0; i < 3; i++) {
+    const x = -0.02 + i * 0.12;
+    b.add([kit.cyl(0.035, 0.035, 0.45, 8, x, 1.8, -0.15), "#e8e4dc"], [new THREE.ConeGeometry(0.035, 0.1, 8).translate(x, 2.3, -0.15), "#c8503a"]);
+  }
+  b.place([...kit.timberWalls(0.5, 0.45, 0.42, 0.1, rng), ...kit.shingleRoof(0.5, 0.45, 0.2, 0.52, kit.jitter(ROOF.red, rng, 0.5), rng)], -0.35, 0.3);
+  b.add(...kit.barrel(0.45, 0.45, rng), ...kit.barrel(0.55, 0.3, rng));
+}
+
+/** Lake basin: a round pond held in a stone rim, a sluice, and the diggers' barrow and spoil. */
+function lakebasin(b: Build): void {
+  const { rng } = b;
+  b.add([kit.cyl(1.05, 1.1, 0.12, 24, 0, 0, 0), kit.C.stone], [kit.cyl(0.9, 0.9, 0.13, 24, 0, 0.02, 0), "#3f6f88"]);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    b.add([kit.box(0.2, 0.16, 0.14, Math.cos(a) * 1.02, 0.02, Math.sin(a) * 1.02, -a), kit.jitter(kit.C.stone, rng, 0.8)]);
+  }
+  b.add([kit.box(0.2, 0.3, 0.3, 0, 0.02, 1.05), kit.C.timber], [kit.box(0.24, 0.05, 0.34, 0, 0.3, 1.05), kit.C.timberLight]);
+  b.add([new THREE.ConeGeometry(0.28, 0.25, 8).translate(1.15, 0.12, -0.7), "#8a7058"], [kit.box(0.2, 0.12, 0.34, 1.2, 0.08, 0.5, 0.4), "#6a4a30"], ...kit.pennant(-0.9, 0.5, 0.7, 0.3));
+}
+
+/** Seed house: a glasshouse of pale green panes over trays of seedlings, sacks of seed outside. */
+function seedhouse(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.8, 1.2, 0.12, rng));
+  b.add([kit.box(1.5, 0.3, 0.9, 0, 0.12, 0), kit.C.stone]);
+  // Glass walls and a pitched glass roof on thin frames.
+  b.add([kit.box(1.46, 0.55, 0.86, 0, 0.42, 0), "#b8dcc6"]);
+  const roof = new THREE.CylinderGeometry(0.5, 0.5, 1.46, 3, 1).rotateZ(Math.PI / 2).rotateX(Math.PI / 6).scale(1, 0.55, 0.9).translate(0, 1.1, 0);
+  b.add([roof, "#c8e6d2"]);
+  for (let i = 0; i < 5; i++) b.add([kit.box(0.03, 0.9, 0.9, -0.7 + i * 0.35, 0.42, 0), "#e8e4dc"]);
+  for (let i = 0; i < 4; i++) b.add([kit.box(0.28, 0.06, 0.6, -0.52 + i * 0.35, 0.72, 0), "#5a8a3a"]);
+  b.add(...kit.sack(0.95, 0.55, rng, "#d8c890"), ...kit.sack(1.1, 0.4, rng), ...kit.crate(-1.0, 0.5, rng, 0.2), ...kit.pennant(0.7, 1.45, 0, 0.3));
+}
+
+/** Gene bank: a squat stone vault under a turf dome, with a frosted door and sample racks. */
+function genebank(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.6, 1.4, 0.14, rng));
+  b.add(...kit.roundTower(0.7, 0.6, 0.14, rng, kit.C.stone, 1));
+  b.add([new THREE.SphereGeometry(0.72, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.6, 1).translate(0, 0.74, 0), "#6a7d4a"]);
+  b.add([kit.box(0.34, 0.46, 0.06, 0, 0.14, 0.69), "#dfe8ee"], [kit.box(0.4, 0.06, 0.08, 0, 0.62, 0.7), "#8a8e96"]);
+  for (let i = 0; i < 3; i++) b.add([kit.box(0.1, 0.3, 0.1, -0.85 + i * 0.14, 0.14, 0.45), i === 1 ? "#7fbfd8" : "#b8903a"]);
+  b.add(...kit.pennant(0.5, 1.2, -0.3, 0.3));
+}
+
+/** Reserve: four posts with ropes between them and a painted sign. */
+function reserve(b: Build): void {
+  const { rng } = b;
+  const corners = [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]] as const;
+  for (const [x, z] of corners) b.add([kit.box(0.08, 0.7, 0.08, x, 0, z), kit.C.timber], [kit.box(0.12, 0.05, 0.12, x, 0.7, z), "#c8503a"]);
+  for (let i = 0; i < 4; i++) {
+    const [ax, az] = corners[i]!;
+    const [bx, bz] = corners[(i + 1) % 4]!;
+    const len = Math.hypot(bx - ax, bz - az);
+    b.add([kit.box(0.02, 0.02, len, (ax + bx) / 2, 0.55, (az + bz) / 2, Math.atan2(bx - ax, bz - az)), kit.C.rope]);
+  }
+  b.add([kit.box(0.05, 0.8, 0.05, 0, 0, 0.85), kit.C.timber], [kit.box(0.5, 0.26, 0.04, 0, 0.62, 0.88), kit.jitter("#6a8a5a", rng, 0.5)]);
+}
+
 /** Saltworks: shallow clay pans in a grid, white salt raked into heaps, a rake and a shed. */
 function saltworks(b: Build): void {
   const { rng } = b;
@@ -860,6 +965,14 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   peatcutter,
   ropeway,
   launchrail,
+  mirrorworks,
+  greenhouseworks,
+  cometcatcher,
+  cloudseeder,
+  lakebasin,
+  seedhouse,
+  genebank,
+  reserve,
   dewcondenser,
   shellfisher,
   tidemill,

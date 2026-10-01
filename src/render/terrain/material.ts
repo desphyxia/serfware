@@ -135,6 +135,20 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const drift = smoothstep(0.08, 0.5, blown.add(mid.mul(0.2)).add(fine.mul(0.1)));
   const ripple = sin(p.x.mul(9).add(p.z.mul(5)).add(mid.mul(6))).mul(0.5).add(0.5);
   c = mix(c, mix(vec3(0.86, 0.76, 0.56), vec3(0.74, 0.62, 0.44), ripple.mul(0.5)), drift.mul(0.9));
+  // Other worlds before terraforming: bare regolith, then lichen crusts, moss, and grass and
+  // woodland as on any living world (life stage / 4 in C.z; living worlds are 1).
+  const lifeV = C.z;
+  const bare = float(1).sub(smoothstep(0.3, 0.72, lifeV.add(mid.mul(0.12))));
+  const lum = dot(c, vec3(0.3, 0.59, 0.11));
+  const regolith = vec3(lum).mul(vec3(1.1, 0.92, 0.78)).mul(0.8).add(vec3(0.12, 0.09, 0.07)).mul(fine.mul(0.2).add(0.9));
+  const crust = smoothstep(0.1, 0.3, lifeV).mul(float(1).sub(smoothstep(0.4, 0.6, lifeV)));
+  const mossy = smoothstep(0.35, 0.55, lifeV).mul(float(1).sub(smoothstep(0.65, 0.8, lifeV)));
+  let ground: THREE.Node<"vec3"> = mix(regolith, vec3(0.6, 0.63, 0.46), crust.mul(smoothstep(0.45, 0.7, tuft)).mul(0.8));
+  ground = mix(ground, vec3(0.26, 0.36, 0.17).mul(fine.mul(0.2).add(0.9)), mossy.mul(smoothstep(0.3, 0.6, mid.add(0.3))));
+  c = mix(c, ground, bare.mul(0.92));
+  // Native life: violet and teal mats in patches.
+  const mats = smoothstep(0.2, 0.7, C.w.add(mid.mul(0.3)).add(fine.mul(0.15)).sub(0.2));
+  c = mix(c, mix(vec3(0.42, 0.27, 0.55), vec3(0.2, 0.55, 0.55), smoothstep(0.4, 0.8, fine)), mats.mul(0.8));
   // Snow drifts: patchy edges, deeper in hollows, sliding off steep ground.
   const snowCover = smoothstep(0.08, 0.55, snow.add(mid.mul(0.22)).add(fine.mul(0.08)))
     .mul(float(1).sub(smoothstep(0.35, 0.6, slope)))

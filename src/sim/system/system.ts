@@ -1,4 +1,5 @@
-import { Rng } from "../rng";
+import { mix32, Rng } from "../rng";
+import type { AirStart } from "../climate/atmosphere";
 import { log, pow } from "../dmath";
 import type { GridSize } from "../planet/grid";
 import type { Planet } from "../planet/planet";
@@ -171,6 +172,28 @@ export function launchWindow(from: SystemPlanet, to: SystemPlanet, day: number):
   const rate = w2 - w1;
   const diff = rate < 0 ? wrap(now - lead) : wrap(lead - now);
   return { daysUntil: diff / Math.abs(rate), transferDays, synodic };
+}
+
+/** A planet's air when first found: home breathes; the rest are for terraforming. */
+const AIR: Record<PlanetKind, AirStart> = {
+  temperate: { pressure: 0.8, oxygen: 0.02, water: 0.6, ice: 0.1 },
+  arid: { pressure: 0.35, oxygen: 0.005, water: 0.12, ice: 0.05 },
+  frozen: { pressure: 0.45, oxygen: 0, water: 0.2, ice: 0.7 },
+  ocean: { pressure: 1.1, oxygen: 0.01, water: 1.1, ice: 0.1 },
+  molten: { pressure: 2.4, oxygen: 0, water: 0.02, ice: 0 },
+  gas: { pressure: 50, oxygen: 0, water: 0, ice: 0 },
+};
+export const HOME_AIR: AirStart = { pressure: 1, oxygen: 0.21, water: 1, ice: 0.1 };
+
+/**
+ * How to build another planet's world (survey and colony alike): its physics and climate, bare
+ * ground, its air, and whether life of its own was there first (one world in three, never a
+ * molten one).
+ */
+export function worldFor(p: SystemPlanet): { planet: ReturnType<typeof planetOverrides>; barren: boolean; native: boolean; air: AirStart } {
+  let h = 0;
+  for (let i = 0; i < p.name.length; i++) h = mix32(h, p.name.charCodeAt(i));
+  return { planet: planetOverrides(p), barren: !p.home, native: !p.home && p.kind !== "molten" && h % 3 === 0, air: p.home ? HOME_AIR : AIR[p.kind] };
 }
 
 /** Terrain and physics for building a planet's world (see World's `planet` option). */
