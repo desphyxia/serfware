@@ -1,4 +1,5 @@
 import type { AudioSettings } from "../core/settings";
+import { Music, type MusicState } from "./music";
 
 /**
  * Procedural soundscape built from WebAudio nodes, no samples:
@@ -34,6 +35,9 @@ export class Ambience {
   private master!: GainNode;
   private ambienceBus!: GainNode;
   private effectsBus!: GainNode;
+  private musicBus!: GainNode;
+  private music: Music | null = null;
+  private musicState: MusicState | null = null;
   private windGain!: GainNode;
   private rainGain!: GainNode;
   private windFilter!: BiquadFilterNode;
@@ -77,6 +81,8 @@ export class Ambience {
     this.effectsBus = ctx.createGain();
     this.ambienceBus.connect(this.master);
     this.effectsBus.connect(this.master);
+    this.musicBus = ctx.createGain();
+    this.musicBus.connect(this.master);
     this.applySettings(this.settings);
 
     // Two seconds of pink-ish noise, reused by every noise voice.
@@ -116,6 +122,16 @@ export class Ambience {
     // Rain: bright hiss on leaves and roofs.
     const rain = loop("highpass", 1800, 0.5);
     this.rainGain = rain.g;
+    this.music = new Music(ctx, this.musicBus, this.noise);
+    if (this.musicState) this.music.set(this.musicState);
+  }
+
+  /** The adaptive music follows the town (see music.ts). */
+  setMusic(state: MusicState): void {
+    this.musicState = state;
+    if (!this.music || !this.running) return;
+    this.music.set(state);
+    if (this.settings.music > 0.001 && this.settings.master > 0.001) this.music.tick();
   }
 
   applySettings(s: AudioSettings): void {
@@ -125,6 +141,7 @@ export class Ambience {
     this.master.gain.setTargetAtTime(s.master, t, 0.1);
     this.ambienceBus.gain.setTargetAtTime(s.ambience, t, 0.1);
     this.effectsBus.gain.setTargetAtTime(s.effects, t, 0.1);
+    this.musicBus.gain.setTargetAtTime(s.music, t, 0.1);
   }
 
   update(state: AmbienceState, work: readonly WorkSound[]): void {

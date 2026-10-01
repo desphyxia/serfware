@@ -1,7 +1,7 @@
 import type { Planet } from "../planet/planet";
 import { Biome } from "../planet/terrain";
 import { SimNoise } from "../noise";
-import type { Rng } from "../rng";
+import { mix32, type Rng } from "../rng";
 import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
 import { computeHydrology, type Hydrology } from "../planet/hydrology";
@@ -38,9 +38,16 @@ export enum Feature {
   Spire = 9,
   /** Glowcap fungus (Lumen Mire): amount is its growth stage 0..4; variety 1 = wild. Glows from stage 2. */
   Glowcap = 10,
+  /**
+   * Precursor ruins beside a Star Well. Amount: digs left for an excavation; variety 1 once
+   * dug out (the ruin stays, open to the sky).
+   */
+  Ruin = 11,
 }
 
 export const GLOWCAP_RIPE = 4;
+/** Digs an excavation takes to empty a ruin. */
+export const RUIN_DIGS = 6;
 
 /** Tree varieties: 0..3 are wild or planted timber; these are special and never felled. */
 export const MEMORIAL = 7;
@@ -289,8 +296,26 @@ export class LandUse {
         this.amount[t] = rng.int(0, 100);
       }
     }
+    this.populateRuins();
     this.featureVersion++;
     this.populateGeology(rng);
+  }
+
+  /**
+   * Ruins of whoever came before: one beside each Star Well on land, placed by hash (not drawn
+   * from the world's random stream, so nothing else about the world changes).
+   */
+  private populateRuins(): void {
+    const grid = this.planet.grid;
+    for (let t = 0; t < grid.count; t++) {
+      if (grid.degree(t) !== 5 || !this.isLand(t)) continue;
+      const ns = grid.neighborsOf(t).filter((n) => this.isLand(n) && grid.degree(n) === 6);
+      if (!ns.length) continue;
+      const r = ns[mix32(t, 1777) % ns.length] as number;
+      this.feature[r] = Feature.Ruin;
+      this.amount[r] = RUIN_DIGS;
+      this.variety[r] = 0;
+    }
   }
 
   /** Deposits under hills and mountains, fish in coastal waters. */
@@ -369,7 +394,7 @@ export class LandUse {
   walkable(t: number): boolean {
     if (this.flooded[t] && !this.causeway[t]) return false;
     const f = this.feature[t];
-    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire;
+    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire && f !== Feature.Ruin;
   }
 
   /** A flag or road of `owner` may go here. */
@@ -405,7 +430,7 @@ export class LandUse {
     const grid = this.planet.grid;
     if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
     const f = this.feature[t];
-    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap))) return false;
+    if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap || f === Feature.Ruin))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;

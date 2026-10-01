@@ -102,9 +102,15 @@ export interface GlowParts {
   belonging: number;
   beauty: number;
   rest: number;
+  /** Kinds of food in store: a varied table. */
+  variety: number;
+  /** Festivals: full for a few days after one. */
+  joy: number;
+  /** The Almanac and relics: knowing the world and its past. */
+  wonder: number;
 }
 
-export const GLOW_WEIGHTS: GlowParts = { nourishment: 0.32, shelter: 0.2, belonging: 0.18, beauty: 0.15, rest: 0.15 };
+export const GLOW_WEIGHTS: GlowParts = { nourishment: 0.27, shelter: 0.17, belonging: 0.15, beauty: 0.13, rest: 0.12, variety: 0.06, joy: 0.05, wonder: 0.05 };
 
 export function glowValue(p: GlowParts): number {
   let s = 0;

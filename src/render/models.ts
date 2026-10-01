@@ -426,6 +426,28 @@ export function sledgeGeometry(): THREE.BufferGeometry {
  * A salt-crystal spire: a cluster of long six-sided prisms, pale rose to white, leaning out from
  * a crusted base. They catch the evening light and glow faintly at night (the renderer tints them).
  */
+/**
+ * A Precursor ruin: a broken ring of pale columns of five sides around a worn platform, a
+ * fallen lintel, and a rune stone with a faint cyan glow. `dug` shows it excavated: the
+ * platform lifted away into a pit, and the lens beneath it shining.
+ */
+export function ruinGeometry(dug = false): THREE.BufferGeometry {
+  const rng = new kit.Rng(dug ? 911 : 907);
+  const stone = "#d6d0c4";
+  const parts: Part[] = [];
+  if (!dug) parts.push([kit.cyl(0.72, 0.78, 0.12, 5, 0, 0, 0), "#bdb6a8"]);
+  else parts.push([kit.cyl(0.55, 0.45, 0.06, 5, 0, 0, 0), "#3a342e"], [kit.cyl(0.18, 0.18, 0.08, 10, 0, 0.04, 0), "#8ff0ff"]);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.3;
+    const h = [0.95, 0.4, 0.7, 0.25, 0.85][i]! * (0.85 + rng.next() * 0.3);
+    parts.push([kit.cyl(0.09, 0.11, h, 5, Math.cos(a) * 0.6, 0.05, Math.sin(a) * 0.6), kit.jitter(stone, rng, 0.6)]);
+    if (h > 0.6) parts.push([kit.cyl(0.13, 0.12, 0.06, 5, Math.cos(a) * 0.6, 0.05 + h, Math.sin(a) * 0.6), stone]);
+  }
+  parts.push([box(0.7, 0.1, 0.16, 0.2, 0.06, 0.75, 0.5), kit.jitter(stone, rng, 0.6)]);
+  parts.push([box(0.16, 0.34, 0.08, -0.15, 0.08, -0.15, 0.4), "#a8a294"], [box(0.06, 0.12, 0.09, -0.15, 0.2, -0.15, 0.4), "#7fe8ff"]);
+  return merge(parts);
+}
+
 export function spireGeometry(): THREE.BufferGeometry {
   const rng = new kit.Rng(307);
   const parts: Part[] = [[new THREE.CylinderGeometry(0.55, 0.7, 0.18, 8).translate(0, 0.09, 0), "#d8cfc6"]];

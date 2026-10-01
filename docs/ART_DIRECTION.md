@@ -346,6 +346,26 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
 - Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
   gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.
 
+### Knowledge and culture (batch 20)
+
+- **Almanac (L):** a book on warm parchment, with an index of pages on the left and the open
+  page on the right. Each page has an ink sketch whose lines wobble slightly, as if drawn by
+  hand (an SVG turbulence displacement), a note in an italic serif, who noticed it and on which
+  day, and what it unlocked. Pages not yet found show as dotted blanks.
+- **Precursor ruins:** each sits beside a Star Well: a broken ring of pale five-sided columns
+  on a worn platform, a fallen lintel, and a rune stone with a faint cyan glow. Once dug out,
+  the platform gives way to a dark pit with a glowing lens at its heart.
+- **Festivals:** paper confetti in red, gold, sky blue and green bursts over the maypole on
+  a feast day. The maypole has six coloured ribbons running from a green crown to pegs in the
+  grass.
+- **Decorations:** flowerbeds with bright blooms in timber edging, stone-and-plank benches, a
+  round fountain with a spout, and a statue of a figure holding up a glowing Precursor lens.
+- **Music:** a soft pad of chords. Layers join as the town grows: plucked strings for the
+  woodworkers, a flute for the farms, bells for the forges, a low pulse for the water trades,
+  and a muffled drum for the mines. The key is major when Glow is high, dorian in between and
+  minor when it is low. At night it thins to pad and bells; on a festival day it quickens, with
+  a tambourine and a fiddle.
+
 ### Terraforming (batch 19)
 
 - **Bare worlds:** another planet before terraforming has no trees, scrub or grass. Its ground is

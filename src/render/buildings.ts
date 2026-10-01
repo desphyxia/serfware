@@ -675,6 +675,69 @@ function reserve(b: Build): void {
   b.add([kit.box(0.05, 0.8, 0.05, 0, 0, 0.85), kit.C.timber], [kit.box(0.5, 0.26, 0.04, 0, 0.62, 0.88), kit.jitter("#6a8a5a", rng, 0.5)]);
 }
 
+/** Excavation: a roped-off trench, sieves and finds trays, a tool shed and a canvas awning. */
+function digsite(b: Build): void {
+  const { rng } = b;
+  b.add([kit.box(1.0, 0.04, 0.6, 0.3, 0, -0.2), "#5a4636"], [kit.box(0.9, 0.06, 0.06, 0.3, 0.02, 0.12), "#8a7058"]);
+  for (const [x, z] of [[-0.25, -0.55], [0.85, -0.55], [-0.25, 0.15], [0.85, 0.15]] as const) b.add([kit.box(0.04, 0.4, 0.04, x, 0, z), kit.C.timber]);
+  b.add([kit.box(1.1, 0.02, 0.02, 0.3, 0.36, -0.55), kit.C.rope], [kit.box(1.1, 0.02, 0.02, 0.3, 0.36, 0.15), kit.C.rope]);
+  // Awning over the finds table.
+  b.add([kit.box(0.7, 0.02, 0.5, -0.6, 0.75, 0.45, 0.1), "#e8dcc0"], [kit.box(0.04, 0.75, 0.04, -0.9, 0, 0.25), kit.C.timber], [kit.box(0.04, 0.75, 0.04, -0.3, 0, 0.65), kit.C.timber]);
+  b.add([kit.box(0.5, 0.05, 0.3, -0.6, 0.4, 0.45), kit.C.timberLight], [kit.box(0.08, 0.06, 0.08, -0.7, 0.45, 0.45), "#7fe8ff"], [kit.box(0.1, 0.05, 0.06, -0.5, 0.45, 0.5), "#d6d0c4"]);
+  b.add([kit.cyl(0.18, 0.18, 0.06, 12, 0.85, 0.3, 0.55), "#8a7058"], ...kit.sack(0.55, 0.6, rng), ...kit.pennant(-0.9, 0.75, 0.25, 0.3));
+}
+
+/** Maypole: a tall pole on a little green, a crown of greenery, and coloured ribbons. */
+function maypole(b: Build): void {
+  b.add([kit.cyl(0.75, 0.8, 0.04, 16, 0, 0, 0), "#6a9a4a"]);
+  b.add([kit.cyl(0.05, 0.07, 2.6, 8, 0, 0, 0), "#e8e0d0"], [new THREE.TorusGeometry(0.16, 0.05, 6, 12).rotateX(Math.PI / 2).translate(0, 2.5, 0), "#4a7a3a"]);
+  const colours = ["#c8503a", "#e8c040", "#4a8ad0", "#5aa04a", "#e8e4dc", "#a050a0"];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const x = Math.cos(a) * 0.65;
+    const z = Math.sin(a) * 0.65;
+    const len = Math.hypot(0.65, 2.4);
+    // From the crown down to a peg in the green: centred halfway, leaning out from the pole.
+    const g = kit.box(0.03, len, 0.006, 0, -len / 2, 0).rotateZ(Math.atan2(0.65, 2.4)).rotateY(-a);
+    b.add([g.translate(x / 2, 0.04 + 2.45 / 2, z / 2), colours[i]!]);
+    b.add([kit.box(0.06, 0.06, 0.06, x, 0, z), colours[i]!]);
+  }
+}
+
+/** Flowerbed: a timber-edged bed of bright flowers. */
+function flowerbed(b: Build): void {
+  const { rng } = b;
+  b.add([kit.box(0.9, 0.12, 0.5, 0, 0, 0), kit.C.timber], [kit.box(0.84, 0.13, 0.44, 0, 0, 0), "#4a3a2a"]);
+  const flowers = ["#e84a6a", "#f0c040", "#f0f0f0", "#a060d0", "#f08040"];
+  for (let i = 0; i < 14; i++) {
+    const x = -0.36 + rng.next() * 0.72;
+    const z = -0.18 + rng.next() * 0.36;
+    b.add([kit.box(0.015, 0.14, 0.015, x, 0.12, z), "#4a8a3a"], [new THREE.SphereGeometry(0.04, 6, 4).translate(x, 0.27, z), rng.pick(flowers)]);
+  }
+}
+
+/** Bench: a plank seat on two stone ends. */
+function bench(b: Build): void {
+  b.add([kit.box(0.12, 0.22, 0.24, -0.35, 0, 0), kit.C.stone], [kit.box(0.12, 0.22, 0.24, 0.35, 0, 0), kit.C.stone]);
+  b.add([kit.box(0.9, 0.05, 0.28, 0, 0.22, 0), kit.C.timberLight], [kit.box(0.9, 0.18, 0.04, 0, 0.27, -0.13), kit.C.timberLight]);
+}
+
+/** Fountain: a round stone basin with a column spouting into it. */
+function fountain(b: Build): void {
+  b.add([kit.cyl(0.62, 0.66, 0.25, 16, 0, 0, 0), kit.C.stone], [kit.cyl(0.55, 0.55, 0.26, 16, 0, 0.01, 0), "#4f8fbf"]);
+  b.add([kit.cyl(0.1, 0.14, 0.7, 8, 0, 0.2, 0), kit.C.stone], [kit.cyl(0.24, 0.12, 0.1, 10, 0, 0.88, 0), kit.C.stone], [kit.cyl(0.18, 0.18, 0.03, 10, 0, 0.98, 0), "#8fc8e8"]);
+  b.add([new THREE.ConeGeometry(0.05, 0.25, 6).translate(0, 1.1, 0), "#cfeaf8"]);
+}
+
+/** Statue: a figure on a plinth, face lifted, holding up a glowing Precursor lens. */
+function statue(b: Build): void {
+  const stone = "#d8d2c6";
+  b.add([kit.box(0.55, 0.4, 0.55, 0, 0, 0), kit.C.stone], [kit.box(0.62, 0.06, 0.62, 0, 0.4, 0), kit.C.stone]);
+  b.add([kit.cyl(0.14, 0.2, 0.75, 8, 0, 0.46, 0), stone], [new THREE.SphereGeometry(0.11, 10, 8).translate(0, 1.32, 0.03), stone]);
+  b.add([kit.box(0.07, 0.42, 0.07, 0.17, 1.0, 0.05).rotateZ(-0.5), stone], [kit.box(0.07, 0.3, 0.07, -0.16, 0.85, 0.05).rotateZ(0.3), stone]);
+  b.add([new THREE.SphereGeometry(0.07, 8, 6).translate(0.36, 1.33, 0.05), "#8ff0ff"]);
+}
+
 /** Saltworks: shallow clay pans in a grid, white salt raked into heaps, a rake and a shed. */
 function saltworks(b: Build): void {
   const { rng } = b;
@@ -973,6 +1036,12 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   seedhouse,
   genebank,
   reserve,
+  digsite,
+  maypole,
+  flowerbed,
+  bench,
+  fountain,
+  statue,
   dewcondenser,
   shellfisher,
   tidemill,

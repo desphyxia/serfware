@@ -622,6 +622,8 @@ export class EconView {
       // Forges throw embers up the chimney while they work.
       if (c && (b.def.id === "smelter" || b.def.id === "goldsmith" || b.def.id === "toolsmith") && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`e${b.id}`, "ember", 6).pos.copy(c).applyMatrix4(mesh.matrixWorld);
+      // Festival day: confetti over the maypole.
+      if (b.def.id === "maypole" && this.eco.culture.festive(b.owner)) get(`f${b.id}`, "confetti", 14).pos.set(0, 2.6, 0).applyMatrix4(mesh.matrixWorld);
       if (b.def.id === "sawmill" && b.worker >= 0 && this.eco.settlers[b.worker]?.state === "craft")
         get(`s${b.id}`, "steam", 5).pos.set(0.95, 0.8, 0.3).applyMatrix4(mesh.matrixWorld);
     }

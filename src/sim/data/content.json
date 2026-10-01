@@ -165,6 +165,10 @@
     {
       "id": "skystone",
       "name": "Skystone"
+    },
+    {
+      "id": "relic",
+      "name": "Relic"
     }
   ],
   "buildings": [
@@ -369,6 +373,74 @@
         "plank": 2
       },
       "reserve": 4
+    },
+    {
+      "id": "digsite",
+      "name": "Excavation",
+      "category": "materials",
+      "description": "Diggers work the Precursor ruin beside a Star Well, a careful trowel at a time. Each find is a relic: a wonder for the Almanac, and the stuff of statues.",
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
+      "job": "excavate",
+      "tool": "shovel",
+      "radius": 3,
+      "workTicks": 200,
+      "restTicks": 40,
+      "produces": "relic"
+    },
+    {
+      "id": "maypole",
+      "name": "Maypole",
+      "category": "decor",
+      "description": "A tall pole with ribbons on a little green. When a festival falls on the world's calendar, everyone gathers here to feast and dance.",
+      "cost": {
+        "plank": 3
+      },
+      "beauty": 2
+    },
+    {
+      "id": "flowerbed",
+      "name": "Flowerbed",
+      "category": "decor",
+      "description": "Beds of flowers by the road. A little beauty for everyone who passes.",
+      "cost": {
+        "log": 1
+      },
+      "beauty": 1
+    },
+    {
+      "id": "bench",
+      "name": "Bench",
+      "category": "decor",
+      "description": "A bench under the eaves to sit and talk on.",
+      "cost": {
+        "plank": 1
+      },
+      "beauty": 1
+    },
+    {
+      "id": "fountain",
+      "name": "Fountain",
+      "category": "decor",
+      "description": "Spring water raised to play in a stone basin: the pride of a square.",
+      "cost": {
+        "stone": 4,
+        "plank": 1
+      },
+      "beauty": 4
+    },
+    {
+      "id": "statue",
+      "name": "Statue",
+      "category": "decor",
+      "description": "A statue carved around a Precursor relic: a figure looking up at the Star Wells.",
+      "cost": {
+        "stone": 4,
+        "relic": 1
+      },
+      "beauty": 6
     },
     {
       "id": "well",

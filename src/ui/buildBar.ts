@@ -17,6 +17,8 @@ export const ICONS: Record<string, string> = {
   storage: svg(`<path d="M3 10l9-6 9 6v10H3zM9 20v-6h6v6" ${STROKE}/>`),
   lantern: svg(`<path d="M12 2v3M8 7h8l-1 9H9zM9 16l-1 5h8l-1-5M12 10v3" ${STROKE}/>`),
   terra: svg(`<circle cx="12" cy="12" r="8" ${STROKE}/><path d="M12 20c0-5 2-8 6-9M12 20c0-4-2-6-5-7M9 6c2 1 3 3 3 6" ${STROKE}/>`),
+  decor: svg(`<path d="M12 21V9M12 9c-2-3-6-3-6 0s4 4 6 0zM12 9c2-3 6-3 6 0s-4 4-6 0zM12 9c-1-3 0-6 0-6s1 3 0 6" ${STROKE}/>`),
+  almanac: svg(`<path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1zM12 6v14" ${STROKE}/>`),
   system: svg(`<circle cx="12" cy="12" r="2.5" ${STROKE}/><ellipse cx="12" cy="12" rx="10" ry="4.5" ${STROKE}/><circle cx="20" cy="10" r="1.3" fill="currentColor"/>`),
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
@@ -28,6 +30,7 @@ export const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "storage", label: "Homes", key: "6" },
   { id: "lantern", label: "Lanterns", key: "7" },
   { id: "terra", label: "Terraform", key: "8" },
+  { id: "decor", label: "Decor", key: "9" },
 ];
 
 /** Hedgerows are planted with the Food tools, though they are not buildings. */
@@ -71,6 +74,9 @@ export class BuildBar {
     private readonly onPick: (id: ToolId) => void,
     private readonly onEconomy: () => void,
     private readonly onSystem: () => void = () => {},
+    private readonly onAlmanac: () => void = () => {},
+    /** Why a building can't be chosen yet (not in the Almanac), or null. */
+    private readonly locked: (id: string) => string | null = () => null,
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
@@ -86,6 +92,7 @@ export class BuildBar {
     add("demolish", "Demolish", "X", ICONS.demolish!, "Remove a building, flag or road. Click twice to confirm.", () => this.pick("demolish"));
     add("economy", "Economy", "P", ICONS.economy!, "Stock, distribution and tool priorities.", () => this.onEconomy());
     add("system", "System", "O", ICONS.system!, "The star system: planets, orbits and launch windows.", () => this.onSystem());
+    add("almanac", "Almanac", "L", ICONS.almanac!, "What your people have learned of their world, and what it unlocks.", () => this.onAlmanac());
     this.popover = h("div", { class: "bb-pop", hidden: true, role: "menu" });
     this.root = h("div", { class: "buildbar-wrap" }, this.popover, bar);
   }
@@ -104,14 +111,15 @@ export class BuildBar {
     const defs = BUILDINGS.filter((b) => b.category === cat && b.buildable !== false);
     const extra = EXTRA_TOOLS[cat] ?? [];
     this.popover.replaceChildren(
-      ...[...defs, ...extra].map((d) =>
-        h(
+      ...[...defs, ...extra].map((d) => {
+        const why = this.locked(d.id);
+        return h(
           "button",
-          { class: "pop-item", role: "menuitem", title: d.description, onclick: () => this.pick(d.id) },
+          { class: `pop-item${why ? " locked" : ""}`, role: "menuitem", title: why ?? d.description, "aria-disabled": why ? "true" : undefined, onclick: () => (why ? undefined : this.pick(d.id)) },
           h("span", { class: "pop-name" }, d.name),
-          h("span", { class: "pop-cost" }, costText(d)),
-        ),
-      ),
+          h("span", { class: "pop-cost" }, why ? "locked" : costText(d)),
+        );
+      }),
     );
     this.popover.hidden = false;
     for (const c of CATEGORIES) this.buttons.get(c.id)?.classList.toggle("open", c.id === cat);
@@ -137,6 +145,7 @@ export class BuildBar {
     else if (k === "2") this.pick("road");
     else if (k === "x") this.pick("demolish");
     else if (k === "p") this.onEconomy();
+    else if (k === "l") this.onAlmanac();
     else {
       const cat = CATEGORIES.find((c) => c.key === k);
       if (!cat) return false;
