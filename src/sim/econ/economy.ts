@@ -202,6 +202,7 @@ export type Command = (
   | { t: "hedge"; tile: number }
   | { t: "causeway"; tile: number }
   | DiplomacyCommand
+  | { t: "send"; to: number; good: string; count: number }
 ) & { player?: number };
 
 export interface CommandResult {
@@ -266,6 +267,10 @@ export class Economy {
   readonly wanderers: Wanderers;
   /** Players run by the computer (they answer offers themselves). */
   readonly aiPlayers = new Set<number>();
+  /** Per player: team (allies share sight, may lay roads on each other's land and win together). */
+  readonly teams: number[] = [];
+  /** How this world is won: the last settlement standing or Star Wells ("conquest"), or the first colony to bloom ("bloom"). */
+  goal: "conquest" | "bloom" = "conquest";
   /** Per player: the settlement's name, if it has one. */
   readonly names: string[] = [];
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
@@ -327,6 +332,18 @@ export class Economy {
   /** Roads across land no longer shared (a shared-roads treaty ended) are taken up. */
   dropForeignRoads(): void {
     for (const r of this.roads) if (r.alive && r.tiles.slice(1, -1).some((t) => !this.land.mayRoad(t, r.owner))) this.removeRoad(r);
+  }
+
+  /** Same player, or both on one team. */
+  allied(p: number, q: number): boolean {
+    if (p === q) return true;
+    const a = this.teams[p];
+    return a !== undefined && a === this.teams[q];
+  }
+
+  /** Everyone allied with `p` (p included). */
+  team(p: number): number[] {
+    return this.keeps.map((_, q) => q).filter((q) => this.keeps[q] !== undefined && this.allied(p, q));
   }
 
   playerName(p: number): string {
@@ -396,7 +413,75 @@ export class Economy {
   }
 
   /** Choose a start site for `player`, place the keep, claim territory and make sure the start is playable. */
-  setupStart(rng: Rng, player = 0): void {
+  /**
+   * How good a start site is, the way fair starts compare them: fresh water near by, ore in the
+   * ground, the soil, and how close the nearest Star Well is. 0..40.
+   */
+  siteScore(t: number): number {
+    const land = this.land;
+    const grid = land.planet.grid;
+    let water = 0;
+    let ore = 0;
+    let soil = 0;
+    let n = 0;
+    for (const x of land.ring(t, 7)) {
+      if (!land.isLand(x)) water++;
+      else {
+        soil += land.soil[x] as number;
+        n++;
+        if (land.deposit[x]) ore++;
+      }
+    }
+    let well = Infinity;
+    this.wellTiles ??= Array.from({ length: grid.count }, (_, w) => w).filter((w) => grid.degree(w) === 5);
+    for (const w of this.wellTiles) {
+      const dx = (grid.center[w * 3] as number) - (grid.center[t * 3] as number);
+      const dy = (grid.center[w * 3 + 1] as number) - (grid.center[t * 3 + 1] as number);
+      const dz = (grid.center[w * 3 + 2] as number) - (grid.center[t * 3 + 2] as number);
+      well = Math.min(well, Math.sqrt(dx * dx + dy * dy + dz * dz) / land.spacing);
+    }
+    return 10 * Math.min(1, (water > 0 ? 8 + Math.min(water, 22) : 0) / 30) + 10 * Math.min(1, ore / 12) + 10 * (n ? soil / n : 0) + 10 * Math.max(0, 1 - well / 30);
+  }
+
+  private wellTiles: number[] | null = null;
+
+  /** Per player: the start site's score (see siteScore). */
+  readonly startScores: number[] = [];
+
+  /**
+   * Fair starts, the last step: where no site came close enough, bring the poorer starts up to
+   * within 5 % of the richest with more ore in the hills around them and better soil.
+   */
+  evenStarts(): void {
+    const land = this.land;
+    const players = this.keeps.map((_, p) => p).filter((p) => this.buildings[this.keeps[p] ?? -1]);
+    const tileOf = (p: number) => (this.buildings[this.keeps[p] as number] as Building).tile;
+    const area = (p: number) => land.ring(tileOf(p), 7).filter((t) => land.isLand(t));
+    for (const p of players) this.startScores[p] = this.siteScore(tileOf(p));
+    // Raise the poorest where it can be raised (more ore, better soil); else temper the richest.
+    for (let i = 0; i < 240; i++) {
+      const by = players.slice().sort((x, y) => (this.startScores[x] as number) - (this.startScores[y] as number));
+      const lo = by[0] as number;
+      const hi = by[by.length - 1] as number;
+      if ((this.startScores[lo] as number) >= (this.startScores[hi] as number) * 0.96) break;
+      const low = area(lo);
+      const bare = low.filter((t) => !land.deposit[t] && land.use[t] === Use.Free && (land.ring(tileOf(lo), 4).indexOf(t) < 0));
+      if (low.filter((t) => land.deposit[t]).length < 12 && bare.length) {
+        const t = bare[(mix32(lo * 977 + i, tileOf(lo)) >>> 0) % bare.length] as number;
+        land.deposit[t] = 1 + (i % 3);
+        land.depositAmount[t] = 20;
+      } else if (low.some((t) => (land.soil[t] as number) < 1)) {
+        for (const t of low) land.soil[t] = Math.min(1, (land.soil[t] as number) + 0.04);
+      } else {
+        for (const t of area(hi)) land.soil[t] = Math.max(0.2, (land.soil[t] as number) - 0.04);
+        this.startScores[hi] = this.siteScore(tileOf(hi));
+        continue;
+      }
+      this.startScores[lo] = this.siteScore(tileOf(lo));
+    }
+  }
+
+  setupStart(rng: Rng, player = 0, fairTo?: number): void {
     const others = this.keeps.map((k) => (this.buildings[k] as Building).tile);
     const land = this.land;
     const { grid, terrain } = land.planet;
@@ -428,7 +513,10 @@ export class Economy {
         if (ang < land.spacing * (START.territoryRadius * 2 + 4)) spread -= 1000;
         else spread -= (Math.abs(ang - land.spacing * (START.territoryRadius * 2 + 10)) / land.spacing) * 6;
       }
+      // Fair starts: a site more than 5 % better or worse than the first player's is a last resort.
+      const fair = fairTo === undefined ? 0 : Math.abs(this.siteScore(t) / fairTo - 1) > 0.05 ? -400 : 0;
       const score =
+        fair +
         spread +
         flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3;
       if (score > bestScore) {
@@ -437,6 +525,7 @@ export class Economy {
       }
     }
     if (best < 0) throw new Error("No start site found");
+    this.startScores[player] = this.siteScore(best);
     this.settleAt(best, rng, player);
   }
 
@@ -647,12 +736,29 @@ export class Economy {
         return this.cmdHedge(cmd.tile, p);
       case "causeway":
         return this.cmdCauseway(cmd.tile, p);
+      case "send":
+        return this.cmdSend(p, cmd.to, cmd.good, cmd.count);
       case "garrison":
         if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
     }
     return { ok: false, reason: "Unknown command." };
+  }
+
+  /** Allies: send goods from your Hearthship's stores straight to theirs. */
+  private cmdSend(p: number, to: number, good: string, count: number): CommandResult {
+    if (to === p || !this.allied(p, to) || this.keeps[to] === undefined) return { ok: false, reason: "Only allies can be sent goods." };
+    const g = GOOD_INDEX.get(good);
+    const from = this.buildings[this.keeps[p] as number] as Building;
+    const dest = this.buildings[this.keeps[to] as number] as Building;
+    if (g === undefined || !dest.alive) return { ok: false, reason: "Nothing to send." };
+    const n = Math.min(Math.max(0, Math.floor(count)), from.stock[g] as number);
+    if (n <= 0) return { ok: false, reason: `No ${GOODS[g]!.name.toLowerCase()} in your Hearthship's stores.` };
+    from.stock[g] = (from.stock[g] as number) - n;
+    dest.stock[g] = (dest.stock[g] as number) + n;
+    this.notify(to, `${this.playerName(p)} sends you ${n} ${GOODS[g]!.name.toLowerCase()}.`);
+    return { ok: true };
   }
 
   private cmdGeologist(flagTile: number, p: number): CommandResult {
@@ -1607,6 +1713,7 @@ export class Economy {
     if (this.winner >= 0) return "The game is over.";
     if (this.tick < this.peaceUntil) return "The peace still holds.";
     if (this.defeated[player]) return "Your settlement has fallen.";
+    if (target.owner !== player && this.allied(player, target.owner)) return "That is an ally's lantern.";
     if (target.owner !== player && this.diplomacy.truce(player, target.owner)) return `You have a truce with ${this.playerName(target.owner)}. Break it first (Diplomacy, J), at a cost.`;
     if (!target.alive || !target.built || target.owner === player) return "That isn't an enemy lantern.";
     if (!target.def.light || (!target.lit && !this.keeps.includes(target.id))) return "Only lit lanterns and Hearthships can be attacked.";
@@ -1901,10 +2008,12 @@ export class Economy {
     // Colonies are not battlefields (yet): nobody wins a colony world.
     if (this.winner >= 0 || this.colony) return;
     const alive = this.keeps.map((_, p) => p).filter((p) => !this.defeated[p]);
-    if (this.keeps.length > 1 && alive.length === 1) {
+    // The last settlement (or the last team) standing.
+    if (this.keeps.length > 1 && alive.length >= 1 && alive.every((p) => this.allied(p, alive[0] as number)) && this.keeps.some((_, p) => !this.allied(p, alive[0] as number))) {
       this.win(alive[0] as number, "conquest");
       return;
     }
+    if (this.goal === "bloom") return;
     const grid = this.land.planet.grid;
     const held = new Array<number>(this.keeps.length).fill(0);
     for (let t = 0; t < grid.count; t++) {
@@ -1925,11 +2034,15 @@ export class Economy {
     }
   }
 
-  private win(p: number, reason: "conquest" | "wells"): void {
+  win(p: number, reason: "conquest" | "wells" | "bloom"): void {
+    if (this.winner >= 0) return;
     this.winner = p;
     this.winReason = reason;
-    for (let o = 0; o < this.keeps.length; o++)
-      this.notify(o, o === p ? (reason === "wells" ? "The Star Wells sing for you. Victory!" : "The last rival Hearthship has fallen. Victory!") : "Another settlement has won this world.");
+    const why = { wells: "The Star Wells sing for you. Victory!", conquest: "The last rival Hearthship has fallen. Victory!", bloom: "Your colony has bloomed first. Victory!" }[reason];
+    for (let o = 0; o < this.keeps.length; o++) {
+      if (this.keeps[o] === undefined) continue;
+      this.notify(o, o === p ? why : this.allied(o, p) ? `${this.playerName(p)} has won, and your team with them. Victory!` : "Another settlement has won this world.");
+    }
   }
 
   /** Daily watch: wardens gain experience; gold in storage pays for faster promotion. */
@@ -2064,6 +2177,22 @@ export class Economy {
         vis[t] = 1;
         exp[t] = 1;
       });
+    }
+    // Allies share their sight.
+    if (this.teams.length) {
+      const own = this.visible.map((v) => v.slice());
+      for (let p = 0; p < this.keeps.length; p++)
+        for (let q = 0; q < this.keeps.length; q++) {
+          if (p === q || !this.allied(p, q)) continue;
+          const vis = this.visible[p] as Uint8Array;
+          const exp = this.explored[p] as Uint8Array;
+          const other = own[q] as Uint8Array;
+          for (let t = 0; t < n; t++)
+            if (other[t]) {
+              vis[t] = 1;
+              exp[t] = 1;
+            }
+        }
     }
     this.visionVersion++;
   }
