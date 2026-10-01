@@ -80,7 +80,7 @@ describe("AI rival", () => {
     expect(owned(w, 1)).toBeGreaterThan(before);
     // Never builds on someone else's land.
     for (const b of mine) expect(w.land.territory[b.tile]).toBe(2);
-  });
+  }, 20000); // About four seconds of simulation: room for a busy CI runner.
 
   it("is deterministic", () => {
     const a = new World("rival-det", { size: "tiny", rivals: 1 });

@@ -346,6 +346,17 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
 - Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
   gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.
 
+### Adversity (batch 21)
+
+- **Warnings** appear in the weather chip ("⚠ Flood in 6 h", "⚠ Falling stars now") as well
+  as in the notices.
+- **Floods:** still grey-blue water plates lie over the drowned tiles by the river until the
+  water goes down.
+- **Falling stars** are long, bright, warm-white streaks slanting down out of the night sky,
+  trailing sparks. Where they land, a dark, faintly purple meteorite rock remains.
+- **Rats** are small dark shapes scurrying in circles round the store they are raiding.
+- **Blight** darkens the crop rows. (In some light the rows still read pale; batch 21b.)
+
 ### Knowledge and culture (batch 20)
 
 - **Almanac (L):** a book on warm parchment, with an index of pages on the left and the open

@@ -68,6 +68,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 21b: blighted rows reading clearly in every light; flood water that follows the
+  terrain; craters around meteorites; settlers sheltering from meteor showers and floods; a
+  calendar of past and coming events in the Almanac; difficulty for the AI's choices; per-event
+  toggles in custom games; insurance for buildings (a "guild hall" that rebuilds).
 - Batch 20b: settlers walking to the maypole and dancing on feast days; more Almanac pages
   (aurora, sky islands, glowcaps, comets, the Bloom); forecasts in the Almanac itself; lore
   pages from each relic; statues of famous settlers; a music settings page (layers on and off);
