@@ -73,6 +73,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   weakest target and press); a Builder squeezed onto a small coastal start grows slowly; late game
   days cost up to ~4 s of simulation on a small world with four settlements (fine at normal
   speed, worth profiling for fast-forward).
+- Batch 24b: voiced or illustrated story beats (the story is text for now); chapter goals that
+  follow the whole team in co-op (they follow player 0's settlement); a scenario editor and
+  shareable scenario files; medals for finishing chapters fast or on hard; tutorial steps for
+  the economy panels, combat and the night sky; campaign progress kept in the save and synced
+  between devices (it lives in this browser's storage).
 - Batch 23b: rejoining and spectating over Steam (the Steam lobby closes at the start); a
   scoreboard and team chat; picking teams for AI rivals in the lobby; relay posts (each player
   keeping one planet) with hand-overs; fair starts weighing biome and neighbours too; a spectator
