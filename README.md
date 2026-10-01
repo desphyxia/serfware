@@ -13,7 +13,12 @@ npm ci
 npm run dev          # http://localhost:5173, add #some-seed to pick a world
 npm run check        # lint, typecheck, tests, single-file build, headless smoke test
 npm run shots        # progress screenshots into artifacts/shots
+npm run touch-test   # the game on a phone-sized touch screen (taps, long presses, two-finger gestures)
+npm run soak         # long all-AI games (SOAK_DAYS=30): rules checked daily, determinism, a war to the end
 ```
+
+The soak run also runs every night in CI (`.github/workflows/soak.yml`) and writes `soak-report.json`:
+per run, how each settlement grew, who won, and the time each game day took.
 
 ## Multiplayer (WebRTC, development)
 
@@ -87,6 +92,20 @@ tomorrow's forecast and the soil in its tooltip. The debug dialog can summon wea
 | WASD, Q/E | Move and turn the camera |
 | R | Reset to north-up overview |
 | Page Up / Page Down | Tilt the camera |
+
+## Touch (phones and tablets)
+
+| Gesture | Action |
+|---------|--------|
+| Tap | Select, place, or pick the tool under your finger |
+| One finger drag | Move over the planet |
+| Pinch | Zoom |
+| Twist two fingers | Turn the view |
+| Slide two fingers up or down | Tilt the view |
+| Long press on the map | Put away the tool in hand; with nothing in hand, inspect what is there |
+| Press and hold a tool button | What it does (there is no hover on a touch screen) |
+
+On a phone the tools sit in two rows along the bottom and the stock is one line you can swipe.
 
 ## Reporting bugs
 

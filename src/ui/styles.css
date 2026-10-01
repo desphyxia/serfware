@@ -966,7 +966,7 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
   .stockbar {
     flex-wrap: nowrap;
     overflow-x: auto;
-    max-width: calc(100vw - 190px);
+    max-width: calc(100vw - 200px);
     scrollbar-width: none;
     font-size: 11px;
     gap: 4px;
