@@ -451,12 +451,18 @@ export class LandUse {
   }
 
   /** Neighbour of `t` best suited as its flag: an existing flag first, else the flattest valid spot. */
+  /** Set by the economy: does the flag on this tile already serve a building? */
+  flagServes: ((tile: number) => boolean) | null = null;
+
   bestFlagTile(t: number, owner = 0): number {
     const grid = this.planet.grid;
     let best = -1;
     let bestScore = Infinity;
+    // A free flag of ours next to the spot serves the new building; a flag that already serves
+    // another building is passed over for a fresh flag on another side, if there is room.
+    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag && this.territory[n] === owner + 1 && !this.flagServes?.(n)) return n;
     for (const n of grid.neighborsOf(t)) {
-      if (this.use[n] === Use.Flag) return this.territory[n] === owner + 1 ? n : -1;
+      if (this.use[n] === Use.Flag) continue;
       if (!this.canPlaceFlag(n, owner)) continue;
       const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + n * 1e-9;
       if (s < bestScore) {

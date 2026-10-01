@@ -58,14 +58,9 @@ export function buildSurface(planet: Planet, subdivisions: number, seed: number,
     verts.push({ tile: t0, dir: new THREE.Vector3(grid.corners[k * 3], grid.corners[k * 3 + 1], grid.corners[k * 3 + 2]), h, color: col, edge: 0 });
   }
 
-  // Fan triangles: (centre, corner k, corner k+1).
+  // Triangles between tile centres (one per grid corner), as the ground is drawn.
   let tris: number[] = [];
-  for (let t = 0; t < N; t++) {
-    const cs = grid.cornersOf(t);
-    for (let k = 0; k < cs.length; k++) {
-      tris.push(t, N + (cs[k] as number), N + (cs[(k + 1) % cs.length] as number));
-    }
-  }
+  for (let k = 0; k < C; k++) tris.push(grid.cornerTiles[k * 3] as number, grid.cornerTiles[k * 3 + 1] as number, grid.cornerTiles[k * 3 + 2] as number);
 
   // Subdivide with a shared midpoint cache.
   for (let s = 0; s < subdivisions; s++) {
