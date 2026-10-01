@@ -24,6 +24,7 @@ import {
   type BuildingDef,
 } from "./defs";
 import { MinHeap } from "./heap";
+import { Culture, DISCOVERIES, unlockedBy } from "./culture";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
@@ -251,6 +252,8 @@ export class Economy {
   private hungry: boolean[] = [];
   private readonly fieldTiles: number[] = [];
   tick = 0;
+  /** The Almanac, festivals and the joy and wonder they bring (see culture.ts). */
+  readonly culture: Culture;
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
   colony = false;
   /** Terraforming works finished a cycle (the world passes it to the planet's atmosphere). */
@@ -286,10 +289,14 @@ export class Economy {
       rain: (t) => this.climate?.rain[t] ?? 0,
       notifyFire: (t) => {
         const owner = (land.territory[t] as number) - 1;
-        if (owner >= 0) this.notify(owner, "Lightning has started a fire on your land! Wells nearby put fires out.");
+        if (owner >= 0) {
+          this.notify(owner, "Lightning has started a fire on your land! Wells nearby put fires out.");
+          this.culture.discover(owner, "fire");
+        }
       },
     });
     land.aquifer = this.ecology.aquifer;
+    this.culture = new Culture(this);
   }
 
   /** Apiaries within three steps: their bees make the flowers there busier. */
@@ -476,7 +483,7 @@ export class Economy {
     this.keeps[player] = keep.id;
     this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison })) as Prefs;
     this.glow[player] = 60;
-    this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1 };
+    this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1, variety: 0.6, joy: 0.5, wonder: 0.4 };
     this.hungry[player] = false;
     this.updateTerritory();
   }
@@ -697,6 +704,7 @@ export class Economy {
     const type = buildingType(typeId);
     const def = BUILDINGS[type] as BuildingDef;
     if (def.buildable === false) return { ok: false, reason: `${def.name} can't be built.` };
+    if (!this.culture.unlocked(p, def.id)) return { ok: false, reason: `${def.name}: not yet in your Almanac. It comes with "${DISCOVERIES[unlockedBy(def.id)!].title}" (L).` };
     if ((def.terra || def.reserve) && !this.colony) return { ok: false, reason: "Your home world already blooms: terraforming works are for the worlds you colonise." };
     if ((def.terra || def.reserve) && !this.rooted[p]) return { ok: false, reason: `Terraforming needs a colony that has taken root (${ROOTED_BUILDINGS} buildings standing).` };
     if (def.rail && this.colony && !this.rooted[p]) return { ok: false, reason: `A colony needs ${ROOTED_BUILDINGS} buildings standing (it must take root) before it can build a launch rail.` };
@@ -2389,6 +2397,8 @@ export class Economy {
       }
       case "quarry":
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
+      case "excavate":
+        return this.findWorkTile(b, (t) => land.feature[t] === Feature.Ruin && (land.amount[t] as number) > 0);
       case "plant":
         // Saplings need living soil: grassland at least.
         return this.findWorkTile(b, (t) => open(t) && (land.life[t] as number) >= 3);
@@ -2601,6 +2611,15 @@ export class Economy {
           land.featureVersion++;
           // Rock by a vent is shot through with volcanic glass.
           got = land.nearVent(t, 2) && (mix32(t, this.tick) & 1) === 0 ? goodId("obsidian") : produced;
+        } else if (def.job === "excavate" && land.feature[t] === Feature.Ruin && (land.amount[t] as number) > 0) {
+          land.amount[t]!--;
+          // Dug out: the ruin stays, open to the sky.
+          if (land.amount[t] === 0) land.variety[t] = 1;
+          land.featureVersion++;
+          got = produced;
+          const who = this.people[s.person];
+          this.culture.relic(b.owner, who ? `${who.first} ${who.family}` : "");
+          if (who) note(who, "Dug a Precursor relic out of the ruin by the Star Well.");
         } else if (def.job === "plant" && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
           land.feature[t] = Feature.Tree;
           land.amount[t] = 0;
@@ -2866,6 +2885,7 @@ export class Economy {
       if (daily) {
         if (this.colony) this.colonyDay(p);
         this.dailyLife(p);
+        this.culture.daily(p);
         this.trainWardens(p);
       }
       this.updateGlow(p);
@@ -2955,8 +2975,11 @@ export class Economy {
       nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4) + Math.min(0.15, (totals[goodId("salt")] as number) / 40)),
       shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
       belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)),
-      beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, ((totals[goodId("obsidian")] as number) + (totals[goodId("glass")] as number)) / 24)) * (grieving ? 0.4 : 1),
+      beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, ((totals[goodId("obsidian")] as number) + (totals[goodId("glass")] as number)) / 24) + Math.min(0.35, this.culture.decor(owner) / 12)) * (grieving ? 0.4 : 1),
       rest: Math.max(0.3, Math.min(1, 1.35 - working)),
+      variety: Math.min(1, this.culture.variety(owner) / 3),
+      joy: grieving ? 0.2 : 0.5 + 0.5 * this.culture.joy(owner),
+      wonder: Math.min(1, 0.4 + (this.culture.pages[owner]?.length ?? 0) * 0.05 + (this.culture.relics[owner] ?? 0) * 0.05),
     };
     this.glowParts[owner] = parts;
     this.glow[owner] = glowValue(parts);
@@ -3166,7 +3189,10 @@ export class Economy {
   /** A sandstorm rises at a tile and blows for six hours. */
   startStorm(t: number): void {
     this.storms.push({ tile: t, until: this.tick + 1800 });
-    for (const o of this.ownersNear(t, 5)) this.notify(o, "A sandstorm is blowing in over the Saltglass! Roads will be buried; carriers clear them as they pass.");
+    for (const o of this.ownersNear(t, 5)) {
+      this.notify(o, "A sandstorm is blowing in over the Saltglass! Roads will be buried; carriers clear them as they pass.");
+      this.culture.discover(o, "storms");
+    }
   }
 
   /** Hourly while a storm blows: sand drifts over everything within four steps. */
@@ -3333,7 +3359,10 @@ export class Economy {
       }
     }
     land.ashVersion++;
-    for (const o of this.ownersNear(t, 6)) this.notify(o, "A vent has erupted! Ash has fallen; it will enrich the soil once it weathers in.");
+    for (const o of this.ownersNear(t, 6)) {
+      this.notify(o, "A vent has erupted! Ash has fallen; it will enrich the soil once it weathers in.");
+      this.culture.discover(o, "eruption");
+    }
   }
 
   // ------------------------------------------------------------------ main step
@@ -3402,5 +3431,6 @@ export class Economy {
     h.int(coast).int(this.storms.length);
     for (const i of this.islands) h.int(i.at).int(i.stone);
     this.ecology.hash(h);
+    this.culture.hash(h);
   }
 }

@@ -8,8 +8,11 @@ const GLOW_LABELS: Record<keyof GlowParts, [string, string]> = {
   nourishment: ["Nourishment", "Food in storage for the days ahead."],
   shelter: ["Shelter", "Beds in houses and the Hearthship for everyone."],
   belonging: ["Belonging", "People living in homes of their own."],
-  beauty: ["Beauty", "Trees and memorial groves near the Hearthship."],
+  beauty: ["Beauty", "Trees and memorial groves near the Hearthship, and decorations."],
   rest: ["Rest", "Not everyone working at once."],
+  variety: ["Variety", "Kinds of food in store: bread, fish, meat, fruit, honey…"],
+  joy: ["Joy", "Festivals at the maypole, when the world's calendar brings them round."],
+  wonder: ["Wonder", "Pages in the Almanac and relics from the ruins."],
 };
 
 const GROUPS: { title: string; ids: string[] }[] = [
