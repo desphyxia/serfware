@@ -69,6 +69,8 @@ export class BuildBar {
   readonly root: HTMLElement;
   private readonly buttons = new Map<string, HTMLButtonElement>();
   private readonly popover: HTMLElement;
+  /** Shows a button's explanation (touch: press and hold). */
+  hint: (text: string) => void = () => {};
   private openCat: Category | null = null;
 
   constructor(
@@ -82,7 +84,43 @@ export class BuildBar {
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
-      const b = h("button", { class: "bb", title: `${label} (${key})\n${hint}`, "aria-label": label, onclick: fn }) as HTMLButtonElement;
+      // Touch: press and hold a button to read what it does (there is no hover on a phone).
+      let held = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let downAt = -1;
+      const explain = () => {
+        if (held) return;
+        held = true;
+        this.hint(`${label}: ${hint}`);
+      };
+      const b = h("button", {
+        class: "bb",
+        title: `${label} (${key})\n${hint}`,
+        "aria-label": label,
+        onclick: () => {
+          if (held) held = false;
+          else fn();
+        },
+      }) as HTMLButtonElement;
+      b.addEventListener("pointerdown", (e) => {
+        if (e.pointerType !== "touch") return;
+        held = false;
+        downAt = e.timeStamp;
+        timer = setTimeout(explain, 500);
+      });
+      // Judge the hold by the touches' own times too: on a busy page the timer can fire late, or
+      // the touch down and up be handled back to back, long after the finger moved.
+      b.addEventListener("pointerup", (e) => {
+        if (timer) clearTimeout(timer);
+        if (e.pointerType === "touch" && downAt >= 0 && e.timeStamp - downAt >= 500) explain();
+        downAt = -1;
+      });
+      for (const ev of ["pointercancel", "pointerleave"])
+        b.addEventListener(ev, () => {
+          if (timer) clearTimeout(timer);
+          downAt = -1;
+        });
+      b.addEventListener("contextmenu", (e) => e.preventDefault());
       b.innerHTML = `${icon}<span class="bb-l">${label}</span><kbd>${key}</kbd>`;
       this.buttons.set(id, b);
       bar.append(b);

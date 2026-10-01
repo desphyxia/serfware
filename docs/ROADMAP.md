@@ -68,6 +68,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Soak findings to follow up: a war of four Wardens on a tiny world takes the human seat and
+  then stalls for 90+ days (three equal Wardens never finish each other; they need to pick a
+  weakest target and press); a Builder squeezed onto a small coastal start grows slowly; late game
+  days cost up to ~4 s of simulation on a small world with four settlements (fine at normal
+  speed, worth profiling for fast-forward).
 - Batch 23b: rejoining and spectating over Steam (the Steam lobby closes at the start); a
   scoreboard and team chat; picking teams for AI rivals in the lobby; relay posts (each player
   keeping one planet) with hand-overs; fair starts weighing biome and neighbours too; a spectator

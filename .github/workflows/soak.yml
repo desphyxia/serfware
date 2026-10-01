@@ -1,0 +1,31 @@
+name: Soak
+
+# Long all-AI games (npm run soak): only when started by hand (Actions, Soak, Run workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Game days per run
+        default: "30"
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run soak
+        env:
+          SOAK_DAYS: ${{ github.event.inputs.days || '30' }}
+          SOAK_SEEDS: russet-heron-417,amber-fern-212,glade-iris-904
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-report
+          path: soak-report.json
+          if-no-files-found: ignore
