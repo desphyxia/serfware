@@ -183,17 +183,17 @@ export class HostLobby extends Lobby {
     const id = back ? back.id : this.nextSpectator++;
     this.peerPlayer.set(from, id);
     const catchUp = session.catchUp(id, !back);
-    this.transport.send(from, { type: "rejoin", seed: session.info.seed, mode: session.info.mode, players: session.info.players, playerId: id, catchUp });
+    this.transport.send(from, { type: "rejoin", seed: session.info.seed, mode: session.info.mode, players: session.info.players, scenario: session.info.scenario, playerId: id, catchUp });
     this.changed(back ? `${name} is back.` : `${name} is watching.`);
   }
 
   /** Start the game on every machine. */
-  start(seed: string, mode: Exclude<SessionMode, "solo">): LockstepSession {
+  start(seed: string, mode: Exclude<SessionMode, "solo">, scenario?: string): LockstepSession {
     const players = this.players.map((p) => ({ ...p }));
-    this.transport.broadcast({ type: "start", seed, mode, players });
+    this.transport.broadcast({ type: "start", seed, mode, players, scenario });
     // The signalling connection stays open: players who drop out can come back, others can watch.
-    const world = new World(seed, worldOptionsFor(mode, players));
-    const session = new LockstepSession(world, { mode, seed, players }, 0, this.transport);
+    const world = new World(seed, worldOptionsFor(mode, players, scenario));
+    const session = new LockstepSession(world, { mode, seed, players, scenario }, 0, this.transport);
     this.session = session;
     log.info(`Hosting ${mode} game "${seed}" with ${players.length} players`);
     return session;
@@ -260,8 +260,9 @@ export class JoinLobby extends Lobby {
       const mode = msg.mode as Exclude<SessionMode, "solo">;
       const seed = String(msg.seed);
       this.signal?.close();
-      const world = new World(seed, worldOptionsFor(mode, players));
-      const session = new LockstepSession(world, { mode, seed, players }, this.playerId, this.transport);
+      const scenario = typeof msg.scenario === "string" ? msg.scenario : undefined;
+      const world = new World(seed, worldOptionsFor(mode, players, scenario));
+      const session = new LockstepSession(world, { mode, seed, players, scenario }, this.playerId, this.transport);
       log.info(`Joined ${mode} game "${seed}" as player ${this.playerId}`);
       this.onStart?.(session);
     } else if (msg.type === "rejoin") {
@@ -271,8 +272,9 @@ export class JoinLobby extends Lobby {
       const seed = String(msg.seed);
       const c = msg.catchUp as CatchUp;
       this.playerId = msg.playerId as number;
-      const world = resumeWorld(seed, mode, players, c.log, c.tick);
-      const session = new LockstepSession(world, { mode, seed, players }, this.playerId, this.transport, c);
+      const scenario = typeof msg.scenario === "string" ? msg.scenario : undefined;
+      const world = resumeWorld(seed, mode, players, c.log, c.tick, {}, scenario);
+      const session = new LockstepSession(world, { mode, seed, players, scenario }, this.playerId, this.transport, c);
       session.log.push(...c.log);
       log.info(`Rejoined ${mode} game "${seed}" at tick ${c.tick} as ${this.playerId >= 100 ? "a spectator" : `player ${this.playerId}`}`);
       this.onStart?.(session);

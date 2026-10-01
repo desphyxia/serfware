@@ -51,9 +51,9 @@ export class SteamHostLobby extends HostLobby {
     this.changed();
   }
 
-  override start(seed: string, mode: Exclude<SessionMode, "solo">): LockstepSession {
+  override start(seed: string, mode: Exclude<SessionMode, "solo">, scenario?: string): LockstepSession {
     void this.bridge.setLobbyJoinable(false);
-    return super.start(seed, mode);
+    return super.start(seed, mode, scenario);
   }
 
   override close(): void {
