@@ -65,19 +65,21 @@ describe("terraforming", () => {
     expect(build(w, "mirrorworks", site)).toBeGreaterThanOrEqual(0);
   });
 
-  it("mirrors warm the world (and the warming fades unless kept up); comets bring water and raise the seas", () => {
+  it("mirrors warm a cold world and shade a hot one (and it fades unless kept up); comets bring water and raise the seas", () => {
     const { w } = colony();
     const a = w.atmosphere;
+    // Mirrors push toward a mild world: warmth where it is cold, shade where it is hot.
+    const sign = a.meanTemp() > 20 ? -1 : 1;
     for (let i = 0; i < 20; i++) a.work("mirror", 0);
     a.day(1);
-    expect(a.warming).toBeGreaterThan(5);
+    expect(sign * a.warming).toBeGreaterThan(5);
     expect(w.climate.tempOffset).toBe(a.warming);
     const t0 = w.climate.temp[10]!;
     w.climate.step(w.tick);
-    expect(w.climate.temp[10]!).toBeGreaterThan(t0 + 4);
-    const warm = a.warming;
+    expect(sign * (w.climate.temp[10]! - t0)).toBeGreaterThan(4);
+    const warm = Math.abs(a.warming);
     a.day(2);
-    expect(a.warming).toBeLessThan(warm);
+    expect(Math.abs(a.warming)).toBeLessThan(warm);
     // Comets: water, then the sea rises over the lowest shores.
     const water = a.water;
     for (let i = 0; i < 40; i++) a.work("comet", 0);

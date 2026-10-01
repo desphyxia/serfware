@@ -155,7 +155,10 @@ export class Atmosphere {
   day(day: number): void {
     const s = 1 / this.mass;
     const p = this.pending;
-    this.warming += (p.mirror * WORK.mirror.warming + p.greenhouse * WORK.greenhouse.warming) * s;
+    // Mirrors turn more sunlight onto a cold world, and on a world already too hot they are set
+    // edge-on as sunshades instead.
+    const mirror = this.meanTemp() > 20 ? -WORK.mirror.warming : WORK.mirror.warming;
+    this.warming += (p.mirror * mirror + p.greenhouse * WORK.greenhouse.warming) * s;
     this.pressure += (p.greenhouse * WORK.greenhouse.pressure + p.comet * WORK.comet.pressure) * s;
     this.water += p.comet * WORK.comet.water * s;
     this.seeding = Math.min(1, this.seeding + p.seeding * WORK.seeding.seeding * s);

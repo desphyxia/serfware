@@ -68,6 +68,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 19b: terraforming for the AI; an atmosphere panel with history graphs; ice caps (the
+  polar ice biome) visibly retreating; comets streaking down to their impact; mirrors seen in
+  orbit; native fauna; a Bloom celebration (festival, colour grade, flowers everywhere); oxygen
+  and pressure affecting settlers (masks, domes) before the Bloom; molten worlds cooled by
+  sunshades into a lava-crust look; reserves drawn as a border on the ground.
 - Batch 18b: colonies' wardens and lanterns on shared colony worlds (PvP beyond home), AI
   rivals that colonise, the AI using launch rails, return voyages carrying people home, the
   founders walking to the rail to board (they vanish from the keep for now), a moving craft in

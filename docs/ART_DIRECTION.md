@@ -346,6 +346,26 @@ After A7 we return to batch 11. The later biome batches (13–16) follow this do
 - Surveyed planets are plain worlds shaped by their parameters (warmth, wetness, land fraction,
   gravity, day length, lock). Towers stand taller on light worlds and squatter on heavy ones.
 
+### Terraforming (batch 19)
+
+- **Bare worlds:** another planet before terraforming has no trees, scrub or grass. Its ground is
+  regolith (the base colour desaturated toward rust and dust). Lichen crusts come first as pale
+  grey-green blotches, then moss in darker green patches. From grass on, it is ordinary living
+  ground. Native life is violet and teal mats in patches.
+- **Sky:** the daytime zenith and horizon follow the air. Thin air is near-black above a dusty
+  horizon; dry, oxygen-less air is butterscotch; thick, hot air is a yellow haze. Breathable air
+  is the familiar blue. The sky eases from one to the next as the air changes.
+- **Seas** rise as comets and melt add water, and the lowest shores flood for good.
+- **Works:**
+  - mirror works: a lattice mast with a polished dish
+  - greenhouse works: a brick hall with three tall stacks
+  - comet catcher: a great white dish with a brass feed horn
+  - cloud seeder: a rocket rack on a timber tower
+  - lake basin: a stone-rimmed pond with a sluice
+  - seed house: a pale green glasshouse over seedling trays
+  - gene bank: a turf-domed stone vault with a frosted door
+  - reserve: four red-capped posts with ropes and a sign
+
 ### Colonisation (batch 18)
 
 - **Launch rail:** a timber trestle ramp climbing at about 30 degrees, iron rails with copper

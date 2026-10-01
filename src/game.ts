@@ -814,7 +814,9 @@ export class Game {
     if (!v) return -1;
     const me = this.session.player;
     const home = w.system.home;
-    const to = w.system.planets.find((p) => p.surface && !p.home)!.index;
+    // Show off a world worth terraforming: dry or frozen first, molten last.
+    const rank = (k: string) => ["arid", "frozen", "temperate", "ocean", "molten"].indexOf(k);
+    const to = w.system.planets.filter((p) => p.surface && !p.home).sort((a, b) => rank(a.kind) - rank(b.kind) || a.index - b.index)[0]!.index;
     v.surveyed[me] = (1 << w.system.planets.length) - 1;
     let rail = v.railOf(me, home);
     if (!rail) {
@@ -902,8 +904,10 @@ export class Game {
     const seeds = eco.buildings.filter((b) => b.alive && b.def.terra === "life").map((b) => b.tile);
     const days = stage === "green" ? 18 : 40;
     for (let d = 1; d <= days; d++) {
-      for (let k = 0; k < 6; k++) a.work("mirror", 0);
-      for (let k = 0; k < 4; k++) a.work("greenhouse", 0);
+      // Warm toward a mild world, then hold it there.
+      const k0 = a.meanTemp() < 14 ? 6 : 1;
+      for (let k = 0; k < k0; k++) a.work("mirror", 0);
+      for (let k = 0; k < (a.pressure < 1 ? 4 : 0); k++) a.work("greenhouse", 0);
       for (let k = 0; k < 3; k++) a.work("comet", 0);
       a.work("seeding", 0);
       a.work("basin", 0);
@@ -1680,12 +1684,17 @@ export class Game {
       } else for (let n = 0; w.tick < home.tick && n < 40; n++) w.step();
     }
     const home = this.session.world;
-    const queues = [home.economy.notices, home.voyages?.notices ?? [], ...home.colonies.map((c) => c?.economy.notices ?? [])];
-    for (const [i, q] of queues.entries()) {
+    // Notices from home, the voyages and every colony (colony news says which colony).
+    const queues: { q: { owner: number; text: string }[]; where: string }[] = [
+      { q: home.economy.notices, where: "" },
+      { q: home.voyages?.notices ?? [], where: "" },
+    ];
+    home.colonies.forEach((c, i) => {
+      if (c) queues.push({ q: c.economy.notices, where: c === this.world ? "" : `${home.system.planets[i]?.name}: ` });
+    });
+    for (const { q, where } of queues) {
       while (q.length) {
         const n = q.shift() as { owner: number; text: string };
-        // Colony news says which colony.
-        const where = i >= 2 && this.world !== home.colonies[i - 2] ? `${home.system.planets[home.colonies.indexOf(home.colonies[i - 2])]?.name}: ` : "";
         if (n.owner === this.session.player) this.toasts.show(where + n.text, "good");
       }
     }
