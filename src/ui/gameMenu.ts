@@ -4,6 +4,8 @@ import { webrtcAvailable } from "../net/webrtc";
 import { SteamHostLobby, SteamJoinLobby } from "../net/steamLobby";
 import { desktop } from "../platform/bridge";
 import { copyText, h, Panel } from "./dom";
+import { campaignPage } from "./campaign";
+import { ALL_SCENARIOS } from "../sim/scenario/campaign";
 
 export interface SaveMeta {
   id: string;
@@ -22,7 +24,9 @@ export interface MenuHost {
   exportCurrent(): string;
   importText(text: string): void;
   seed(): string;
-  startSession(lobby: HostLobby, mode: PlayMode): void;
+  startSession(lobby: HostLobby, mode: PlayMode, scenario?: string): void;
+  /** Start a scenario (tutorial, chapter, handmade) alone. */
+  playScenario(id: string): void;
   joined(lobby: JoinLobby): void;
   notify(text: string, kind?: "info" | "warn" | "good"): void;
 }
@@ -32,12 +36,15 @@ const defaultServer = () => `ws://${location.hostname || "localhost"}:8787`;
 /** Game menu (M): saves, export/import, and multiplayer lobbies. */
 export class GameMenu extends Panel {
   private readonly saveList: HTMLElement;
+  private readonly campaign: HTMLElement & { refresh?: () => void };
   private readonly mpBody: HTMLElement;
   private lobby: HostLobby | JoinLobby | null = null;
   /** Switch to a tab by name (Multiplayer, Saves, …). */
   selectTab: (name: string) => void = () => {};
   /** Steam is running (desktop build): multiplayer goes through Steam lobbies. */
   private steamName = "";
+  /** The scenario chosen for a hosted co-op game (played in a shared settlement). */
+  private mpScenario: () => string | undefined = () => undefined;
 
   constructor(private readonly host: MenuHost) {
     super("menu", "Game", { width: 400 });
@@ -52,6 +59,10 @@ export class GameMenu extends Panel {
       for (const b of tabs.querySelectorAll("button")) b.classList.toggle("on", b.textContent === name);
       for (const p of pages.children) (p as HTMLElement).hidden = (p as HTMLElement).dataset.tab !== name;
     };
+
+    // Campaign
+    this.campaign = campaignPage((id) => this.host.playScenario(id));
+    addTab("Campaign", this.campaign);
 
     // Saves
     const saves = h("div", { class: "form" });
@@ -116,7 +127,7 @@ export class GameMenu extends Panel {
     this.renderMpStart();
 
     this.body.append(tabs, pages);
-    select("Saves");
+    select("Campaign");
     this.selectTab = select;
     const bridge = desktop();
     if (bridge)
@@ -128,6 +139,7 @@ export class GameMenu extends Panel {
   }
 
   protected override onShow(): void {
+    this.campaign.refresh?.();
     this.refreshSaves();
   }
 
@@ -171,6 +183,8 @@ export class GameMenu extends Panel {
     const room = h("input", { type: "text", id: "mp-room", value: randomRoom() }) as HTMLInputElement;
     const mode = h("select", { id: "mp-mode" }, ...(Object.keys(MODE_NAMES) as PlayMode[]).map((m) => h("option", { value: m }, MODE_NAMES[m]))) as HTMLSelectElement;
     const watch = h("input", { type: "checkbox", id: "mp-watch" }) as HTMLInputElement;
+    const scen = h("select", { id: "mp-scenario" }, h("option", { value: "" }, "Free play"), ...ALL_SCENARIOS.map((x) => h("option", { value: x.id }, x.chapter ? `The Long Voyage ${x.chapter}: ${x.title}` : x.title))) as HTMLSelectElement;
+    this.mpScenario = () => scen.value || undefined;
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });
     const steam = this.steamName
       ? [
@@ -188,6 +202,7 @@ export class GameMenu extends Panel {
       h("div", { class: "row" }, h("label", { for: "mp-server" }, "Server"), server, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-room" }, "Room"), room, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-mode" }, "Mode"), mode, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-scenario" }, "Scenario"), scen, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-watch" }, "Join to watch"), watch, h("span")),
       h("p", { class: "hint" }, "A player who drops out is kept by a steward (the AI) until they join again with the same name. Anyone joining a game in progress watches."),
       h(
@@ -221,7 +236,7 @@ export class GameMenu extends Panel {
         "div",
         { class: "btn-row" },
         h("button", { class: "btn", onclick: () => lobby.invite() }, "Invite friends"),
-        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode) }, "Start game"),
+        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario()) }, "Start game"),
         h(
           "button",
           {
@@ -338,7 +353,7 @@ export class GameMenu extends Panel {
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode) }, "Start game"),
+        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario()) }, "Start game"),
         h(
           "button",
           {

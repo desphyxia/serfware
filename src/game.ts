@@ -37,6 +37,8 @@ import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
 import { DiplomacyPanel } from "./ui/diplomacy";
+import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
+import { scenarioWorld } from "./sim/scenario/campaign";
 import type { PlayMode } from "./net/session";
 import type { AiLevel } from "./sim/ai/personality";
 import type { Difficulty } from "./sim/econ/adversity";
@@ -105,6 +107,10 @@ export class Game {
   private readonly systemMap: SystemMap;
   private readonly almanac: AlmanacPanel;
   private readonly diplomacy: DiplomacyPanel;
+  private readonly objectives = new ObjectivesPanel();
+  private readonly story = new StoryPanel();
+  /** The scenario whose ending has been told (so it is told once). */
+  private storyTold = "";
   private surveys = new Map<number, World>();
   private homeView: WorldView | null = null;
   private visitIndex = -1;
@@ -301,7 +307,8 @@ export class Game {
       exportCurrent: () => JSON.stringify(makeSave(this.session, this.world.seed, BUILD.id)),
       importText: (text) => void this.importSave(text),
       seed: () => this.world.seed,
-      startSession: (lobby, mode) => this.startHosted(lobby, mode),
+      startSession: (lobby, mode, scenario) => this.startHosted(lobby, mode, scenario),
+      playScenario: (id) => this.playScenario(id),
       joined: (lobby) => this.watchJoin(lobby),
       notify: (text, kind) => this.toasts.show(text, kind),
     });
@@ -333,6 +340,8 @@ export class Game {
       this.systemMap.root,
       this.almanac.root,
       this.diplomacy.root,
+      this.objectives.root,
+      this.story.root,
       this.warp,
       this.menu.root,
       this.debug.root,
@@ -1160,6 +1169,48 @@ export class Game {
     this.focusPlayer(0, stage === "world" ? 40 : 120);
   }
 
+  /** Play a scenario alone: a new world for it, then its story. */
+  playScenario(id: string): void {
+    const sw = scenarioWorld(id);
+    if (!sw) return;
+    this.useSession(new SoloSession(new World(sw.seed, sw.opts)));
+    this.menu.hide();
+    this.storyTold = "";
+    this.tellIntro();
+  }
+
+  private tellIntro(): void {
+    const run = this.session.world.scenario;
+    if (!run) return;
+    const d = run.def;
+    this.story.tell(d.chapter ? `The Long Voyage · Chapter ${d.chapter}: ${d.title}` : d.title, d.intro, [{ label: "Begin", primary: true, act: () => {} }]);
+  }
+
+  /** The goals panel, the tutorial's pointer, and the story told when a scenario ends. */
+  private updateScenario(): void {
+    const run = this.session.world.scenario;
+    this.objectives.update(run);
+    const cur = run && !run.done && run.def.sequential ? run.def.goals[run.current]?.tool ?? null : null;
+    this.buildBar.highlight(cur);
+    if (!run || this.storyTold === `${run.def.id}:${run.start}`) return;
+    if (run.done) {
+      this.storyTold = `${run.def.id}:${run.start}`;
+      progress.complete(run.def.id);
+      const next = nextAfter(run.def.id);
+      this.story.tell("Complete", run.def.outro, [
+        ...(next ? [{ label: `Next: ${next.chapter ? `Chapter ${next.chapter}, ` : ""}${next.title}`, primary: true, act: () => this.playScenario(next.id) }] : []),
+        { label: "Keep playing", act: () => {} },
+        { label: "Campaign", act: () => (this.menu.show(), this.menu.selectTab("Campaign")) },
+      ]);
+    } else if (run.failed) {
+      this.storyTold = `${run.def.id}:${run.start}`;
+      this.story.tell("Failed", run.def.fail?.text || "The scenario is lost.", [
+        { label: "Try again", primary: true, act: () => this.playScenario(run.def.id) },
+        { label: "Campaign", act: () => (this.menu.show(), this.menu.selectTab("Campaign")) },
+      ]);
+    }
+  }
+
   /** Screenshots and testing: open the settings at a tab. */
   openSettings(tab = "Graphics"): void {
     this.settingsPanel.show();
@@ -1537,9 +1588,10 @@ export class Game {
     this.startHosted(lobby, mode);
   }
 
-  private startHosted(lobby: HostLobby, mode: PlayMode): void {
-    const seed = this.world.seed;
-    this.useSession(lobby.start(seed, mode));
+  private startHosted(lobby: HostLobby, mode: PlayMode, scenario?: string): void {
+    const seed = scenario ? (scenarioWorld(scenario)?.seed ?? this.world.seed) : this.world.seed;
+    this.useSession(lobby.start(seed, mode, scenario));
+    if (scenario) this.tellIntro();
     this.menu.hide();
     this.toasts.show(`Game started with ${lobby.players.length} players.`, "good");
   }
@@ -1548,6 +1600,8 @@ export class Game {
     lobby.onStart = (session) => {
       this.useSession(session);
       this.menu.hide();
+      this.storyTold = "";
+      if (session.world.scenario) this.tellIntro();
       if (session.spectating) {
         this.setFog(false);
         this.toasts.show(`Watching "${session.world.seed}". You see every settlement; you give no orders.`, "good");
@@ -2020,6 +2074,7 @@ export class Game {
       this.systemMap.refresh();
       this.almanac.refresh();
       this.diplomacy.refresh();
+      this.updateScenario();
     }
     this.view.updateTerrain(this.camera.position);
     this.gfx.render();

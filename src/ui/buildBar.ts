@@ -174,6 +174,11 @@ export class BuildBar {
     return true;
   }
 
+  /** The tutorial points at a button (or at nothing). */
+  highlight(id: string | null): void {
+    for (const [k, b] of this.buttons) b.classList.toggle("pulse", k === id);
+  }
+
   setActive(id: ToolId): void {
     const def = BUILDINGS.find((b) => b.id === id);
     for (const [k, b] of this.buttons) b.classList.toggle("on", k === id || (!!def && k === def.category));
