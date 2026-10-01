@@ -15,6 +15,8 @@ export interface Transport {
   broadcast(msg: NetMessage, except?: string): void;
   send(peer: string, msg: NetMessage): void;
   onMessage(fn: MessageHandler): void;
+  /** A peer's connection closed (they left or dropped). */
+  onPeerLeft?(fn: (peer: string) => void): void;
   close(): void;
 }
 
@@ -33,6 +35,15 @@ export class LoopbackHub {
 
   ids(): string[] {
     return [...this.endpoints.keys()];
+  }
+
+  /** An endpoint drops off the network; the others hear that it left. */
+  disconnect(id: string): void {
+    const t = this.endpoints.get(id);
+    if (!t) return;
+    this.endpoints.delete(id);
+    t.close();
+    for (const o of this.endpoints.values()) o.left(id);
   }
 
   deliver(from: string, to: string, msg: NetMessage): void {
@@ -56,6 +67,15 @@ export class LoopbackHub {
 
 export class LoopbackTransport implements Transport {
   private handlers: MessageHandler[] = [];
+  private leftHandlers: ((peer: string) => void)[] = [];
+
+  onPeerLeft(fn: (peer: string) => void): void {
+    this.leftHandlers.push(fn);
+  }
+
+  left(peer: string): void {
+    for (const h of this.leftHandlers) h(peer);
+  }
 
   constructor(
     readonly id: string,

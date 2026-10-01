@@ -87,6 +87,7 @@ export class Diplomacy {
       case "propose": {
         const q = cmd.to;
         if (q === p || eco.keeps[q] === undefined || eco.defeated[q]) return { ok: false, reason: "There is no one there to talk to." };
+        if (eco.allied(p, q)) return { ok: false, reason: "You are on the same team: allies need no treaties." };
         if (!TREATIES[cmd.kind]) return { ok: false, reason: "Unknown treaty." };
         if (cmd.kind !== "prisoners" && this.between(p, q, cmd.kind).length) return { ok: false, reason: `You already have a ${TREATIES[cmd.kind].name.toLowerCase()}.` };
         if (this.proposals.some((x) => x.open && x.from === p && x.to === q && x.kind === cmd.kind)) return { ok: false, reason: "That offer is already on the table." };
@@ -171,11 +172,13 @@ export class Diplomacy {
     eco.notify(q, `${this.name(p)} has broken their treaties with you!`);
   }
 
-  /** Shared roads: who may lay roads on whose land (kept on the land for road checks). */
-  private sync(): void {
-    const land = this.eco.land;
+  /** Shared roads: who may lay roads on whose land (kept on the land for road checks). Allies always may. */
+  sync(): void {
+    const eco = this.eco;
+    const land = eco.land;
     const before = land.roadShare.slice();
     land.roadShare.length = 0;
+    for (let p = 0; p < eco.keeps.length; p++) for (let q = 0; q < eco.keeps.length; q++) if (p !== q && eco.allied(p, q)) land.roadShare[p] = (land.roadShare[p] ?? 0) | (1 << q);
     for (const t of this.treaties) {
       if (t.broken || t.until <= this.eco.tick || t.kind !== "roads") continue;
       land.roadShare[t.a] = (land.roadShare[t.a] ?? 0) | (1 << t.b);

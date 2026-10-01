@@ -37,6 +37,7 @@ import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
 import { DiplomacyPanel } from "./ui/diplomacy";
+import type { PlayMode } from "./net/session";
 import type { AiLevel } from "./sim/ai/personality";
 import type { Difficulty } from "./sim/econ/adversity";
 import { LAYER_OF, type MusicLayer } from "./audio/music";
@@ -1134,6 +1135,30 @@ export class Game {
     return c.tile;
   }
 
+  /**
+   * Screenshots and testing: team play. "world": a two-against-two world (you and an ally
+   * against two rivals) with the Diplomacy panel open; "map": the same world from high up;
+   * "lobby": a hosted Teams lobby with players on both sides.
+   */
+  async teamsDemo(stage: "world" | "map" | "lobby"): Promise<void> {
+    if (stage === "lobby") {
+      this.menu.show();
+      this.menu.selectTab("Multiplayer");
+      const lobby = await this.menu.openHost({ name: "Ada", server: "", room: "heron-412" }, "teams");
+      lobby.players.push({ id: 1, name: "Bram", team: 1 }, { id: 2, name: "Cleo", team: 0 }, { id: 3, name: "Dov", team: 1 }, { id: 100, name: "Esme", spectator: true });
+      lobby.changed("Lobby open: 4 players, 1 watching.");
+      return;
+    }
+    if (!this.world.economy.teams.length) {
+      this.useSession(new SoloSession(new World(this.world.seed, { rivals: 3, teams: [0, 0, 1, 1], difficulty: this.difficulty })));
+      demoSettlement(this.world);
+      for (let i = 0; i < 1500; i++) this.world.step();
+    }
+    this.setFog(false);
+    if (stage === "world") this.diplomacy.show();
+    this.focusPlayer(0, stage === "world" ? 40 : 120);
+  }
+
   /** Screenshots and testing: open the settings at a tab. */
   openSettings(tab = "Graphics"): void {
     this.settingsPanel.show();
@@ -1499,19 +1524,19 @@ export class Game {
   }
 
   /** Programmatic multiplayer entry points (used by the menu and the multiplayer test). */
-  hostLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }, mode: "shared" | "neighbours"): Promise<HostLobby> {
+  hostLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }, mode: PlayMode): Promise<HostLobby> {
     return this.menu.openHost(o, mode);
   }
 
-  joinLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }): Promise<JoinLobby> {
+  joinLobby(o: { name: string; server: string; room: string; ice?: RTCIceServer[]; spectate?: boolean }): Promise<JoinLobby> {
     return this.menu.openJoin(o);
   }
 
-  startLobby(lobby: HostLobby, mode: "shared" | "neighbours"): void {
+  startLobby(lobby: HostLobby, mode: PlayMode): void {
     this.startHosted(lobby, mode);
   }
 
-  private startHosted(lobby: HostLobby, mode: "shared" | "neighbours"): void {
+  private startHosted(lobby: HostLobby, mode: PlayMode): void {
     const seed = this.world.seed;
     this.useSession(lobby.start(seed, mode));
     this.menu.hide();
@@ -1522,7 +1547,10 @@ export class Game {
     lobby.onStart = (session) => {
       this.useSession(session);
       this.menu.hide();
-      this.toasts.show(`Joined "${session.world.seed}" as player ${session.localPlayer + 1}.`, "good");
+      if (session.spectating) {
+        this.setFog(false);
+        this.toasts.show(`Watching "${session.world.seed}". You see every settlement; you give no orders.`, "good");
+      } else this.toasts.show(`Joined "${session.world.seed}" as player ${session.localPlayer + 1}.`, "good");
     };
   }
 

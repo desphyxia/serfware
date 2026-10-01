@@ -30,6 +30,12 @@ export interface WorldOptions {
   aiLevel?: AiLevel;
   /** Each rival's temperament, in order (otherwise the seed decides). */
   personalities?: Personality[];
+  /** Team per player (humans first, then rivals). Allies share sight and roads and win together. */
+  teams?: number[];
+  /** How the world is won (default "conquest": the last settlement or team, or the Star Wells). */
+  goal?: "conquest" | "bloom";
+  /** Start sites within 5 % of each other on water, ore, soil and Star Well distance (default on). */
+  fairStarts?: boolean;
   /** Game days before anyone may attack. */
   peaceDays?: number;
   /** Another planet of the star system: its physics and climate (see sim/system). */
@@ -46,8 +52,14 @@ export interface WorldOptions {
   air?: AirStart;
 }
 
-/** Any command: to a world's economy (optionally on another planet of the system), or a voyage. */
-export type WorldCommand = (Command & { planet?: number }) | VoyageCommand;
+/**
+ * A steward (the AI) keeps a disconnected player's settlement running until they rejoin. Issued
+ * by the host so every peer switches on the same tick.
+ */
+export type StewardCommand = { t: "steward"; of: number; on: boolean; player?: number };
+
+/** Any command: to a world's economy (optionally on another planet of the system), a voyage, or a steward. */
+export type WorldCommand = (Command & { planet?: number }) | VoyageCommand | StewardCommand;
 
 /** The seed of another planet's world in a home seed's system (survey and colony alike). */
 export function planetSeed(homeSeed: string, name: string): string {
@@ -69,6 +81,10 @@ export class World implements WorldHost {
   readonly humans: number;
   readonly rivals: number;
   readonly ai: AiBuilder[] = [];
+  /** Stewards keeping absent players' settlements, by player. */
+  readonly stewards = new Map<number, AiBuilder>();
+  /** A colony world: called when it blooms (the home world credits the race). */
+  onBloom: (() => void) | null = null;
   /** The star system (home worlds only; survey and colony worlds belong to one). */
   readonly system: StarSystem;
   /** Voyages between planets and the colony worlds they have founded, by planet index. */
@@ -93,7 +109,12 @@ export class World implements WorldHost {
     const bare = opts.survey || opts.colony;
     this.rivals = bare ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
     this.players = this.humans + this.rivals;
-    if (!bare) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p);
+    if (opts.teams) for (let p = 0; p < this.players; p++) this.economy.teams[p] = opts.teams[p] ?? p + 100;
+    this.economy.goal = opts.goal ?? "conquest";
+    const fair = (opts.fairStarts ?? true) && this.players > 1;
+    if (!bare) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p, fair && p > 0 ? this.economy.startScores[0] : undefined);
+    if (fair && !bare) this.economy.evenStarts();
+    this.economy.diplomacy.sync();
     for (let p = this.humans; p < this.players; p++) {
       const r = rivalFor(seed, p);
       const ai = new AiBuilder(p, this.rng.fork(`ai-${p}`), opts.personalities?.[p - this.humans] ?? r.personality, opts.aiLevel ?? "normal");
@@ -102,7 +123,7 @@ export class World implements WorldHost {
       this.economy.names[p] = r.name;
     }
     this.economy.diplomacy.aiAnswer = (p, prop) => {
-      const ai = this.ai.find((a) => a.player === p);
+      const ai = this.ai.find((a) => a.player === p) ?? this.stewards.get(p);
       return ai ? answerOffer(this.economy, ai.personality, p, prop) : false;
     };
     this.economy.wanderers.setup(seed, { hamlets: !bare, creatures: !opts.survey && (!opts.barren || !!opts.native), native: !!opts.native });
@@ -157,6 +178,7 @@ export class World implements WorldHost {
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
   command(cmd: WorldCommand): CommandResult {
+    if (cmd.t === "steward") return this.steward(cmd.of, cmd.on);
     if (VOYAGE_COMMANDS.has(cmd.t)) return this.voyages ? this.voyages.apply(cmd as VoyageCommand) : { ok: false, reason: "No voyages from here." };
     const c = cmd as Command & { planet?: number };
     if (c.planet === undefined || c.planet === this.system.home) return this.economy.apply(c);
@@ -168,10 +190,40 @@ export class World implements WorldHost {
 
   /** Check a command without applying it (multiplayer's instant feedback). Voyages check on arrival. */
   check(cmd: WorldCommand): string | null {
+    if (cmd.t === "steward") return null;
     if (VOYAGE_COMMANDS.has(cmd.t)) return this.voyages ? null : "No voyages from here.";
     const { planet, ...rest } = cmd as Command & { planet?: number };
     const eco = planet === undefined ? this.economy : this.economyAt(planet);
     return eco ? eco.check(rest) : "Nobody has settled that planet.";
+  }
+
+  /** Hand a human player's settlement to a steward (they left) or back (they rejoined). */
+  private steward(p: number, on: boolean): CommandResult {
+    const eco = this.economy;
+    if (p < 0 || p >= this.humans || eco.keeps[p] === undefined) return { ok: false, reason: "No such player." };
+    if (on === this.stewards.has(p)) return { ok: true };
+    if (on) {
+      this.stewards.set(p, new AiBuilder(p, new Rng(`${this.seed}:steward-${p}:${this.tick}`), "builder", "normal"));
+      eco.aiPlayers.add(p);
+    } else {
+      this.stewards.delete(p);
+      eco.aiPlayers.delete(p);
+    }
+    for (let o = 0; o < this.players; o++)
+      eco.notify(o, on ? `${o === p ? "You are away: a steward" : `${eco.playerName(p)} has left; a steward`} keeps the settlement running until they return.` : o === p ? "Welcome back: the steward hands your settlement over." : `${eco.playerName(p)} is back.`);
+    return { ok: true };
+  }
+
+  /** A colony on `planet` has bloomed: in a Bloom race, whoever did most to green it wins. */
+  private bloomed(planet: number): void {
+    const home = this.economy;
+    const c = this.colonies[planet];
+    if (!c || home.goal !== "bloom" || home.winner >= 0) return;
+    const works = new Array<number>(this.players).fill(0);
+    for (const b of c.economy.buildings) if (b.alive && b.built && b.def.terra && b.owner < this.players) works[b.owner] = (works[b.owner] as number) + 1;
+    let best = 0;
+    for (let p = 1; p < this.players; p++) if ((works[p] as number) > (works[best] as number)) best = p;
+    home.win(best, "bloom");
   }
 
   /** The economy on a planet of this world's system: home, a colony, or none. */
@@ -193,6 +245,9 @@ export class World implements WorldHost {
     if (!p) throw new Error(`No planet ${planet}`);
     const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.humans, startTick: this.tick });
     this.colonies[planet] = w;
+    w.economy.teams.push(...this.economy.teams);
+    w.economy.names.push(...this.economy.names);
+    w.onBloom = () => this.bloomed(planet);
     return w.economy;
   }
 
@@ -201,10 +256,11 @@ export class World implements WorldHost {
     if (this.tick % CLIMATE_STEP === 0) this.climate.step(this.tick);
     this.economy.step(this.tick);
     for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
+    for (const ai of this.stewards.values()) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
     // A rooted colony's planet changes by decades a day (see Atmosphere).
     if (this.economy.colony && this.tick % this.economy.dayTicks === 7 && this.economy.rooted.some(Boolean)) {
       this.atmosphere.day(Math.floor(this.tick / this.economy.dayTicks));
-      this.atmosphere.checkBloom();
+      if (this.atmosphere.checkBloom()) this.onBloom?.();
     }
     if (this.voyages) {
       this.voyages.step(this.tick);
@@ -233,6 +289,7 @@ export class World implements WorldHost {
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
     this.economy.hash(h);
+    for (const p of this.stewards.keys()) h.int(p);
     let snow = 0;
     for (let t = 0; t < this.land.snowCover.length; t += 7) snow += this.land.snowCover[t] as number;
     h.int(Math.round(snow * 1000)).int(this.climate.version);

@@ -14,12 +14,52 @@ export interface LoggedCommand {
 /** Session-level commands that change how the game runs rather than the world. */
 export type MetaCommand = { t: "speed"; value: number };
 
-export type SessionMode = "solo" | "shared" | "neighbours";
+/**
+ * How a game is played together. "shared": one settlement, everyone builds it. "neighbours":
+ * a settlement each, free for all. "teams": a settlement each, in teams (allies share sight
+ * and roads and win together). "relay": everyone on one team, racing nobody but the planet:
+ * the team wins when any colony blooms. "race": a settlement each; the first colony to bloom wins.
+ */
+export type SessionMode = "solo" | "shared" | "neighbours" | "teams" | "relay" | "race";
+
+/** The modes a lobby can start. */
+export type PlayMode = Exclude<SessionMode, "solo">;
+
+export const MODE_NAMES: Record<Exclude<SessionMode, "solo">, string> = {
+  shared: "Co-op: shared keep",
+  neighbours: "Neighbours (each their own)",
+  teams: "Teams (up to 4 v 4)",
+  relay: "Relay co-op: bloom a colony together",
+  race: "Bloom race",
+};
+
+export interface SessionPlayer {
+  id: number;
+  name: string;
+  /** Teams mode: which side (0 or 1, up to four each). */
+  team?: number;
+  /** Watching only: sees everything, gives no orders, the game never waits for them. */
+  spectator?: boolean;
+}
 
 export interface SessionInfo {
   mode: SessionMode;
   seed: string;
-  players: { id: number; name: string }[];
+  players: SessionPlayer[];
+}
+
+/** The world a multiplayer game starts from: how many settlements, the teams and the goal. */
+export function worldOptionsFor(mode: SessionMode, players: readonly SessionPlayer[]): WorldOptions {
+  const playing = players.filter((p) => !p.spectator).sort((a, b) => a.id - b.id);
+  if (mode === "shared" || mode === "solo") return { players: 1 };
+  const opts: WorldOptions = { players: playing.length };
+  if (mode === "teams") opts.teams = playing.map((p, i) => p.team ?? i % 2);
+  if (mode === "relay") {
+    opts.teams = playing.map(() => 0);
+    opts.goal = "bloom";
+  }
+  if (mode === "race") opts.goal = "bloom";
+  return opts;
 }
 
 /**
@@ -39,9 +79,14 @@ export abstract class Session {
     readonly localPlayer: number,
   ) {}
 
-  /** Player whose economy this machine controls. */
+  /** Watching only (no orders). */
+  get spectating(): boolean {
+    return !!this.info.players.find((p) => p.id === this.localPlayer)?.spectator;
+  }
+
+  /** Player whose economy this machine controls (spectators look on from the first). */
   get player(): number {
-    return this.info.mode === "neighbours" ? this.localPlayer : 0;
+    return this.info.mode === "shared" || this.info.mode === "solo" || this.spectating ? 0 : this.localPlayer;
   }
 
   abstract submit(cmd: Command): CommandResult;
@@ -107,6 +152,9 @@ export interface SaveFile {
   difficulty?: Difficulty;
   /** AI rivals' skill (absent in older saves: Normal). */
   aiLevel?: AiLevel;
+  /** Teams and goal (team modes; absent otherwise). */
+  teams?: number[];
+  goal?: "conquest" | "bloom";
   mode: SessionMode;
   tick: number;
   checksum: number;
@@ -126,6 +174,8 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
     stakes: session.world.economy.stakes,
     difficulty: session.world.economy.adversity.difficulty,
     aiLevel: session.world.ai[0]?.level,
+    teams: session.world.economy.teams.length ? session.world.economy.teams.slice(0, session.world.players) : undefined,
+    goal: session.world.economy.goal,
     mode: session.info.mode,
     tick: session.world.tick,
     checksum: session.world.checksum(),
@@ -139,7 +189,7 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
  */
 export function replaySave(save: SaveFile, opts: WorldOptions = {}, onProgress?: (f: number) => void): { world: World; matches: boolean; log: LoggedCommand[] } {
   if (save.format !== "seedfall-save" || save.version !== 1) throw new Error("Not a Seedfall save file.");
-  const world = new World(save.seed, { ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest", aiLevel: save.aiLevel ?? "normal" });
+  const world = new World(save.seed, { ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest", aiLevel: save.aiLevel ?? "normal", teams: save.teams, goal: save.goal ?? "conquest" });
   const cmds = [...save.commands].sort((a, b) => a.tick - b.tick);
   let i = 0;
   const log: LoggedCommand[] = [];
@@ -155,4 +205,17 @@ export function replaySave(save: SaveFile, opts: WorldOptions = {}, onProgress?:
     if (onProgress && world.tick % 2000 === 0) onProgress(world.tick / save.tick);
   }
   return { world, matches: world.checksum() === save.checksum, log };
+}
+
+/** Build the world of a game in progress from its log, up to `tick` (rejoining, spectating late). */
+export function resumeWorld(seed: string, mode: SessionMode, players: readonly SessionPlayer[], log: readonly LoggedCommand[], tick: number, extra: WorldOptions = {}): World {
+  const world = new World(seed, { ...extra, ...worldOptionsFor(mode, players) });
+  let i = 0;
+  const cmds = [...log].sort((a, b) => a.tick - b.tick);
+  while (world.tick < tick) {
+    while (i < cmds.length && (cmds[i] as LoggedCommand).tick === world.tick) world.command((cmds[i++] as LoggedCommand).cmd);
+    world.step();
+  }
+  while (i < cmds.length && (cmds[i] as LoggedCommand).tick === world.tick) world.command((cmds[i++] as LoggedCommand).cmd);
+  return world;
 }

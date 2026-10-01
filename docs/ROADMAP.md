@@ -68,6 +68,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 23b: rejoining and spectating over Steam (the Steam lobby closes at the start); a
+  scoreboard and team chat; picking teams for AI rivals in the lobby; relay posts (each player
+  keeping one planet) with hand-overs; fair starts weighing biome and neighbours too; a spectator
+  camera that follows the action; stewards that play to the absent player's own plans.
 - Batch 22b: rivals that break their own word (a Warden turning on a truce when the odds are
   good) and remember who broke theirs; walking traders and prisoners on the map instead of goods
   appearing in the keep; caravans choosing what to bring from what the settlement lacks; hunting

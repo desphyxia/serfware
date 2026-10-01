@@ -111,9 +111,17 @@ export class RtcTransport implements Transport {
     };
   }
 
+  private leftHandlers: ((peer: string) => void)[] = [];
+
+  onPeerLeft(fn: (peer: string) => void): void {
+    this.leftHandlers.push(fn);
+  }
+
   remove(id: string): void {
+    const had = this.map.has(id);
     this.map.get(id)?.close();
     this.map.delete(id);
+    if (had) for (const h of this.leftHandlers) h(id);
   }
 
   broadcast(msg: NetMessage, except?: string): void {
