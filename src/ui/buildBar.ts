@@ -105,13 +105,14 @@ export class BuildBar {
       b.addEventListener("pointerdown", (e) => {
         if (e.pointerType !== "touch") return;
         held = false;
-        downAt = performance.now();
+        downAt = e.timeStamp;
         timer = setTimeout(explain, 500);
       });
-      // Judge the hold by how long the finger stayed down too (a busy frame can delay the timer).
+      // Judge the hold by the touches' own times too: on a busy page the timer can fire late, or
+      // the touch down and up be handled back to back, long after the finger moved.
       b.addEventListener("pointerup", (e) => {
         if (timer) clearTimeout(timer);
-        if (e.pointerType === "touch" && downAt >= 0 && performance.now() - downAt >= 500) explain();
+        if (e.pointerType === "touch" && downAt >= 0 && e.timeStamp - downAt >= 500) explain();
         downAt = -1;
       });
       for (const ev of ["pointercancel", "pointerleave"])

@@ -24,11 +24,13 @@ try {
   });
   await page.waitForTimeout(1500);
   const cdp = await ctx.newCDPSession(page);
-  const touch = (type, points) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
+  const touch = (type, points, timestamp) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })), ...(timestamp ? { timestamp } : {}) });
+  // A hold: the touches carry their own times (ms apart), so a slow machine can't shorten it.
   const hold = async (x, y, ms) => {
-    await touch("touchStart", [[x, y]]);
+    const t0 = Date.now() / 1000;
+    await touch("touchStart", [[x, y]], t0);
     await page.waitForTimeout(ms);
-    await touch("touchEnd", []);
+    await touch("touchEnd", [], t0 + ms / 1000);
   };
   const two = async (from, to, steps = 8) => {
     await touch("touchStart", from);
@@ -48,15 +50,16 @@ try {
   check(boxes.every((b) => b.h >= 40), `buttons at least 40 px tall (smallest ${Math.min(...boxes.map((b) => b.h)).toFixed(0)})`);
 
   // 2. Press and hold a tool button: its explanation, and the tool is not picked.
-  // Slow the page right down, as a busy phone (or a CI machine) is: the hold must still count.
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 8 });
+  // As on a busy phone (or a slow CI machine): the finger goes down and lifts 0.8 s later, but
+  // the page handles both touches back to back. The hold must still count.
   const lantern = boxes.find((b) => b.l === "Diplomacy");
-  await hold(lantern.x + lantern.w / 2, lantern.y + lantern.h / 2, 800);
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  const t0 = Date.now() / 1000;
+  await Promise.all([touch("touchStart", [[lantern.x + lantern.w / 2, lantern.y + lantern.h / 2]], t0), touch("touchEnd", [], t0 + 0.8)]);
+  await page.waitForTimeout(400);
   await page.waitForTimeout(200);
   const toast = await page.$eval(".toasts", (e) => e.textContent ?? "");
   const dipOpen = await page.evaluate(() => !document.getElementById("diplomacy")?.hidden);
-  check(/Diplomacy:/.test(toast) && !dipOpen, "press and hold a button explains it (and does not press it)");
+  check(/Diplomacy:/.test(toast) && !dipOpen, `press and hold a button explains it (and does not press it)${/Diplomacy:/.test(toast) && !dipOpen ? "" : ` [toast: ${JSON.stringify(toast.slice(0, 80))}, panel open: ${dipOpen}]`}`);
 
   // 3. Tap the Hearthship in the middle of the screen: it is selected.
   await page.touchscreen.tap(195, 422);

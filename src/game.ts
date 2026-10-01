@@ -1687,7 +1687,7 @@ export class Game {
         return;
       }
       this.downAt = { x: e.clientX, y: e.clientY, button: e.button };
-      pressedAt = e.pointerType === "touch" ? performance.now() : -1;
+      pressedAt = e.pointerType === "touch" ? e.timeStamp : -1;
       if (e.pointerType === "touch") press = setTimeout(longPress, 550);
     });
     const longPress = () => {
@@ -1719,7 +1719,7 @@ export class Game {
     canvas.addEventListener("pointerup", (e) => {
       // Held long enough but the timer was late (a busy frame): still a long press.
       const d0 = this.downAt;
-      const late = e.pointerType === "touch" && pressedAt >= 0 && performance.now() - pressedAt >= 550 && !!d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) <= 10;
+      const late = e.pointerType === "touch" && pressedAt >= 0 && e.timeStamp - pressedAt >= 550 && !!d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) <= 10;
       lift(e);
       if (late) {
         aim(e);
