@@ -1,9 +1,7 @@
 name: Soak
 
-# Long all-AI games (npm run soak): every night, or by hand with a chosen length.
+# Long all-AI games (npm run soak): only when started by hand (Actions, Soak, Run workflow).
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       days:

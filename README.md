@@ -17,8 +17,9 @@ npm run touch-test   # the game on a phone-sized touch screen (taps, long presse
 npm run soak         # long all-AI games (SOAK_DAYS=30): rules checked daily, determinism, a war to the end
 ```
 
-The soak run also runs every night in CI (`.github/workflows/soak.yml`) and writes `soak-report.json`:
-per run, how each settlement grew, who won, and the time each game day took.
+The soak run can also be started by hand in CI (Actions, Soak, Run workflow; it never runs on its
+own). It writes `soak-report.json`: per run, how each settlement grew, who won, and the time each
+game day took.
 
 ## Multiplayer (WebRTC, development)
 
