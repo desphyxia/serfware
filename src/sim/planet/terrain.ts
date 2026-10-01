@@ -114,7 +114,7 @@ export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number, over
     const lat = Math.abs(y);
     const m = clamp(nMoist.fbm(x * 2.2 + 11, y * 2.2, z * 2.2, 4) * 0.9 + params.wetness * 0.9 - 0.2, 0, 1);
     moisture[t] = m;
-    const temp = 30 * params.warmth + 12 - lat * lat * 46 - Math.max(0, e) * (38 / params.mountainHeight) * 0.7;
+    const temp = tileTemperature(params, lat, e);
     temperature[t] = temp;
     biome[t] = classify(e, m, temp, params.mountainHeight);
   }
@@ -135,4 +135,17 @@ function classify(e: number, m: number, temp: number, peak: number): Biome {
   if (m > 0.66) return Biome.DeepForest;
   if (m > 0.5) return Biome.Forest;
   return Biome.Meadow;
+}
+
+/** A tile's mean temperature from its latitude (|y| of its centre) and height (painted worlds). */
+export function tileTemperature(params: TerrainParams, lat: number, e: number): number {
+  return 30 * params.warmth + 12 - lat * lat * 46 - Math.max(0, e) * (38 / params.mountainHeight) * 0.7;
+}
+
+/** Recompute a tile's temperature and terrain class after its height changed (the world painter). */
+export function reclassify(terrain: Terrain, grid: PlanetGrid, t: number): void {
+  const e = terrain.elevation[t] as number;
+  const temp = tileTemperature(terrain.params, Math.abs(grid.center[t * 3 + 1] as number), e);
+  terrain.temperature[t] = temp;
+  terrain.biome[t] = classify(e, terrain.moisture[t] as number, temp, terrain.params.mountainHeight);
 }

@@ -1467,7 +1467,7 @@ export class Game {
   private surveyWorld(index: number): World {
     const home = this.session.world;
     const p = this.system.planets[index]!;
-    const w = this.surveys.get(index) ?? new World(planetSeed(home.seed, p.name), { ...worldFor(p), survey: true });
+    const w = this.surveys.get(index) ?? new World(planetSeed(home.seed, p.name), { ...worldFor(p), survey: true, mods: home.mods });
     this.surveys.set(index, w);
     w.tick = Math.max(w.tick, home.tick);
     w.climate.step(w.tick);
