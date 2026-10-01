@@ -11,6 +11,7 @@ import { Planet, type PlanetOverrides } from "./planet/planet";
 import { Rng } from "./rng";
 import { generateSystem, HOME_AIR, worldFor, type StarSystem } from "./system/system";
 import { Atmosphere, type AirStart } from "./climate/atmosphere";
+import type { Difficulty } from "./econ/adversity";
 import { VOYAGE_COMMANDS, Voyages, type VoyageCommand, type WorldHost } from "./system/voyages";
 
 export interface WorldOptions {
@@ -22,6 +23,8 @@ export interface WorldOptions {
   rivals?: number;
   /** What losing a duel costs: a wound (default) or a life. */
   stakes?: "wounded" | "mortal";
+  /** How hard adversity bites: floods, blight, cold snaps, meteors, pests, fire (default Honest). */
+  difficulty?: Difficulty;
   /** Game days before anyone may attack. */
   peaceDays?: number;
   /** Another planet of the star system: its physics and climate (see sim/system). */
@@ -107,6 +110,7 @@ export class World implements WorldHost {
     this.atmosphere.apply();
     this.economy.onTerraform = (b) => b.def.terra && this.atmosphere.work(b.def.terra, b.tile);
     this.economy.stakes = opts.stakes ?? "wounded";
+    this.economy.adversity.difficulty = opts.difficulty ?? "honest";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
   }
 

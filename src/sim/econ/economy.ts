@@ -25,6 +25,7 @@ import {
 } from "./defs";
 import { MinHeap } from "./heap";
 import { Culture, DISCOVERIES, unlockedBy } from "./culture";
+import { Adversity, METEORITE } from "./adversity";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
@@ -254,6 +255,8 @@ export class Economy {
   tick = 0;
   /** The Almanac, festivals and the joy and wonder they bring (see culture.ts). */
   readonly culture: Culture;
+  /** Floods, blight, cold snaps, meteors and pests, and the difficulty (see adversity.ts). */
+  readonly adversity: Adversity;
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
   colony = false;
   /** Terraforming works finished a cycle (the world passes it to the planet's atmosphere). */
@@ -297,6 +300,13 @@ export class Economy {
     });
     land.aquifer = this.ecology.aquifer;
     this.culture = new Culture(this);
+    this.adversity = new Adversity(this);
+  }
+
+  /** Remove a building struck down by disaster (a meteor). */
+  removeBuildingAt(t: number): void {
+    const b = this.buildingAt(t);
+    if (b?.alive) this.removeBuilding(b);
   }
 
   /** Apiaries within three steps: their bees make the flowers there busier. */
@@ -337,9 +347,12 @@ export class Economy {
     b.wear = Math.min(1, b.wear + 0.15);
     b.soot = Math.min(1, b.soot + 0.3);
     if (this.keeps.includes(b.id) || !b.built) return;
+    // Gentle: fire scorches but never takes a building. Hard: it burns down sooner.
+    const diff = this.adversity.difficulty;
+    if (diff === "gentle" && b.burn >= 2) return;
     b.burn++;
     if (b.burn === 1) this.notify(b.owner, `Your ${b.def.name.toLowerCase()} has caught fire! A well within five steps would save it.`);
-    if (b.burn >= 3) {
+    if (b.burn >= (diff === "hard" ? 2 : 3)) {
       this.notify(b.owner, `Your ${b.def.name.toLowerCase()} has burned down.`);
       this.removeBuilding(b);
     }
@@ -527,8 +540,11 @@ export class Economy {
     // Dew condensers water the dry Saltglass fields around them.
     const dew = this.dewNear(t) ? 0.6 : 0;
     const f = 0.75 + (land.soil[t] as number) + (land.nearWater(t, 2) ? 0.2 : 0) + hedge + dew;
-    // Bees and other pollinators from wild ground nearby help the crop along.
-    return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t) * rules.fieldGrowth));
+    // Bees and other pollinators from wild ground nearby help the crop along; hardy seed kept
+    // after a blight grows faster for a while.
+    const owner = (land.territory[t] as number) - 1;
+    const hardy = owner >= 0 && (this.adversity.hardyUntil[owner] ?? -1) > this.tick ? 1.25 : 1;
+    return Math.round(FIELD_GROWTH_TICKS / (f * this.ecology.pollination(t) * rules.fieldGrowth * hardy));
   }
 
   /** Ticks per growth stage of a young tree: the Canopy Deeps grow fast, the tundra slow. */
@@ -2609,8 +2625,9 @@ export class Economy {
           land.amount[t]!--;
           if (land.amount[t] === 0) land.feature[t] = Feature.None;
           land.featureVersion++;
-          // Rock by a vent is shot through with volcanic glass.
-          got = land.nearVent(t, 2) && (mix32(t, this.tick) & 1) === 0 ? goodId("obsidian") : produced;
+          // Rock by a vent is shot through with volcanic glass; a meteorite is iron, with gold in it.
+          if (land.variety[t] === METEORITE) got = mix32(t, this.tick) % 3 === 0 ? goodId("gold") : goodId("iron");
+          else got = land.nearVent(t, 2) && (mix32(t, this.tick) & 1) === 0 ? goodId("obsidian") : produced;
         } else if (def.job === "excavate" && land.feature[t] === Feature.Ruin && (land.amount[t] as number) > 0) {
           land.amount[t]!--;
           // Dug out: the ruin stays, open to the sky.
@@ -2633,7 +2650,12 @@ export class Economy {
             land.amount[t] = 0;
             // Each harvest takes from the soil.
             land.soil[t] = Math.max(0.05, (land.soil[t] as number) - 0.09);
-            got = produced;
+            // A blighted crop is good for nothing.
+            got = this.adversity.blight[t] ? -1 : produced;
+            if (this.adversity.blight[t]) {
+              this.adversity.blight[t] = 0;
+              this.adversity.blightVersion++;
+            }
           } else if ((land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.use[t] === Use.Free) {
             land.feature[t] = Feature.Field;
             land.amount[t] = 0;
@@ -2826,6 +2848,11 @@ export class Economy {
       if ((land.amount[t] as number) < FIELD_RIPE && (land.nextGrowth[t] as number) <= this.tick) {
         // Outside the growing season fields wait; frost doesn't kill them, it just holds them.
         if (this.climate && !this.climate.growing(t)) {
+          land.nextGrowth[t] = this.tick + 200;
+          continue;
+        }
+        // Blighted crops stand still until the blight passes.
+        if (this.adversity.blight[t]) {
           land.nextGrowth[t] = this.tick + 200;
           continue;
         }
@@ -3385,6 +3412,8 @@ export class Economy {
     }
     if (tick % 100 === 0) this.stepVictory();
     this.stepFrontiers(tick);
+    this.adversity.step(tick);
+    if (this.climate) this.climate.coldSnap = this.adversity.cold;
     if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();
   }
@@ -3432,5 +3461,6 @@ export class Economy {
     for (const i of this.islands) h.int(i.at).int(i.stone);
     this.ecology.hash(h);
     this.culture.hash(h);
+    this.adversity.hash(h);
   }
 }

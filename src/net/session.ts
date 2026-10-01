@@ -2,6 +2,7 @@ import type { CommandResult } from "../sim/econ/economy";
 import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
 import { World, type WorldOptions } from "../sim/world";
+import type { Difficulty } from "../sim/econ/adversity";
 
 /** A command as recorded in the log: applied when world.tick === tick, before that tick's step. */
 export interface LoggedCommand {
@@ -102,6 +103,7 @@ export interface SaveFile {
   /** AI rivals (absent in older saves). */
   rivals?: number;
   stakes?: "wounded" | "mortal";
+  difficulty?: Difficulty;
   mode: SessionMode;
   tick: number;
   checksum: number;
@@ -119,6 +121,7 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
     players: session.world.humans,
     rivals: session.world.rivals,
     stakes: session.world.economy.stakes,
+    difficulty: session.world.economy.adversity.difficulty,
     mode: session.info.mode,
     tick: session.world.tick,
     checksum: session.world.checksum(),
@@ -132,7 +135,7 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
  */
 export function replaySave(save: SaveFile, opts: WorldOptions = {}, onProgress?: (f: number) => void): { world: World; matches: boolean; log: LoggedCommand[] } {
   if (save.format !== "seedfall-save" || save.version !== 1) throw new Error("Not a Seedfall save file.");
-  const world = new World(save.seed, { ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded" });
+  const world = new World(save.seed, { ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest" });
   const cmds = [...save.commands].sort((a, b) => a.tick - b.tick);
   let i = 0;
   const log: LoggedCommand[] = [];

@@ -55,6 +55,8 @@ export class Climate {
    */
   tempOffset = 0;
   seaRise = 0;
+  /** A cold snap in force (adversity), °C, negative. */
+  coldSnap = 0;
   rainBoost = 0;
 
   constructor(
@@ -147,7 +149,7 @@ export class Climate {
       const ty = c[t * 3 + 1] as number;
       const rain = this.rainBoost > 0 ? Math.min(1, this.rainAt(t) * (1 + this.rainBoost)) : this.rainAt(t);
       this.rain[t] = rain;
-      const temp = (terrain.temperature[t] as number) + this.offsetAt(tick, t, ty) - rain * 4 + this.tempOffset;
+      const temp = (terrain.temperature[t] as number) + this.offsetAt(tick, t, ty) - rain * 4 + this.tempOffset + this.coldSnap;
       this.temp[t] = temp;
       land.chill[t] = temp < -2 ? 1 : 0;
       if (land.hydro.lake[t]) {
