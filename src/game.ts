@@ -272,6 +272,7 @@ export class Game {
       },
       () => this.diplomacy.toggle(),
     );
+    this.buildBar.hint = (t) => this.toasts.show(t, "info");
     this.diplomacy = new DiplomacyPanel(
       () => this.session.world.economy,
       () => this.session.player,
@@ -1663,13 +1664,62 @@ export class Game {
       this.pointer.set(9, 9);
       this.setHover(-1);
     });
+    // Touch: a tap aims where it lands; a long press cancels the tool in hand, or inspects.
+    let touches = 0;
+    let press: ReturnType<typeof setTimeout> | null = null;
+    const aim = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      this.pointerDirty = true;
+    };
+    const stopPress = () => {
+      if (press) clearTimeout(press);
+      press = null;
+    };
     canvas.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "touch") touches++;
+      aim(e);
+      stopPress();
+      // A second finger means a pinch or a twist, never a tap.
+      if (touches > 1) {
+        this.downAt = null;
+        return;
+      }
       this.downAt = { x: e.clientX, y: e.clientY, button: e.button };
+      if (e.pointerType === "touch")
+        press = setTimeout(() => {
+          press = null;
+          if (!this.downAt) return;
+          this.downAt = null;
+          navigator.vibrate?.(12);
+          if (this.tools.cancel()) {
+            this.toasts.show("Cancelled.", "info");
+            return;
+          }
+          this.updateHover();
+          if (this.tools.tool === "select" && this.pickPerson()) return;
+          this.tools.click(this.hoverTile);
+        }, 550);
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      const d = this.downAt;
+      if (press && d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) stopPress();
+    });
+    const lift = (e: PointerEvent) => {
+      if (e.pointerType === "touch") touches = Math.max(0, touches - 1);
+      stopPress();
+    };
+    canvas.addEventListener("pointercancel", (e) => {
+      lift(e);
+      this.downAt = null;
     });
     canvas.addEventListener("pointerup", (e) => {
+      lift(e);
       const d = this.downAt;
       this.downAt = null;
       if (!d) return;
+      aim(e);
+      this.updateHover();
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) {
         // Dragging the view lets go of a followed settler.
         if (d.button === 0 && this.following >= 0) {
