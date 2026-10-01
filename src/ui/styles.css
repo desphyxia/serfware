@@ -918,3 +918,64 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .panel.diplomacy .btn:disabled { opacity: 0.45; cursor: default; }
 .panel.diplomacy .dip-temper.ally { background: rgba(110, 160, 220, 0.4); }
 .panel.diplomacy .dip-card.ally { border-color: rgba(110, 160, 220, 0.45); }
+
+/* ---------- Phones and small touch screens ---------- */
+@media (max-width: 640px), (pointer: coarse) and (max-width: 900px) {
+  /* All tools in view: two rows of finger-sized buttons, no keyboard hints. */
+  .buildbar-wrap {
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 12px);
+    width: calc(100vw - 12px);
+  }
+  .buildbar {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 2px;
+    padding: 4px;
+    width: 100%;
+    max-width: none;
+    overflow: visible;
+    box-sizing: border-box;
+  }
+  .bb {
+    min-width: 0;
+    min-height: 44px;
+    padding: 5px 2px 3px;
+    justify-content: center;
+  }
+  .bb svg {
+    width: 22px;
+    height: 22px;
+  }
+  .bb-l {
+    font-size: 9px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bb kbd,
+  .bugline {
+    display: none;
+  }
+  .bb-pop {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  /* Stock: one swipeable line instead of a wall of chips. */
+  .stockbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: calc(100vw - 200px);
+    scrollbar-width: none;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .chip-good {
+    padding: 3px 7px;
+    gap: 4px;
+  }
+  .inspector {
+    display: none;
+  }
+}

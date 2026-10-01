@@ -488,6 +488,10 @@ export class Economy {
     const { grid, terrain } = land.planet;
     let best = -1;
     let bestScore = -Infinity;
+    // Room to build first: sites with too little flat land are a last resort (a start on a
+    // narrow spit of land between sea and cliffs stalls, however fair its water and ore look).
+    const MIN_FLAT = 80;
+    let roomy = false;
     for (let t = 0; t < grid.count; t++) {
       if (!land.isLand(t) || grid.degree(t) === 5 || land.territory[t] !== 0) continue;
       const e = terrain.elevation[t] as number;
@@ -515,11 +519,18 @@ export class Economy {
         else spread -= (Math.abs(ang - land.spacing * (START.territoryRadius * 2 + 10)) / land.spacing) * 6;
       }
       // Fair starts: a site more than 5 % better or worse than the first player's is a last resort.
-      const fair = fairTo === undefined ? 0 : Math.abs(this.siteScore(t) / fairTo - 1) > 0.05 ? -400 : 0;
+      if (flatLand < MIN_FLAT && roomy) continue;
+      // Fair starts: prefer a site close to the first player's (evenStarts closes the rest of the gap).
+      const fair = fairTo === undefined ? 0 : Math.abs(this.siteScore(t) / fairTo - 1) > 0.05 ? -40 : 0;
       const score =
         fair +
         spread +
         flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3;
+      // The first roomy site found outranks every cramped one before it.
+      if (flatLand >= MIN_FLAT && !roomy) {
+        roomy = true;
+        bestScore = -Infinity;
+      }
       if (score > bestScore) {
         bestScore = score;
         best = t;
@@ -1176,6 +1187,14 @@ export class Economy {
 
   private dropCarriedGoodAt(s: Settler, flagId: number): void {
     const g = this.goods[s.carryGood] as Good;
+    // Still on the way to fetch it: the good never left its flag, so it simply waits there again.
+    if (s.state === "fetch" || s.carrying < 0) {
+      if (g.alive) g.carrier = -1;
+      this.releaseReservations(s);
+      s.carryGood = -1;
+      s.carrying = -1;
+      return;
+    }
     const flag = this.flags[flagId] as Flag;
     if (flag.alive && flag.goods.length < FLAG_CAPACITY) {
       g.flag = flagId;

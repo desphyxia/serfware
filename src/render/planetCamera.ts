@@ -34,7 +34,7 @@ export class PlanetCamera {
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private dragButton = -1;
   private edge = new THREE.Vector2();
-  private pinch: { dist: number; angle: number } | null = null;
+  private pinch: { dist: number; angle: number; midY: number } | null = null;
 
   constructor(
     readonly camera: THREE.PerspectiveCamera,
@@ -121,6 +121,8 @@ export class PlanetCamera {
         if (this.pinch && now) {
           this.tDistance = THREE.MathUtils.clamp(this.tDistance * (this.pinch.dist / now.dist), this.minDistance, this.maxDistance);
           this.tHeading += now.angle - this.pinch.angle;
+          // Two fingers sliding up or down together tilt the view.
+          this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - (now.midY - this.pinch.midY) * 0.005, -0.6, 0.5);
         }
         this.pinch = now;
         return;
@@ -156,11 +158,11 @@ export class PlanetCamera {
     window.addEventListener("blur", () => this.keys.clear());
   }
 
-  private pinchState(): { dist: number; angle: number } | null {
+  private pinchState(): { dist: number; angle: number; midY: number } | null {
     const pts = [...this.pointers.values()];
     if (pts.length < 2) return null;
     const [a, b] = pts as [{ x: number; y: number }, { x: number; y: number }];
-    return { dist: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    return { dist: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x), midY: (a.y + b.y) / 2 };
   }
 
   /** Controller: turn the view (radians), tilt it, and zoom by a factor (<1 is closer). */

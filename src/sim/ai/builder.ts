@@ -28,6 +28,8 @@ export class AiBuilder {
 
   private started = false;
   private thoughts = 0;
+  /** Wishes that found no site lately, and the thought they may be tried again. */
+  private readonly resting = new Map<string, number>();
 
   /** Attack the nearest enemy lantern it can take with good odds, using as few wardens as it can. */
   private attack(w: World): boolean {
@@ -74,21 +76,33 @@ export class AiBuilder {
     const count = (id: string) => mine.filter((b) => b.def.id === id).length;
     const lanterns = mine.filter((b) => LANTERNS.has(b.def.id)).length;
     const people = eco.peopleOf(pl).length;
-    const wants: (() => boolean)[] = [];
-    const want = (cond: boolean, fn: () => boolean) => {
-      if (cond) wants.push(fn);
+    const wants: { key: string; fn: () => boolean }[] = [];
+    const want = (cond: boolean, w: { key: string; fn: () => boolean }) => {
+      if (cond) wants.push(w);
     };
-    const near = (type: string, feature?: Feature, max = 9) => () => placeConnected(w, type, { minDist: 2, maxDist: max, near: feature, player: pl, center: this.center(w), splitRoads: true });
+    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: max, near: feature, player: pl, center: this.center(w), splitRoads: true }) });
+    const grow = () => ({ key: "expand", fn: () => this.expand(w, plank, stone) });
+    // Try the wishes in order; one that finds no site steps aside for a while, so a cramped spot
+    // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.
+    const attempt = (list: typeof wants, tries: number) => {
+      for (const x of list) {
+        if ((this.resting.get(x.key) ?? 0) > this.thoughts) continue;
+        if (x.fn()) return true;
+        this.resting.set(x.key, this.thoughts + 6);
+        if (--tries <= 0) return false;
+      }
+      return false;
+    };
     want(idle < 2 && plank >= 4 && count("house") < 2 + Math.floor(people / 6), near("house"));
     if (idle < 1) {
-      for (const fn of wants) if (fn()) return;
+      attempt(wants, wants.length);
       return;
     }
     want(count("woodcutter") < 1, near("woodcutter", Feature.Tree));
     want(count("quarry") < 1, near("quarry", Feature.Rock));
     want(count("sawmill") < 1, near("sawmill"));
     want(count("forester") < 1, near("forester", Feature.Tree));
-    want(lanterns < 1 + Math.floor(mine.length / 5), () => this.expand(w, plank, stone));
+    want(lanterns < 1 + Math.floor(mine.length / 5), grow());
     want(count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
     want(count("fisher") < 1, near("fisher", undefined, 11));
     want(count("farm") < 1, near("farm"));
@@ -110,8 +124,8 @@ export class AiBuilder {
     want(this.personality === "builder" && count("flowerbed") < Math.floor(mine.length / 10), near("flowerbed"));
     want(this.personality === "builder" && count("bench") < Math.floor(mine.length / 14), near("bench"));
     want(this.personality === "warden" && count("toolsmith") > 0 && count("weaponsmith") < 1, near("weaponsmith"));
-    want(lanterns < 3 + Math.floor(mine.length / 3), () => this.expand(w, plank, stone));
-    for (const fn of wants.slice(0, lv.wants)) if (fn()) return;
+    want(lanterns < 3 + Math.floor(mine.length / 3), grow());
+    attempt(wants, lv.wants);
   }
 
   /** Diplomacy: offer what this temperament wants, and get its prisoners home. */
