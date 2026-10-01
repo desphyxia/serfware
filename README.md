@@ -75,6 +75,15 @@ harvest tires the soil, which recovers when left alone; water nearby and a hedge
 help crops. The top bar shows the season, temperature and weather where you look, with
 tomorrow's forecast and the soil in its tooltip. The debug dialog can summon weather and skip days.
 
+## Campaign
+
+The game menu opens on the Campaign tab: a short tutorial (one goal at a time, the tool to use
+pulses in the toolbar), The Long Voyage (twelve chapters on the Lanterne world, from landfall to
+a second world in bloom; each opens when the one before is done) and standalone scenarios. Goals
+show at the side of the screen. Chapters can be played in co-op: pick one under Multiplayer,
+Scenario. Goals and scripted events run inside the simulation, so every player sees them at the
+same moment and saves replay them exactly.
+
 ## Keys
 
 | Key | Action |

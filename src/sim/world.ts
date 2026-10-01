@@ -5,6 +5,8 @@ import { Feature, LandUse } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
 import { answerOffer, rivalFor, type AiLevel, type Personality } from "./ai/personality";
+import { ScenarioRun } from "./scenario/scenario";
+import { scenarioById } from "./scenario/campaign";
 import { Climate, CLIMATE_STEP } from "./climate/climate";
 import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
@@ -36,6 +38,8 @@ export interface WorldOptions {
   goal?: "conquest" | "bloom";
   /** Start sites within 5 % of each other on water, ore, soil and Star Well distance (default on). */
   fairStarts?: boolean;
+  /** A scenario (tutorial, chapter of The Long Voyage, handmade scenario) by id. */
+  scenario?: string;
   /** Game days before anyone may attack. */
   peaceDays?: number;
   /** Another planet of the star system: its physics and climate (see sim/system). */
@@ -83,6 +87,8 @@ export class World implements WorldHost {
   readonly ai: AiBuilder[] = [];
   /** Stewards keeping absent players' settlements, by player. */
   readonly stewards = new Map<number, AiBuilder>();
+  /** The scenario being played, if any: its goals, triggers and story. */
+  readonly scenario: ScenarioRun | null = null;
   /** A colony world: called when it blooms (the home world credits the race). */
   onBloom: (() => void) | null = null;
   /** The star system (home worlds only; survey and colony worlds belong to one). */
@@ -149,6 +155,11 @@ export class World implements WorldHost {
     this.economy.stakes = opts.stakes ?? "wounded";
     this.economy.adversity.difficulty = opts.difficulty ?? "honest";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
+    const def = opts.scenario ? scenarioById(opts.scenario) : undefined;
+    if (def) {
+      def.setup?.(this);
+      this.scenario = new ScenarioRun(def, this);
+    }
   }
 
   /**
@@ -256,6 +267,7 @@ export class World implements WorldHost {
     if (this.tick % CLIMATE_STEP === 0) this.climate.step(this.tick);
     this.economy.step(this.tick);
     for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
+    this.scenario?.step(this.tick);
     for (const ai of this.stewards.values()) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
     // A rooted colony's planet changes by decades a day (see Atmosphere).
     if (this.economy.colony && this.tick % this.economy.dayTicks === 7 && this.economy.rooted.some(Boolean)) {
@@ -290,6 +302,7 @@ export class World implements WorldHost {
     this.planet.hash(h);
     this.economy.hash(h);
     for (const p of this.stewards.keys()) h.int(p);
+    this.scenario?.hash(h);
     let snow = 0;
     for (let t = 0; t < this.land.snowCover.length; t += 7) snow += this.land.snowCover[t] as number;
     h.int(Math.round(snow * 1000)).int(this.climate.version);

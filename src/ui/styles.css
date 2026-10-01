@@ -979,3 +979,41 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
     display: none;
   }
 }
+
+/* ---------- Campaign: menu list, goals panel, story ---------- */
+.campaign .camp-list { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 4px; }
+.campaign .camp-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); }
+.campaign .camp-row.done { background: rgba(140, 200, 120, 0.1); }
+.campaign .camp-row.locked { opacity: 0.55; }
+.campaign .camp-text { flex: 1; display: grid; gap: 1px; min-width: 0; }
+.campaign .camp-text span { font-size: 0.85em; color: var(--muted); }
+.campaign .camp-done { color: #9ad08a; font-weight: 700; }
+.campaign .btn:disabled { opacity: 0.5; cursor: default; }
+.objectives {
+  position: absolute;
+  left: 12px;
+  top: calc(56px + env(safe-area-inset-top, 0px));
+  width: min(280px, calc(100vw - 24px));
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: calc(12.5px * var(--ui-scale));
+  color: var(--ink);
+}
+.objectives h3 { margin: 0 0 6px; font-family: var(--f-display); font-size: 1.1em; color: var(--lantern); }
+.objectives ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.objectives li { display: flex; gap: 6px; color: var(--ink-2); }
+.objectives li.now { color: var(--ink); font-weight: 600; }
+.objectives li.met { color: #9ad08a; }
+.objectives .tick { width: 1em; flex: none; }
+.objectives .obj-hint { margin: 6px 0 0; font-size: 0.92em; color: var(--muted); font-style: italic; }
+.objectives .obj-done { margin: 6px 0 0; color: #9ad08a; font-weight: 700; }
+.objectives .obj-failed { margin: 6px 0 0; color: #e0806a; font-weight: 700; }
+.panel.story .story-text { margin: 0 0 10px; line-height: 1.55; }
+.bb.pulse { color: var(--lantern); border-color: var(--lantern); animation: bb-pulse 1.2s ease-in-out infinite; }
+@keyframes bb-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(240, 178, 90, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(240, 178, 90, 0.45); } }
+@media (max-width: 640px), (pointer: coarse) and (max-width: 900px) {
+  .objectives { top: calc(44px + env(safe-area-inset-top, 0px)); width: calc(100vw - 24px); font-size: 11.5px; padding: 6px 10px; }
+}
