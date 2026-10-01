@@ -26,6 +26,8 @@ import {
 import { MinHeap } from "./heap";
 import { Culture, DISCOVERIES, unlockedBy } from "./culture";
 import { Adversity, METEORITE } from "./adversity";
+import { Wanderers } from "./wanderers";
+import { Diplomacy, DIPLOMACY_COMMANDS, type DiplomacyCommand } from "./diplomacy";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
@@ -199,6 +201,7 @@ export type Command = (
   | { t: "attack"; target: number; count: number }
   | { t: "hedge"; tile: number }
   | { t: "causeway"; tile: number }
+  | DiplomacyCommand
 ) & { player?: number };
 
 export interface CommandResult {
@@ -257,6 +260,14 @@ export class Economy {
   readonly culture: Culture;
   /** Floods, blight, cold snaps, meteors and pests, and the difficulty (see adversity.ts). */
   readonly adversity: Adversity;
+  /** Treaties between settlements, reputation and shame (see diplomacy.ts). */
+  readonly diplomacy: Diplomacy;
+  /** Nomad caravans, hamlets in the wild, and native creatures (see wanderers.ts). */
+  readonly wanderers: Wanderers;
+  /** Players run by the computer (they answer offers themselves). */
+  readonly aiPlayers = new Set<number>();
+  /** Per player: the settlement's name, if it has one. */
+  readonly names: string[] = [];
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
   colony = false;
   /** Terraforming works finished a cycle (the world passes it to the planet's atmosphere). */
@@ -301,6 +312,25 @@ export class Economy {
     land.aquifer = this.ecology.aquifer;
     this.culture = new Culture(this);
     this.adversity = new Adversity(this);
+    this.diplomacy = new Diplomacy(this);
+    this.wanderers = new Wanderers(this);
+  }
+
+  /** People who join at once (a hamlet coming in): one family, arriving grown up. */
+  welcome(owner: number, n: number, why: string): void {
+    const r = this.lifeRng;
+    if (!r) return;
+    const family = randomFamily(r);
+    for (let i = 0; i < n; i++) note(this.addPerson(owner, randomFirst(r), family, this.tick - r.int(17, 40) * this.dayTicks, r), why);
+  }
+
+  /** Roads across land no longer shared (a shared-roads treaty ended) are taken up. */
+  dropForeignRoads(): void {
+    for (const r of this.roads) if (r.alive && r.tiles.slice(1, -1).some((t) => !this.land.mayRoad(t, r.owner))) this.removeRoad(r);
+  }
+
+  playerName(p: number): string {
+    return this.names[p] ?? (p === 0 ? "the first settlement" : `settlement ${p + 1}`);
   }
 
   /** Remove a building struck down by disaster (a meteor). */
@@ -591,6 +621,7 @@ export class Economy {
   private applyCommand(cmd: Command): CommandResult {
     const p = cmd.player ?? 0;
     if (this.keeps[p] === undefined) return { ok: false, reason: "Unknown player." };
+    if (DIPLOMACY_COMMANDS.has(cmd.t)) return this.diplomacy.apply(cmd as DiplomacyCommand);
     switch (cmd.t) {
       case "flag":
         return this.cmdFlag(cmd.tile, p);
@@ -621,6 +652,7 @@ export class Economy {
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
     }
+    return { ok: false, reason: "Unknown command." };
   }
 
   private cmdGeologist(flagTile: number, p: number): CommandResult {
@@ -1575,6 +1607,7 @@ export class Economy {
     if (this.winner >= 0) return "The game is over.";
     if (this.tick < this.peaceUntil) return "The peace still holds.";
     if (this.defeated[player]) return "Your settlement has fallen.";
+    if (target.owner !== player && this.diplomacy.truce(player, target.owner)) return `You have a truce with ${this.playerName(target.owner)}. Break it first (Diplomacy, J), at a cost.`;
     if (!target.alive || !target.built || target.owner === player) return "That isn't an enemy lantern.";
     if (!target.def.light || (!target.lit && !this.keeps.includes(target.id))) return "Only lit lanterns and Hearthships can be attacked.";
     if (!this.attackSources(player, target).length) return "None of your lanterns is close enough.";
@@ -1757,11 +1790,11 @@ export class Economy {
       wp.xp += 2;
       note(wp, `Won a duel at the door of a ${b.def.name.toLowerCase()}.`);
     }
-    this.hurt(loser, `lost a duel at the door of a ${b.def.name.toLowerCase()}`);
+    this.hurt(loser, `lost a duel at the door of a ${b.def.name.toLowerCase()}`, loser === a ? b.owner : -1);
   }
 
   /** The loser of a fight: wounded and sent home, or fallen if the stakes are mortal. */
-  private hurt(s: Settler, how: string): void {
+  private hurt(s: Settler, how: string, captor = -1): void {
     const p = this.people[s.person];
     if (s.role === "warden" && s.building >= 0) {
       const b = this.buildings[s.building] as Building;
@@ -1777,6 +1810,13 @@ export class Economy {
     if (p) {
       p.woundedUntil = this.tick + COMBAT.woundedDays * this.dayTicks;
       note(p, `Was wounded: ${how}.`);
+      // A beaten attacker may be taken prisoner (held until an exchange sends them home).
+      if (captor >= 0 && captor !== p.owner && mix32(this.tick, p.id) % 2 === 0) {
+        p.captive = captor;
+        p.woundedUntil = this.tick + 1000 * this.dayTicks;
+        note(p, `Was taken prisoner by ${this.playerName(captor)}.`);
+        this.notify(captor, `Your wardens have taken ${fullName(p)} of ${this.playerName(p.owner)} prisoner.`);
+      }
     }
     if (s.role === "attacker") s.building = -1;
     this.sendHome(s);
@@ -2174,13 +2214,14 @@ export class Economy {
       case "enter":
         if (this.walk(s)) {
           const g = this.goods[s.carryGood] as Good;
-          const dest = this.buildings[g.dest] as Building;
-          if (dest.alive) this.receive(dest, g.type);
+          // The building may have gone while the good was on its way in (the good is lost).
+          const dest = this.buildings[g.dest];
+          if (dest?.alive) this.receive(dest, g.type);
           g.alive = false;
           s.carryGood = -1;
           s.carrying = -1;
           s.state = "leave";
-          this.setPath(s, [dest.tile, road.tiles[s.roadIdx] as number]);
+          this.setPath(s, [dest?.tile ?? (s.path[s.pi] as number), road.tiles[s.roadIdx] as number]);
         }
         return;
       case "leave":
@@ -2917,6 +2958,7 @@ export class Economy {
       }
       this.updateGlow(p);
     }
+    if (daily) this.diplomacy.daily();
   }
 
   /** Room for people: the Hearthship's berths plus every house. */
@@ -2997,15 +3039,17 @@ export class Economy {
     const totals = this.storageTotals(owner);
     const working = adults.filter((p) => p.settler >= 0).length / Math.max(1, adults.length);
     const grieving = (this.griefUntil[owner] ?? -1) > this.tick;
+    // Broken word: the people are ashamed for a few days.
+    const shamed = this.diplomacy.shamed(owner);
     const parts: GlowParts = {
       // Salt keeps the stores from spoiling: a little more nourishment from the same food.
       nourishment: this.hungry[owner] ? 0.1 : Math.min(1, 0.25 + food / (perDay * 4) + Math.min(0.15, (totals[goodId("salt")] as number) / 40)),
       shelter: Math.min(1, (KEEP_SHELTER + houses.length * HOUSE_ADULTS) / all.length),
-      belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)),
+      belonging: Math.max(0, 0.3 + 0.7 * (housed / all.length) - (grieving ? 0.2 : 0)) * (shamed ? 0.6 : 1),
       beauty: Math.min(1, 0.2 + trees / 30 + Math.min(0.25, ((totals[goodId("obsidian")] as number) + (totals[goodId("glass")] as number)) / 24) + Math.min(0.35, this.culture.decor(owner) / 12)) * (grieving ? 0.4 : 1),
       rest: Math.max(0.3, Math.min(1, 1.35 - working)),
       variety: Math.min(1, this.culture.variety(owner) / 3),
-      joy: grieving ? 0.2 : 0.5 + 0.5 * this.culture.joy(owner),
+      joy: grieving ? 0.2 : (shamed ? 0.25 : 0.5) + (shamed ? 0.25 : 0.5) * this.culture.joy(owner),
       wonder: Math.min(1, 0.4 + (this.culture.pages[owner]?.length ?? 0) * 0.05 + (this.culture.relics[owner] ?? 0) * 0.05),
     };
     this.glowParts[owner] = parts;
@@ -3413,6 +3457,7 @@ export class Economy {
     if (tick % 100 === 0) this.stepVictory();
     this.stepFrontiers(tick);
     this.adversity.step(tick);
+    this.wanderers.step(tick);
     if (this.climate) this.climate.coldSnap = this.adversity.cold;
     if (this.territoryDirty) this.updateTerritory();
     if (tick % 600 === 0) this.compact();
@@ -3462,5 +3507,7 @@ export class Economy {
     this.ecology.hash(h);
     this.culture.hash(h);
     this.adversity.hash(h);
+    this.diplomacy.hash(h);
+    this.wanderers.hash(h);
   }
 }

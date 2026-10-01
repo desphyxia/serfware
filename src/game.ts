@@ -36,6 +36,7 @@ import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
+import type { Difficulty } from "./sim/econ/adversity";
 import { LAYER_OF, type MusicLayer } from "./audio/music";
 import { DISCOVERIES, unlockedBy } from "./sim/econ/culture";
 import { worldFor, type StarSystem } from "./sim/system/system";
@@ -116,6 +117,7 @@ export class Game {
   /** AI rivals in new solo worlds. */
   private rivals = 1;
   private stakes: "wounded" | "mortal" = "wounded";
+  private difficulty: Difficulty = "honest";
   /** Fog of war drawn (the debug dialog can lift it). */
   private fogOn = true;
   /** Person the camera follows, or -1. */
@@ -183,9 +185,10 @@ export class Game {
     this.inspector = h("div", { class: "inspector", hidden: true, "aria-live": "polite" });
     this.settingsPanel = new SettingsPanel(settings, {
       seed: () => this.world.seed,
-      newWorld: (s, rivals, stakes) => void this.newWorld(s, rivals, stakes),
+      newWorld: (s, rivals, stakes, difficulty) => void this.newWorld(s, rivals, stakes, difficulty),
       rivals: () => this.rivals,
       stakes: () => this.stakes,
+      difficulty: () => this.difficulty,
     });
     this.report = new ReportPanel();
     this.debug = new DebugPanel({
@@ -416,8 +419,14 @@ export class Game {
       };
     }
     const soil = w.land.soil[t] as number;
+    // Foretold and present trouble for this player.
+    const NAMES = { flood: "Flood", blight: "Blight", coldsnap: "Cold snap", meteors: "Falling stars", pests: "Rats" } as const;
+    const trouble = w.economy.adversity
+      .live()
+      .filter((e) => e.owner === me || e.kind === "coldsnap" || e.kind === "meteors")
+      .map((e) => `${NAMES[e.kind]} ${e.started ? "now" : `in ${Math.max(1, Math.round((e.at - w.tick) / (w.economy.dayTicks / 24)))} h`}`);
     return {
-      text: `${season[0]!.toUpperCase()}${season.slice(1)} · ${Math.round(temp)} °C · ${sky}`,
+      text: `${season[0]!.toUpperCase()}${season.slice(1)} · ${Math.round(temp)} °C · ${sky}${trouble.length ? ` · ⚠ ${trouble[0]}` : ""}`,
       title: `${this.forecastCache.text}\nSoil here: ${soil > 0.7 ? "rich" : soil > 0.4 ? "fair" : "tired"}${w.land.isRiver(t) ? ", by a river" : ""}.${c.growing(t) ? "" : " Too cold for crops to grow."}`,
     };
   }
@@ -991,6 +1000,79 @@ export class Game {
     return pole?.tile ?? -1;
   }
 
+  /**
+   * Screenshots and testing: put adversity on show. "flood": the river near the keep over its
+   * banks; "blight": withered fields; "meteors": falling stars mid-flight at night; "rats": rats
+   * in the Hearthship's stores; "warning": a cold snap foretold (see the weather chip).
+   */
+  adversityDemo(kind: "flood" | "blight" | "meteors" | "rats" | "warning"): number {
+    const w = this.session.world;
+    const eco = w.economy;
+    const land = w.land;
+    const adv = eco.adversity;
+    const me = this.session.player;
+    const keep = eco.buildings[eco.keeps[me] ?? -1];
+    if (!keep) return -1;
+    const strike = (e: { at: number }) => {
+      for (let t = w.tick - (w.tick % 25) + 25; t <= e.at + 25; t += 25) {
+        eco.tick = t;
+        adv.step(t);
+      }
+    };
+    if (kind === "warning") {
+      adv.foretell("coldsnap", me, -1, w.tick);
+      return keep.tile;
+    }
+    if (kind === "flood") {
+      let river = -1;
+      for (let r = 1; r < 16 && river < 0; r++) river = land.ring(keep.tile, r).find((t) => land.isRiver(t)) ?? -1;
+      if (river < 0) return -1;
+      const e = adv.foretell("flood", me, river, w.tick);
+      strike(e);
+      e.until = e.at + 1e6;
+      this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(river)), 16);
+      return river;
+    }
+    if (kind === "blight") {
+      const farm = eco.buildings.find((b) => b.alive && b.owner === me && b.def.id === "farm");
+      const centre = farm?.tile ?? keep.tile;
+      const open = (t: number) => land.isLand(t) && (land.use[t] === Use.Free || land.use[t] === Use.Blocked) && (land.feature[t] === Feature.None || land.feature[t] === Feature.Field || land.feature[t] === Feature.Shrub);
+      // The most open patch of ground near the farm or keep: a block of fields there.
+      const candidates = [...land.ring(centre, 4), ...land.ring(keep.tile, 8)].filter(open);
+      const best = candidates.reduce((a, t) => (land.ring(t, 2).filter(open).length > land.ring(a, 2).filter(open).length ? t : a), candidates[0] ?? centre);
+      const fields = [best, ...land.ring(best, 2)].filter(open);
+      for (const t of fields.slice(0, 14)) {
+        land.feature[t] = Feature.Field;
+        land.amount[t] = 3;
+      }
+      land.featureVersion++;
+      const e = adv.foretell("blight", me, fields[0] ?? centre, w.tick);
+      strike(e);
+      for (const t of fields.slice(0, 9)) adv.blight[t] = 1;
+      adv.blightVersion++;
+      this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(best)), 12);
+      return best;
+    }
+    if (kind === "rats") {
+      const e = adv.foretell("pests", me, keep.tile, w.tick);
+      strike(e);
+      this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(keep.tile)), 9);
+      return keep.tile;
+    }
+    const e = adv.foretell("meteors", me, keep.tile, w.tick);
+    strike(e);
+    // Hold the stars in the air: each part way down.
+    e.times = e.times.map((_, i) => w.tick + 20 + i * 12);
+    this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(keep.tile)), 50);
+    return keep.tile;
+  }
+
+  /** Screenshots and testing: open the settings at a tab. */
+  openSettings(tab = "Graphics"): void {
+    this.settingsPanel.show();
+    this.settingsPanel.showTab(tab);
+  }
+
   visitHamlet(): void {
     const n = demoSettlement(this.world);
     for (let i = 0; i < 6000; i++) this.world.step();
@@ -1177,15 +1259,16 @@ export class Game {
     requestAnimationFrame(frame);
   }
 
-  async newWorld(seedInput?: string, rivals = this.rivals, stakes = this.stakes): Promise<void> {
+  async newWorld(seedInput?: string, rivals = this.rivals, stakes = this.stakes, difficulty = this.difficulty): Promise<void> {
     this.rivals = rivals;
     this.stakes = stakes;
+    this.difficulty = difficulty;
     const seed = seedInput && seedInput.trim() ? normaliseSeed(seedInput) : randomSeedWord(Math.floor(Math.random() * 2 ** 32));
     this.loading.hidden = false;
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed, { rivals, stakes })));
+    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {

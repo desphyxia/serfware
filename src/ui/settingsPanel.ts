@@ -1,4 +1,5 @@
 import type { GraphicsSettings, PresetName, Settings, SettingsStore } from "../core/settings";
+import { DIFFICULTY, type Difficulty } from "../sim/econ/adversity";
 import { h, Panel } from "./dom";
 
 type Opt<T> = readonly (readonly [T, string])[];
@@ -10,10 +11,14 @@ export class SettingsPanel extends Panel {
   private readonly seedInput: HTMLInputElement;
   private readonly rivalsInput: HTMLSelectElement;
   private readonly stakesInput: HTMLSelectElement;
+  private readonly difficultyInput: HTMLSelectElement;
+  private noteDifficulty: () => void = () => {};
+  /** Switch to a tab by name. */
+  showTab: (name: string) => void = () => {};
 
   constructor(
     private readonly store: SettingsStore,
-    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number, stakes?: "wounded" | "mortal") => void; rivals: () => number; stakes: () => "wounded" | "mortal" },
+    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number, stakes?: "wounded" | "mortal", difficulty?: Difficulty) => void; rivals: () => number; stakes: () => "wounded" | "mortal"; difficulty: () => Difficulty },
   ) {
     super("settings", "Settings", { width: 380 });
     const tabs = h("div", { class: "tabs", role: "tablist" });
@@ -95,14 +100,21 @@ export class SettingsPanel extends Panel {
     w.append(this.row("AI rivals", this.rivalsInput, null, "w-rivals"));
     this.stakesInput = h("select", { id: "w-stakes" }, h("option", { value: "wounded" }, "Wounded (losers limp home)"), h("option", { value: "mortal" }, "Mortal (losers fall)")) as HTMLSelectElement;
     w.append(this.row("Battle stakes", this.stakesInput, null, "w-stakes"));
+    this.difficultyInput = h("select", { id: "w-difficulty" }, ...(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => h("option", { value: d }, DIFFICULTY[d].label))) as HTMLSelectElement;
+    const diffNote = h("p", { class: "hint" });
+    const noteFor = () => (diffNote.textContent = DIFFICULTY[this.difficultyInput.value as Difficulty].note);
+    this.difficultyInput.addEventListener("change", noteFor);
+    w.append(this.row("Adversity", this.difficultyInput, null, "w-difficulty"), diffNote);
     const rivals = () => Number(this.rivalsInput.value);
     const stakes = () => this.stakesInput.value as "wounded" | "mortal";
+    const difficulty = () => this.difficultyInput.value as Difficulty;
+    this.noteDifficulty = noteFor;
     w.append(
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals(), stakes()) }, "Generate this seed"),
-        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals(), stakes()) }, "Random seed"),
+        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals(), stakes(), difficulty()) }, "Generate this seed"),
+        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals(), stakes(), difficulty()) }, "Random seed"),
       ),
       h("p", { class: "hint" }, "The same seed always produces the same world. Include it in bug reports."),
     );
@@ -110,6 +122,7 @@ export class SettingsPanel extends Panel {
 
     this.body.append(tabs, pages);
     select("Graphics");
+    this.showTab = select;
     store.subscribe((s) => this.sync(s));
     this.sync(store.get());
   }
@@ -118,6 +131,8 @@ export class SettingsPanel extends Panel {
     this.seedInput.value = this.world.seed();
     this.rivalsInput.value = String(this.world.rivals());
     this.stakesInput.value = this.world.stakes();
+    this.difficultyInput.value = this.world.difficulty();
+    this.noteDifficulty();
     this.sync(this.store.get());
   }
 

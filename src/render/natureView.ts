@@ -75,6 +75,9 @@ export class NatureView {
   private maskVersion = -1;
   /** Changes a few times a day so trees follow the seasons and the snow. */
   seasonKey = 0;
+  /** Blighted fields (adversity), drawn withered. */
+  blight: { blight: Uint8Array; blightVersion: number } | null = null;
+  private blightVersion = -1;
   private builtSeason = -1;
   private density = -1;
 
@@ -144,7 +147,9 @@ export class NatureView {
       this.signVersion = this.land.signVersion;
       this.updateSigns();
     }
-    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion && this.seasonKey === this.builtSeason) return;
+    const bv = this.blight?.blightVersion ?? 0;
+    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion && this.seasonKey === this.builtSeason && bv === this.blightVersion) return;
+    this.blightVersion = bv;
     this.builtSeason = this.seasonKey;
     this.version = this.land.featureVersion;
     this.maskVersion = this.mask.version;
@@ -243,7 +248,8 @@ export class NatureView {
         m.compose(base, q, s);
         if (counts.r < this.rocks.instanceMatrix.count) {
           // Rock by a vent is black volcanic glass; tundra rock is frosted.
-          if (land.nearVent(t, 2)) color.setRGB(0.2, 0.19, 0.25);
+          if (land.variety[t] === 7) color.setRGB(0.36, 0.3, 0.34);
+          else if (land.nearVent(t, 2)) color.setRGB(0.2, 0.19, 0.25);
           else color.setRGB(1, 1, 1).lerp(new THREE.Color(1.15, 1.2, 1.3), Math.min(0.5, this.season(t).snow));
           this.rocks.setColorAt(counts.r, color);
           this.rocks.setMatrixAt(counts.r++, m);
@@ -289,6 +295,8 @@ export class NatureView {
           m.compose(base, q, s);
           this.rows.setMatrixAt(counts.f, m);
           color.copy(green).lerp(gold, Math.max(0, g * 1.4 - 0.4));
+          // Blight: the crop withers brown and black.
+          if (this.blight?.blight[t]) color.setRGB(0.16, 0.12, 0.08);
           this.rows.setColorAt(counts.f, color);
           counts.f++;
         }

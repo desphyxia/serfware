@@ -29,6 +29,8 @@ export interface Person {
   arms: number;
   /** Tick until which this person is recovering from a wound (can't work or fight). */
   woundedUntil: number;
+  /** Held prisoner by this player (taken in a lost attack) until an exchange frees them. */
+  captive?: number;
   alive: boolean;
   /** Planet index this person was raised on (colonists; absent for people of the world they live on). */
   origin?: number;
