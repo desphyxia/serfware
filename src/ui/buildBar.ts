@@ -20,6 +20,7 @@ export const ICONS: Record<string, string> = {
   decor: svg(`<path d="M12 21V9M12 9c-2-3-6-3-6 0s4 4 6 0zM12 9c2-3 6-3 6 0s-4 4-6 0zM12 9c-1-3 0-6 0-6s1 3 0 6" ${STROKE}/>`),
   almanac: svg(`<path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1zM12 6v14" ${STROKE}/>`),
   system: svg(`<circle cx="12" cy="12" r="2.5" ${STROKE}/><ellipse cx="12" cy="12" rx="10" ry="4.5" ${STROKE}/><circle cx="20" cy="10" r="1.3" fill="currentColor"/>`),
+  diplomacy: svg(`<path d="M2 12l4-4 4 2 3-2 5 1 4 3M6 8v6l5 5 2-1 2 1 3-3M10 16l3-3M12 18l3-3" ${STROKE}/>`),
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
 
@@ -77,6 +78,7 @@ export class BuildBar {
     private readonly onAlmanac: () => void = () => {},
     /** Why a building can't be chosen yet (not in the Almanac), or null. */
     private readonly locked: (id: string) => string | null = () => null,
+    private readonly onDiplomacy: () => void = () => {},
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
@@ -93,6 +95,7 @@ export class BuildBar {
     add("economy", "Economy", "P", ICONS.economy!, "Stock, distribution and tool priorities.", () => this.onEconomy());
     add("system", "System", "O", ICONS.system!, "The star system: planets, orbits and launch windows.", () => this.onSystem());
     add("almanac", "Almanac", "L", ICONS.almanac!, "What your people have learned of their world, and what it unlocks.", () => this.onAlmanac());
+    add("diplomacy", "Diplomacy", "J", ICONS.diplomacy!, "Other settlements: treaties, offers, prisoners and your name among them.", () => this.onDiplomacy());
     this.popover = h("div", { class: "bb-pop", hidden: true, role: "menu" });
     this.root = h("div", { class: "buildbar-wrap" }, this.popover, bar);
   }
@@ -146,6 +149,7 @@ export class BuildBar {
     else if (k === "x") this.pick("demolish");
     else if (k === "p") this.onEconomy();
     else if (k === "l") this.onAlmanac();
+    else if (k === "j") this.onDiplomacy();
     else {
       const cat = CATEGORIES.find((c) => c.key === k);
       if (!cat) return false;

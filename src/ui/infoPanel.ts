@@ -14,9 +14,6 @@ function armsText(arms: number): string {
   return parts.length ? ` with ${parts.join(", ")}` : "";
 }
 
-export function playerName(owner: number): string {
-  return owner === 0 ? "the first settlement" : `rival settlement ${owner}`;
-}
 
 const STATE_TEXT: Record<string, string> = {
   guard: "keeping watch",
@@ -159,7 +156,7 @@ export class InfoPanel extends Panel {
       title.textContent = b.built ? b.def.name : `${b.def.name} (site)`;
       const theirs = b.owner !== this.actions.player();
       if (theirs) {
-        body.push(h("p", { class: "status warn" }, `Belongs to ${playerName(b.owner)}.`));
+        body.push(h("p", { class: "status warn" }, `Belongs to ${eco.playerName(b.owner)}.`));
         if (b.stranded >= 0) body.push(h("p", { class: "hint" }, "Cut off and standing idle."));
         else if (b.def.light) {
           const isKeep = eco.keeps.includes(b.id);

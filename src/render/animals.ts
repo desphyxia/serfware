@@ -205,6 +205,8 @@ export class AnimalBatch {
   constructor(
     species: Species,
     readonly capacity: number,
+    /** Multiplies the coat colours (native beasts of other kinds share a shape). */
+    tint: THREE.ColorRepresentation = "#ffffff",
   ) {
     const base = speciesGeometry(species);
     const g = new THREE.InstancedBufferGeometry();
@@ -252,7 +254,8 @@ export class AnimalBatch {
     const iQuat = attribute("iQuat", "vec4");
     mat.positionNode = rotQ(posed, iQuat).add(attribute("iPos", "vec3"));
     mat.normalNode = normalize(varying(transformNormalToView(rotQ(n0, iQuat))));
-    mat.colorNode = vec4(vec3(vertexColor()), 1);
+    const tc = new THREE.Color(tint);
+    mat.colorNode = vec4(vec3(vertexColor()).mul(vec3(tc.r, tc.g, tc.b)), 1);
     mat.vertexColors = false;
     this.mesh = new THREE.Mesh(g, mat);
     this.mesh.frustumCulled = false;
