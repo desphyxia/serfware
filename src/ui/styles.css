@@ -880,3 +880,22 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .panel.system .mass span { position: relative; padding-left: 6px; line-height: 18px; font-variant-numeric: tabular-nums; }
 .panel.system .voyages { margin: 4px 0 0; padding-left: 18px; font-size: 0.88em; display: grid; gap: 3px; }
 .panel.system .btn.small { padding: 1px 8px; font-size: 0.85em; margin-left: 6px; }
+/* Almanac (L): a hand-written book on parchment. */
+.panel.almanac .alm-book { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 0; min-height: 320px;
+  background: radial-gradient(ellipse at 30% 20%, #f4ead2, #e6d6b0 70%, #d8c49a); color: #3a2a1a; border-radius: 4px;
+  box-shadow: inset 0 0 40px rgba(90, 60, 20, 0.35); font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; }
+.panel.almanac .alm-index { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px; border-right: 1px solid rgba(90, 60, 20, 0.35);
+  box-shadow: inset -8px 0 12px -10px rgba(60, 40, 10, 0.5); overflow-y: auto; max-height: 60vh; }
+.panel.almanac .alm-count { margin: 0 0 6px; font-size: 0.8em; font-style: italic; opacity: 0.75; }
+.panel.almanac .alm-tab { text-align: left; background: none; border: 0; color: inherit; font: inherit; font-size: 0.9em; padding: 3px 6px; border-radius: 3px; cursor: pointer; }
+.panel.almanac .alm-tab:hover, .panel.almanac .alm-tab:focus-visible { background: rgba(90, 60, 20, 0.12); }
+.panel.almanac .alm-tab.on { background: rgba(90, 60, 20, 0.2); font-weight: 600; }
+.panel.almanac .alm-tab.blank { opacity: 0.45; letter-spacing: 0.2em; }
+.panel.almanac .alm-page { padding: 14px 18px; }
+.panel.almanac .alm-title { margin: 0 0 6px; font-size: 1.25em; font-style: italic; font-weight: 600; }
+.panel.almanac .alm-title.blank { opacity: 0.5; }
+.panel.almanac .alm-sketch { display: block; width: 70%; max-width: 260px; margin: 4px auto 8px; color: #4a3220; }
+.panel.almanac .alm-text { margin: 0 0 8px; line-height: 1.5; font-size: 0.95em; }
+.panel.almanac .alm-by { margin: 0 0 4px; font-size: 0.85em; font-style: italic; opacity: 0.8; }
+.panel.almanac .alm-unlocks { margin: 8px 0 0; font-size: 0.88em; color: #6a3a10; font-weight: 600; }
+.bb-pop .pop-item.locked { opacity: 0.45; cursor: not-allowed; }

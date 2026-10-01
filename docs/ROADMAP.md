@@ -68,6 +68,10 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   carriers (a canopy logistics layer); regional colour grading; honey and fruit in recipes
   (honey cakes at the bakery); orchards and hedgerows for the AI; the planned regions'
   (Rimefall, Emberglass, Saltglass, Tidewater, Lumen, Skyreef) rules and flora in batches 14–16.
+- Batch 20b: settlers walking to the maypole and dancing on feast days; more Almanac pages
+  (aurora, sky islands, glowcaps, comets, the Bloom); forecasts in the Almanac itself; lore
+  pages from each relic; statues of famous settlers; a music settings page (layers on and off);
+  decorations for the AI; colonies keeping their own Almanac but sharing what home knows.
 - Batch 19b: terraforming for the AI; an atmosphere panel with history graphs; ice caps (the
   polar ice biome) visibly retreating; comets streaking down to their impact; mirrors seen in
   orbit; native fauna; a Bloom celebration (festival, colour grade, flowers everywhere); oxygen

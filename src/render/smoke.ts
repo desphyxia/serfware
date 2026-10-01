@@ -5,7 +5,7 @@ export interface Emitter {
   pos: THREE.Vector3;
   /** Particles per second. */
   rate: number;
-  kind: "smoke" | "steam" | "dust" | "spark" | "ember" | "soot" | "sand" | "spore";
+  kind: "smoke" | "steam" | "dust" | "spark" | "ember" | "soot" | "sand" | "spore" | "confetti";
 }
 
 const MAX = 700;
@@ -14,6 +14,14 @@ const MAX = 700;
  * Soft particle system for chimney smoke, sawmill steam and work dust. Particles rise along the
  * local up direction and drift with the wind; they grow and fade as they age.
  */
+/** Festival confetti: red, gold, sky blue and leaf green paper. */
+const CONFETTI = [
+  [1.5, 0.3, 0.3],
+  [1.5, 1.2, 0.3],
+  [0.4, 0.8, 1.5],
+  [0.4, 1.3, 0.45],
+] as const;
+
 export class Particles {
   /** The drawable (kept as `points` for callers). */
   readonly points: THREE.Mesh;
@@ -63,7 +71,7 @@ export class Particles {
       const t = this.age[i]! / this.life[i]!;
       up.set(this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!).normalize();
       const k = this.kind[i]!;
-      const rise = k === 2 ? 0.2 : k === 3 ? -0.4 : k === 4 ? 0.9 : k === 5 ? 0.05 : k === 6 ? 0.18 : 0.55;
+      const rise = k === 2 ? 0.2 : k === 3 ? -0.4 : k === 4 ? 0.9 : k === 5 ? 0.05 : k === 6 ? 0.18 : k === 7 ? 0.5 - t * 1.2 : 0.55;
       for (let j = 0; j < 3; j++) {
         this.pos[i * 3 + j]! += (this.vel[i * 3 + j]! + up.getComponent(j) * rise + wind.getComponent(j) * t * 0.8) * dt;
         this.vel[i * 3 + j]! *= 0.98;
@@ -71,13 +79,14 @@ export class Particles {
       const base = k === 0 ? 0.5 : k === 1 ? 0.35 : k === 5 ? 0.6 : k >= 3 ? 1 : 0.45;
       // Embers flicker as they climb.
       if (k === 4) for (let j = 0; j < 3; j++) this.vel[i * 3 + j]! += (this.rand() - 0.5) * dt * 1.2;
-      this.size[i] = k === 6 ? 0.1 : k === 4 ? 0.14 * (1 - t * 0.6) : k === 3 ? 0.35 * (1 - t) : k === 5 ? 2.5 + t * 3 : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
+      this.size[i] = k === 7 ? 0.12 : k === 6 ? 0.1 : k === 4 ? 0.14 * (1 - t * 0.6) : k === 3 ? 0.35 * (1 - t) : k === 5 ? 2.5 + t * 3 : (k === 2 ? 0.6 : 0.5) + t * (k === 2 ? 1.4 : 2.2);
       this.alpha[i] = base * Math.sin(Math.min(1, t) * Math.PI) * (1 - t * 0.4);
-      if (k === 3 || k === 4 || k === 6) {
+      if (k === 3 || k === 4 || k === 6 || k === 7) {
         if (ns >= sp.capacity) continue;
         sp.pos.set([this.pos[i * 3]!, this.pos[i * 3 + 1]!, this.pos[i * 3 + 2]!], ns * 3);
         if (k === 4) sp.color.set([1.8, 0.75 + (1 - t) * 0.35, 0.25], ns * 3);
         else if (k === 6) sp.color.set([0.35, 1.3, 1.05], ns * 3);
+        else if (k === 7) sp.color.set(CONFETTI[i % CONFETTI.length]!, ns * 3);
         else sp.color.set([1.6, 1.0, 0.45], ns * 3);
         sp.size[ns] = this.size[i]! * 0.5;
         sp.alpha[ns] = this.alpha[i]!;
@@ -105,13 +114,13 @@ export class Particles {
     this.pos[i * 3] = e.pos.x + j();
     this.pos[i * 3 + 1] = e.pos.y + j();
     this.pos[i * 3 + 2] = e.pos.z + j();
-    const burst = e.kind === "spark" ? 12 : e.kind === "ember" ? 2 : 1;
+    const burst = e.kind === "spark" ? 12 : e.kind === "ember" ? 2 : e.kind === "confetti" ? 14 : 1;
     this.vel[i * 3] = j() * burst;
     this.vel[i * 3 + 1] = j() * burst;
     this.vel[i * 3 + 2] = j() * burst;
     this.age[i] = 0;
-    this.kind[i] = e.kind === "smoke" || e.kind === "soot" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : e.kind === "sand" ? 5 : e.kind === "spore" ? 6 : 4;
-    this.life[i] = e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : e.kind === "ember" ? 1.1 + this.rand() * 0.8 : e.kind === "sand" ? 2.5 + this.rand() : e.kind === "spore" ? 4 + this.rand() * 3 : 3.5 + this.rand() * 2;
+    this.kind[i] = e.kind === "smoke" || e.kind === "soot" ? 0 : e.kind === "steam" ? 1 : e.kind === "dust" ? 2 : e.kind === "spark" ? 3 : e.kind === "sand" ? 5 : e.kind === "spore" ? 6 : e.kind === "confetti" ? 7 : 4;
+    this.life[i] = e.kind === "confetti" ? 2.2 + this.rand() : e.kind === "dust" ? 1.2 : e.kind === "spark" ? 0.45 : e.kind === "ember" ? 1.1 + this.rand() * 0.8 : e.kind === "sand" ? 2.5 + this.rand() : e.kind === "spore" ? 4 + this.rand() * 3 : 3.5 + this.rand() * 2;
     // Sand streams sideways with the storm.
     if (e.kind === "sand") for (let j = 0; j < 3; j++) this.vel[i * 3 + j]! *= 25;
     this.shade[i] = e.kind === "soot" ? 0.22 + this.rand() * 0.1 : e.kind === "smoke" ? 0.6 + this.rand() * 0.15 : e.kind === "steam" ? 0.95 : e.kind === "spark" ? 2.4 : 0.75;

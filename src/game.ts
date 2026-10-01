@@ -29,12 +29,15 @@ import { MEMORIAL, type Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
-import { demoSettlement, placeConnected, starterChain } from "./sim/econ/planner";
+import { demoSettlement, placeConnected, placeOn, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
+import { AlmanacPanel } from "./ui/almanac";
+import { LAYER_OF, type MusicLayer } from "./audio/music";
+import { DISCOVERIES, unlockedBy } from "./sim/econ/culture";
 import { worldFor, type StarSystem } from "./sim/system/system";
 import type { Voyage } from "./sim/system/voyages";
 import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
@@ -96,6 +99,7 @@ export class Game {
     return this.session.world.system;
   }
   private readonly systemMap: SystemMap;
+  private readonly almanac: AlmanacPanel;
   private surveys = new Map<number, World>();
   private homeView: WorldView | null = null;
   private visitIndex = -1;
@@ -252,6 +256,15 @@ export class Game {
       (id) => this.tools.set(id),
       () => this.economyPanel.toggle(),
       () => this.systemMap.toggle(),
+      () => this.almanac.toggle(),
+      (id) => {
+        const by = unlockedBy(id);
+        return by && !this.world.economy.culture.unlocked(this.session.player, id) ? `Not yet in your Almanac: comes with "${DISCOVERIES[by].title}".` : null;
+      },
+    );
+    this.almanac = new AlmanacPanel(
+      () => this.world.economy,
+      () => this.session.player,
     );
     this.systemMap = new SystemMap({
       home: () => this.session.world,
@@ -301,6 +314,7 @@ export class Game {
       this.info.root,
       this.economyPanel.root,
       this.systemMap.root,
+      this.almanac.root,
       this.warp,
       this.menu.root,
       this.debug.root,
@@ -385,12 +399,20 @@ export class Game {
     const y = w.planet.grid.center[t * 3 + 1] as number;
     const season = c.season(w.tick, y);
     const sky = rain > 0.5 ? (temp < 0 ? "Heavy snow" : "Heavy rain") : rain > 0.15 ? (temp < 0 ? "Snow" : "Rain") : rain > 0.05 ? "Drizzle" : "Clear";
-    const key = `${t}:${Math.floor(w.tick / 600)}`;
+    // Forecasts and the tide table come with the Almanac.
+    const culture = w.economy.culture;
+    const me = this.session.player;
+    const lore = culture.unlocked(me, "forecast");
+    const tides = culture.unlocked(me, "tides") && w.land.tidal.some((v) => v === 1);
+    const key = `${t}:${Math.floor(w.tick / 600)}:${lore}:${tides}`;
     if (key !== this.forecastCache.key) {
       const fc = c.forecast(w.tick, t, 24);
+      const tide = c.tide > 0.5 ? "high water over the flats" : c.tide < -0.5 ? "low water: the flats are open" : c.tideFlow > 0 ? "the tide is coming in" : "the tide is going out";
       this.forecastCache = {
         key,
-        text: `Next 24 hours: ${fc.rain > 0.15 ? (fc.snow ? "snow likely" : "rain likely") : fc.rain > 0.05 ? "a shower or two" : "dry"}, ${Math.round(fc.low)} to ${Math.round(fc.high)} °C.`,
+        text: (lore
+          ? `Next 24 hours: ${fc.rain > 0.15 ? (fc.snow ? "snow likely" : "rain likely") : fc.rain > 0.05 ? "a shower or two" : "dry"}, ${Math.round(fc.low)} to ${Math.round(fc.high)} °C.`
+          : "No forecast yet: your people have still to learn the weather (Almanac).") + (tides ? `\nTides: ${tide}.` : ""),
       };
     }
     const soil = w.land.soil[t] as number;
@@ -925,6 +947,48 @@ export class Game {
     w.climate.step(w.tick);
     this.sky.snapAir(a);
     return to;
+  }
+
+  /**
+   * Screenshots and testing: knowledge and culture. "ruin": the nearest Precursor ruin, claimed
+   * and with an excavation beside it, part dug; "almanac": a well-filled Almanac open at the
+   * Precursors; "festival": a decorated green with its maypole on a feast day.
+   */
+  cultureDemo(stage: "ruin" | "almanac" | "festival"): number {
+    const w = this.session.world;
+    const eco = w.economy;
+    const land = w.land;
+    const me = this.session.player;
+    const keep = eco.buildings[eco.keeps[me] ?? -1];
+    if (!keep) return -1;
+    const names = eco.people.filter((p) => p.alive && p.owner === me).map((p) => `${p.first} ${p.family}`);
+    for (const [i, id] of (["weather", "seasons", "springs", "stars", "frost", "festival"] as const).entries()) eco.culture.discover(me, id, names[i * 3] ?? "");
+    if (stage === "ruin" || stage === "almanac") {
+      let ruin = -1;
+      for (let r = 1; r < 40 && ruin < 0; r++) ruin = land.ring(keep.tile, r).find((t) => land.feature[t] === Feature.Ruin) ?? -1;
+      if (ruin < 0) return -1;
+      if (land.territory[ruin] !== me + 1) land.claim(ruin, 4, me);
+      placeOn(w, "digsite", land.ring(ruin, 2), me, false, 40);
+      for (const b of eco.buildings) if (b.alive && b.def.id === "digsite") b.built = true;
+      land.amount[ruin] = 3;
+      land.featureVersion++;
+      eco.culture.relic(me, names[2] ?? "");
+      eco.culture.relic(me, names[2] ?? "");
+      if (stage === "almanac") {
+        this.almanac.show();
+        this.almanac.select("precursors");
+      } else this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(ruin)), 9);
+      return ruin;
+    }
+    // The green: maypole, flowerbeds, a fountain, benches and a statue around the keep.
+    eco.culture.relic(me, names[2] ?? "");
+    for (const type of ["maypole", "fountain", "statue", "flowerbed", "flowerbed", "flowerbed", "bench", "bench"]) placeConnected(w, type, { minDist: 2, maxDist: 6, player: me });
+    for (const b of eco.buildings) if (b.alive && b.owner === me && b.def.category === "decor") b.built = true;
+    eco.culture.festivalAt[me] = w.tick;
+    eco.culture.festivalName[me] = "Midsummer";
+    const pole = eco.buildings.find((b) => b.alive && b.owner === me && b.def.id === "maypole");
+    if (pole) this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(pole.tile)), 10);
+    return pole?.tile ?? -1;
   }
 
   visitHamlet(): void {
@@ -1483,6 +1547,7 @@ export class Game {
     else if (this.menu.visible) this.menu.hide();
     else if (this.economyPanel.visible) this.economyPanel.hide();
     else if (this.systemMap.visible) this.systemMap.hide();
+    else if (this.almanac.visible) this.almanac.hide();
     else this.settingsPanel.toggle();
   }
 
@@ -1711,6 +1776,7 @@ export class Game {
       this.info.refresh();
       this.economyPanel.refresh();
       this.systemMap.refresh();
+      this.almanac.refresh();
     }
     this.view.updateTerrain(this.camera.position);
     this.gfx.render();
@@ -1875,6 +1941,15 @@ export class Game {
       },
       work,
     );
+    // The music follows the town: its trades add layers, its Glow sets the mode.
+    const me = this.session.player;
+    const layers = new Set<MusicLayer>();
+    for (const b of eco.buildings) {
+      if (!b.alive || !b.built || b.owner !== me) continue;
+      const l = LAYER_OF[b.def.id];
+      if (l) layers.add(l);
+    }
+    this.audio.setMusic({ glow: eco.glow[me] ?? 50, layers, daylight: this.daylight, festival: eco.culture.festive(me) });
   }
 
   /** Select the settler under the pointer, if any. */

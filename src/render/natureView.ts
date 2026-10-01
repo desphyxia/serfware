@@ -4,7 +4,7 @@ import { Feature, FIELD_RIPE, ORCHARD, TREE_MATURE, type LandUse } from "../sim/
 import { Region } from "../sim/biomes/regions";
 import { hiddenAt, type FogMask } from "./fogMask";
 import { SurfaceFrames } from "./frames";
-import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, glowcapGeometry, rockGeometry, signpostGeometry, spireGeometry, stumpGeometry, ventGeometry } from "./models";
+import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, giantTreeGeometry, hedgeGeometry, palmGeometry, pineGeometry, fieldRowsGeometry, fieldSoilGeometry, glowcapGeometry, rockGeometry, ruinGeometry, signpostGeometry, spireGeometry, stumpGeometry, ventGeometry } from "./models";
 import { PAINT, PainterlyMaterial } from "./painterly";
 import { vec3 } from "three/tsl";
 import { bushGeometry } from "./undergrowth";
@@ -50,6 +50,9 @@ export class NatureView {
   private readonly rocks: THREE.InstancedMesh;
   /** Emberglass vents and Saltglass spires. */
   private readonly vents: THREE.InstancedMesh;
+  /** Precursor ruins by the Star Wells, standing and dug out. */
+  private readonly ruins: THREE.InstancedMesh;
+  private readonly digs: THREE.InstancedMesh;
   private readonly spires: THREE.InstancedMesh;
   /** Lumen Mire glowcaps: they glow teal, strongest at night (emissive plus bloom). */
   private readonly glowcaps: THREE.InstancedMesh;
@@ -109,6 +112,9 @@ export class NatureView {
     this.rocks = make(rockGeometry(), capacity);
     this.rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)));
+    const ruinMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, emissive: "#0c2a30", brush: 0.7 });
+    this.ruins = make(ruinGeometry(), 32, ruinMat);
+    this.digs = make(ruinGeometry(true), 32, ruinMat);
     // Spires glow faintly rose after dark.
     const capMat = new PainterlyMaterial({ vertexColors: true, brush: 0.4 });
     capMat.emissiveNode = vec3(0.16, 0.55, 0.46).mul(PAINT.night.mul(2.4).add(0.2));
@@ -154,7 +160,7 @@ export class NatureView {
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
     const color = new THREE.Color();
-    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0, v: 0, p: 0, c: 0 };
+    const counts = { r: 0, s: 0, f: 0, h: 0, g: 0, o: 0, e: 0, v: 0, p: 0, c: 0, u: 0, d: 0 };
     const treeCount = this.trees.map(() => 0);
     const crowns: number[] = [];
     const { temperature, moisture, biome } = land.planet.terrain;
@@ -249,6 +255,14 @@ export class NatureView {
         s.set(sc, sc, sc);
         m.compose(base, q, s);
         if (counts.c < this.glowcaps.instanceMatrix.count) this.glowcaps.setMatrixAt(counts.c++, m);
+      } else if (f === Feature.Ruin) {
+        this.frames.orient(base, null, q);
+        q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 41) * 6.28));
+        s.set(1.1, 1.1, 1.1);
+        m.compose(base, q, s);
+        const dug = land.variety[t] === 1;
+        if (dug && counts.d < this.digs.instanceMatrix.count) this.digs.setMatrixAt(counts.d++, m);
+        else if (!dug && counts.u < this.ruins.instanceMatrix.count) this.ruins.setMatrixAt(counts.u++, m);
       } else if (f === Feature.Spire) {
         this.frames.orient(base, null, q);
         q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 25) * 6.28));
@@ -320,6 +334,8 @@ export class NatureView {
       [this.rocks, counts.r],
       [this.vents, counts.v],
       [this.spires, counts.p],
+      [this.ruins, counts.u],
+      [this.digs, counts.d],
       [this.glowcaps, counts.c],
       [this.stumps, counts.s],
       [this.shrubs, counts.h],
