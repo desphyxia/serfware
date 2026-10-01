@@ -48,8 +48,11 @@ try {
   check(boxes.every((b) => b.h >= 40), `buttons at least 40 px tall (smallest ${Math.min(...boxes.map((b) => b.h)).toFixed(0)})`);
 
   // 2. Press and hold a tool button: its explanation, and the tool is not picked.
+  // Slow the page right down, as a busy phone (or a CI machine) is: the hold must still count.
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 8 });
   const lantern = boxes.find((b) => b.l === "Diplomacy");
   await hold(lantern.x + lantern.w / 2, lantern.y + lantern.h / 2, 800);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   await page.waitForTimeout(200);
   const toast = await page.$eval(".toasts", (e) => e.textContent ?? "");
   const dipOpen = await page.evaluate(() => !document.getElementById("diplomacy")?.hidden);

@@ -87,6 +87,12 @@ export class BuildBar {
       // Touch: press and hold a button to read what it does (there is no hover on a phone).
       let held = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
+      let downAt = -1;
+      const explain = () => {
+        if (held) return;
+        held = true;
+        this.hint(`${label}: ${hint}`);
+      };
       const b = h("button", {
         class: "bb",
         title: `${label} (${key})\n${hint}`,
@@ -99,12 +105,20 @@ export class BuildBar {
       b.addEventListener("pointerdown", (e) => {
         if (e.pointerType !== "touch") return;
         held = false;
-        timer = setTimeout(() => {
-          held = true;
-          this.hint(`${label}: ${hint}`);
-        }, 500);
+        downAt = performance.now();
+        timer = setTimeout(explain, 500);
       });
-      for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, () => timer && clearTimeout(timer));
+      // Judge the hold by how long the finger stayed down too (a busy frame can delay the timer).
+      b.addEventListener("pointerup", (e) => {
+        if (timer) clearTimeout(timer);
+        if (e.pointerType === "touch" && downAt >= 0 && performance.now() - downAt >= 500) explain();
+        downAt = -1;
+      });
+      for (const ev of ["pointercancel", "pointerleave"])
+        b.addEventListener(ev, () => {
+          if (timer) clearTimeout(timer);
+          downAt = -1;
+        });
       b.addEventListener("contextmenu", (e) => e.preventDefault());
       b.innerHTML = `${icon}<span class="bb-l">${label}</span><kbd>${key}</kbd>`;
       this.buttons.set(id, b);

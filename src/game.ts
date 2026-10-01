@@ -1667,6 +1667,7 @@ export class Game {
     // Touch: a tap aims where it lands; a long press cancels the tool in hand, or inspects.
     let touches = 0;
     let press: ReturnType<typeof setTimeout> | null = null;
+    let pressedAt = -1;
     const aim = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
       this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -1686,21 +1687,23 @@ export class Game {
         return;
       }
       this.downAt = { x: e.clientX, y: e.clientY, button: e.button };
-      if (e.pointerType === "touch")
-        press = setTimeout(() => {
-          press = null;
-          if (!this.downAt) return;
-          this.downAt = null;
-          navigator.vibrate?.(12);
-          if (this.tools.cancel()) {
-            this.toasts.show("Cancelled.", "info");
-            return;
-          }
-          this.updateHover();
-          if (this.tools.tool === "select" && this.pickPerson()) return;
-          this.tools.click(this.hoverTile);
-        }, 550);
+      pressedAt = e.pointerType === "touch" ? performance.now() : -1;
+      if (e.pointerType === "touch") press = setTimeout(longPress, 550);
     });
+    const longPress = () => {
+      press = null;
+      pressedAt = -1;
+      if (!this.downAt) return;
+      this.downAt = null;
+      navigator.vibrate?.(12);
+      if (this.tools.cancel()) {
+        this.toasts.show("Cancelled.", "info");
+        return;
+      }
+      this.updateHover();
+      if (this.tools.tool === "select" && this.pickPerson()) return;
+      this.tools.click(this.hoverTile);
+    };
     canvas.addEventListener("pointermove", (e) => {
       const d = this.downAt;
       if (press && d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) stopPress();
@@ -1714,7 +1717,16 @@ export class Game {
       this.downAt = null;
     });
     canvas.addEventListener("pointerup", (e) => {
+      // Held long enough but the timer was late (a busy frame): still a long press.
+      const d0 = this.downAt;
+      const late = e.pointerType === "touch" && pressedAt >= 0 && performance.now() - pressedAt >= 550 && !!d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) <= 10;
       lift(e);
+      if (late) {
+        aim(e);
+        longPress();
+        return;
+      }
+      pressedAt = -1;
       const d = this.downAt;
       this.downAt = null;
       if (!d) return;
