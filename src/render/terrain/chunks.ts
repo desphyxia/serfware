@@ -12,6 +12,8 @@ const MORPH_TIME = 0.3;
 interface Chunk {
   id: number;
   tiles: number[];
+  /** Ground triangles (grid corners; each joins the centres of the three tiles meeting there). */
+  corners: number[];
   /** Unit direction of the chunk's middle. */
   center: THREE.Vector3;
   level: number;
@@ -40,6 +42,9 @@ export class ChunkedTerrain {
   readonly group = new THREE.Group();
   private readonly chunks: Chunk[] = [];
   readonly tileChunk: Int32Array;
+  private readonly cornerChunk: Int32Array;
+  /** The two triangles (grid corners) on either side of each edge between tile centres. */
+  private edgeCorners: Map<number, number[]>;
   private maxLevel: number;
   private triangles = 0;
   private lastUpdate = 0;
@@ -53,6 +58,8 @@ export class ChunkedTerrain {
     this.maxLevel = detail === "low" ? 2 : detail === "medium" ? 3 : 3;
     const { grid } = planet;
     this.tileChunk = new Int32Array(grid.count).fill(-1);
+    this.cornerChunk = new Int32Array(grid.corners.length / 3).fill(-1);
+    this.edgeCorners = new Map();
     for (let seed = 0; seed < grid.count; seed++) {
       if (this.tileChunk[seed] !== -1) continue;
       const id = this.chunks.length;
@@ -73,7 +80,24 @@ export class ChunkedTerrain {
       const center = new THREE.Vector3();
       for (const t of tiles) center.add(new THREE.Vector3(...grid.centerOf(t)));
       center.normalize();
-      this.chunks.push({ id, tiles, center, level: -1, mesh: null, dirty: true, morph: 1, coarsenTo: -1 });
+      this.chunks.push({ id, tiles, corners: [], center, level: -1, mesh: null, dirty: true, morph: 1, coarsenTo: -1 });
+    }
+    // The ground is drawn as triangles between tile centres (as in Serf City: flags and
+    // buildings on the corners, roads along the edges). Each triangle belongs to the chunk of its
+    // lowest-numbered tile.
+    const C = grid.corners.length / 3;
+    this.edgeCorners = new Map();
+    for (let k = 0; k < C; k++) {
+      const ts = [grid.cornerTiles[k * 3] as number, grid.cornerTiles[k * 3 + 1] as number, grid.cornerTiles[k * 3 + 2] as number];
+      const owner = Math.min(...ts);
+      this.cornerChunk[k] = this.tileChunk[owner] as number;
+      this.chunks[this.tileChunk[owner] as number]?.corners.push(k);
+      for (let i = 0; i < 3; i++) {
+        const key = edgeKey(ts[i] as number, ts[(i + 1) % 3] as number);
+        const list = this.edgeCorners.get(key);
+        if (list) list.push(k);
+        else this.edgeCorners.set(key, [k]);
+      }
     }
     this.group.name = "terrain";
   }
@@ -184,7 +208,18 @@ export class ChunkedTerrain {
     const owner: number[] = [];
     const edge: number[] = [];
     const keyed = new Map<string, number>();
-    const add = (x: number, y: number, z: number, t: number, e: number) => {
+    // Barycentric position of each vertex in its own ground triangle (vertices are not shared
+    // between triangles, so every vertex has one frame): the grid lines and the blending of
+    // per-tile data are worked out per pixel from these.
+    const bx: number[] = [];
+    const by: number[] = [];
+    const bz: number[] = [];
+    const vCorner: number[] = [];
+    const add = (x: number, y: number, z: number, t: number, e: number, b: [number, number, number] = [0, 0, 0], k = -1) => {
+      bx.push(b[0]);
+      by.push(b[1]);
+      bz.push(b[2]);
+      vCorner.push(k);
       const l = Math.sqrt(x * x + y * y + z * z);
       dx.push(x / l);
       dy.push(y / l);
@@ -193,20 +228,13 @@ export class ChunkedTerrain {
       edge.push(e);
       return dx.length - 1;
     };
-    const centerV = (t: number) => {
-      const k = `t${t}`;
-      let v = keyed.get(k);
-      if (v === undefined) {
-        v = add(grid.center[t * 3] as number, grid.center[t * 3 + 1] as number, grid.center[t * 3 + 2] as number, t, 1);
-        keyed.set(k, v);
-      }
-      return v;
-    };
-    const cornerV = (k: number, t: number) => {
-      const key = `c${k}`;
+    /** The vertex at tile `t`'s centre as corner `slot` of ground triangle `k`. */
+    const centerV = (t: number, k: number, slot: number) => {
+      const key = `${t}:${k}`;
       let v = keyed.get(key);
       if (v === undefined) {
-        v = add(grid.corners[k * 3] as number, grid.corners[k * 3 + 1] as number, grid.corners[k * 3 + 2] as number, t, 0);
+        const b: [number, number, number] = [slot === 0 ? 1 : 0, slot === 1 ? 1 : 0, slot === 2 ? 1 : 0];
+        v = add(grid.center[t * 3] as number, grid.center[t * 3 + 1] as number, grid.center[t * 3 + 2] as number, t, 1, b, k);
         keyed.set(key, v);
       }
       return v;
@@ -219,7 +247,15 @@ export class ChunkedTerrain {
       const key = a < b ? a * 2097152 + b : b * 2097152 + a;
       let m = mids.get(key);
       if (m === undefined) {
-        m = add((dx[a] as number) + (dx[b] as number), (dy[a] as number) + (dy[b] as number), (dz[a] as number) + (dz[b] as number), (edge[a] as number) >= (edge[b] as number) ? (owner[a] as number) : (owner[b] as number), ((edge[a] as number) + (edge[b] as number)) / 2);
+        m = add(
+          (dx[a] as number) + (dx[b] as number),
+          (dy[a] as number) + (dy[b] as number),
+          (dz[a] as number) + (dz[b] as number),
+          (edge[a] as number) >= (edge[b] as number) ? (owner[a] as number) : (owner[b] as number),
+          ((edge[a] as number) + (edge[b] as number)) / 2,
+          [((bx[a] as number) + (bx[b] as number)) / 2, ((by[a] as number) + (by[b] as number)) / 2, ((bz[a] as number) + (bz[b] as number)) / 2],
+          vCorner[a] as number,
+        );
         mids.set(key, m);
         if (lastStep) parents.set(m, [a, b]);
       }
@@ -227,20 +263,15 @@ export class ChunkedTerrain {
     };
     let tris: number[] = [];
     const boundary: [number, number][] = [];
-    const inChunk = (t: number) => this.tileChunk[t] === c.id;
-    for (const t of c.tiles) {
-      const cs = grid.cornersOf(t);
-      const ns = grid.neighborsOf(t);
-      const cv = centerV(t);
-      for (let k = 0; k < cs.length; k++) {
-        const a = cornerV(cs[k] as number, t);
-        const b = cornerV(cs[(k + 1) % cs.length] as number, t);
-        tris.push(cv, a, b);
-      }
-      // Border edges shared with another chunk get skirts. Edge (cs[k-1], cs[k]) faces ns[k].
-      for (let k = 0; k < ns.length; k++) {
-        if (inChunk(ns[k] as number)) continue;
-        boundary.push([cornerV(cs[(k - 1 + cs.length) % cs.length] as number, t), cornerV(cs[k] as number, t)]);
+    for (const k of c.corners) {
+      const ts = [grid.cornerTiles[k * 3] as number, grid.cornerTiles[k * 3 + 1] as number, grid.cornerTiles[k * 3 + 2] as number];
+      tris.push(centerV(ts[0] as number, k, 0), centerV(ts[1] as number, k, 1), centerV(ts[2] as number, k, 2));
+      // Edges shared with a triangle of another chunk get skirts.
+      for (let i = 0; i < 3; i++) {
+        const ta = ts[i] as number;
+        const tb = ts[(i + 1) % 3] as number;
+        const across = (this.edgeCorners.get(edgeKey(ta, tb)) ?? []).find((x) => x !== k);
+        if (across === undefined || this.cornerChunk[across] !== c.id) boundary.push([centerV(ta, k, i), centerV(tb, k, (i + 1) % 3)]);
       }
     }
     for (let s = 0; s < level; s++) {
@@ -256,6 +287,24 @@ export class ChunkedTerrain {
         next.push(a, ab, da, ab, b, bd, da, bd, d, ab, bd, da);
       }
       tris = next;
+    }
+    // Each vertex: its tile (the nearest of its triangle's three centres, for per-tile data) and
+    // how far it is from the triangle's edges (0 on an edge: where the build grid draws lines).
+    const tri3 = new Float32Array(dx.length * 3);
+    const bary3 = new Float32Array(dx.length * 3);
+    for (let v = 0; v < dx.length; v++) {
+      const k = vCorner[v] as number;
+      if (k < 0) continue;
+      const t0 = grid.cornerTiles[k * 3] as number;
+      const t1 = grid.cornerTiles[k * 3 + 1] as number;
+      const t2 = grid.cornerTiles[k * 3 + 2] as number;
+      const w0 = bx[v] as number;
+      const w1 = by[v] as number;
+      const w2 = bz[v] as number;
+      owner[v] = w0 >= w1 && w0 >= w2 ? t0 : w1 >= w2 ? t1 : t2;
+      edge[v] = 3 * Math.min(w0, w1, w2);
+      tri3.set([t0, t1, t2], v * 3);
+      bary3.set([w0, w1, w2], v * 3);
     }
     // Skirt chains: the subdivided border edges (same midpoints as the triangles).
     const chain = (a: number, b: number, depth: number): number[] => {
@@ -279,6 +328,10 @@ export class ChunkedTerrain {
     const col = new Float32Array(total * 3);
     const coarse = new Float32Array(total * 3);
     const tileAttr = new Float32Array(total);
+    const tilesAttr = new Float32Array(total * 3);
+    const baryAttr = new Float32Array(total * 3);
+    tilesAttr.set(tri3);
+    baryAttr.set(bary3);
     // Distances (world units) to the nearest road centreline and to the river's water edge,
     // interpolated per pixel by the ground material to draw roads and banks crisply.
     const roadAttr = new Float32Array(total);
@@ -356,6 +409,27 @@ export class ChunkedTerrain {
         acc[v * 3 + 2] = (acc[v * 3 + 2] as number) + fn.z;
       }
     }
+    // Each ground triangle has its own vertices: sum the normals of copies at the same point, so
+    // the shading runs smoothly across triangle edges (no creases).
+    const same = new Map<string, number[]>();
+    for (let i = 0; i < nv; i++) {
+      const key = `${Math.round((dx[i] as number) * 1e6)},${Math.round((dy[i] as number) * 1e6)},${Math.round((dz[i] as number) * 1e6)}`;
+      const list = same.get(key);
+      if (list) list.push(i);
+      else same.set(key, [i]);
+    }
+    for (const list of same.values()) {
+      if (list.length < 2) continue;
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      for (const i of list) {
+        x += acc[i * 3] as number;
+        y += acc[i * 3 + 1] as number;
+        z += acc[i * 3 + 2] as number;
+      }
+      for (const i of list) acc.set([x, y, z], i * 3);
+    }
     for (let i = 0; i < nv; i++) {
       if (onBorder[i]) continue;
       fn.set(acc[i * 3] as number, acc[i * 3 + 1] as number, acc[i * 3 + 2] as number).normalize();
@@ -380,6 +454,8 @@ export class ChunkedTerrain {
       nor.copyWithin(i * 3, top * 3, top * 3 + 3);
       col.copyWithin(i * 3, top * 3, top * 3 + 3);
       tileAttr[i] = tileAttr[top] as number;
+      tilesAttr.copyWithin(i * 3, top * 3, top * 3 + 3);
+      baryAttr.copyWithin(i * 3, top * 3, top * 3 + 3);
       edgeAttr[i] = 0;
       roadAttr[i] = roadAttr[top] as number;
       riverAttr[i] = riverAttr[top] as number;
@@ -397,6 +473,8 @@ export class ChunkedTerrain {
     g.setAttribute("aCoarse", new THREE.BufferAttribute(coarse, 3));
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     g.setAttribute("aTile", new THREE.BufferAttribute(tileAttr, 1));
+    g.setAttribute("aTiles", new THREE.BufferAttribute(tilesAttr, 3));
+    g.setAttribute("aBary", new THREE.BufferAttribute(baryAttr, 3));
     g.setAttribute("aEdge", new THREE.BufferAttribute(edgeAttr, 1));
     g.setAttribute("aRoad", new THREE.BufferAttribute(roadAttr, 1));
     g.setAttribute("aRiver", new THREE.BufferAttribute(riverAttr, 1));
@@ -421,4 +499,8 @@ export class ChunkedTerrain {
   dispose(): void {
     for (const c of this.chunks) c.mesh?.geometry.dispose();
   }
+}
+
+function edgeKey(a: number, b: number): number {
+  return a < b ? a * 4194304 + b : b * 4194304 + a;
 }

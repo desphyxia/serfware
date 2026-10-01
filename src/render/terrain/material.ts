@@ -9,6 +9,7 @@ import {
   fwidth,
   length,
   max,
+  min,
   mix,
   mx_noise_float,
   normalize,
@@ -39,9 +40,14 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const uGrid = uniform(0);
   const tile = attribute("aTile", "float");
   const edge = attribute("aEdge", "float");
-  const A = varying(tiles.lookup(tiles.a, tile));
-  const B = varying(tiles.lookup(tiles.b, tile));
-  const C = varying(tiles.lookup(tiles.c, tile));
+  // Tile data blended across the ground's triangles from their three corner tiles.
+  const ts = attribute("aTiles", "vec3");
+  const bw = attribute("aBary", "vec3");
+  const blend = (tex: THREE.DataTexture) => varying(tiles.lookup(tex, ts.x).mul(bw.x).add(tiles.lookup(tex, ts.y).mul(bw.y)).add(tiles.lookup(tex, ts.z).mul(bw.z)));
+  const A = blend(tiles.a);
+  const B = blend(tiles.b);
+  const C = blend(tiles.c);
+  void tile;
   const blown = C.x;
   const glowLit = C.y;
   const wear = A.x;
@@ -112,9 +118,12 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const puddle = smoothstep(0.2, 0.6, mud).mul(smoothstep(0.1, 0.35, mx_noise_float(p.mul(1.6)))).mul(ruts.add(0.3).min(1));
   road = mix(road, mix(road.mul(0.3), vec3(0.3, 0.37, 0.45), 0.4), puddle.mul(0.9));
   c = mix(c, road, onRoad);
-  // Build-mode hex grid.
-  const w = fwidth(edge).mul(1.4);
-  const line = float(1).sub(smoothstep(0, w.add(0.02), edge));
+  // Build-mode grid.
+  // Lines along the ground triangles' edges (where roads run), from the per-pixel barycentrics.
+  const gridEdge = min(bw.x, min(bw.y, bw.z)).mul(3);
+  const w = fwidth(gridEdge).mul(1.4);
+  const line = float(1).sub(smoothstep(0, w.add(0.02), gridEdge));
+  void edge;
   c = mix(c, c.mul(0.55).add(vec3(0.06, 0.05, 0.02)), line.mul(uGrid).mul(0.85));
   // Seasons: grass goes gold in autumn; mud darkens; snow lies white on the flatter ground.
   const luma = dot(c, vec3(0.3, 0.59, 0.11));

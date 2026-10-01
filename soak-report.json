@@ -1,0 +1,167 @@
+{
+  "days": 4,
+  "runs": [
+    {
+      "name": "economy",
+      "seed": "russet-heron-417",
+      "days": 0,
+      "winner": -1,
+      "winReason": "",
+      "msPerDay": {
+        "median": 1425,
+        "max": 1425,
+        "first": 1425,
+        "last": 1425
+      },
+      "players": [
+        {
+          "player": 0,
+          "name": "the first settlement",
+          "temper": "steward",
+          "buildings": 18,
+          "people": 45,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 1,
+          "name": "Harrowgate",
+          "temper": "builder",
+          "buildings": 17,
+          "people": 40,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 2,
+          "name": "Greystrand",
+          "temper": "trader",
+          "buildings": 19,
+          "people": 40,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 3,
+          "name": "Larkspur",
+          "temper": "warden",
+          "buildings": 9,
+          "people": 41,
+          "glow": 50,
+          "defeated": false
+        }
+      ],
+      "broken": [
+        "day 1: flag 13 lists a good 258 that is gone"
+      ]
+    },
+    {
+      "name": "war",
+      "seed": "russet-heron-417",
+      "days": 1,
+      "winner": -1,
+      "winReason": "",
+      "msPerDay": {
+        "median": 1180,
+        "max": 1180,
+        "first": 1138,
+        "last": 1180
+      },
+      "players": [
+        {
+          "player": 0,
+          "name": "the first settlement",
+          "temper": "steward",
+          "buildings": 9,
+          "people": 0,
+          "glow": 51,
+          "defeated": true
+        },
+        {
+          "player": 1,
+          "name": "Harrowgate",
+          "temper": "warden",
+          "buildings": 6,
+          "people": 36,
+          "glow": 42,
+          "defeated": false
+        },
+        {
+          "player": 2,
+          "name": "Greystrand",
+          "temper": "warden",
+          "buildings": 17,
+          "people": 43,
+          "glow": 56,
+          "defeated": false
+        },
+        {
+          "player": 3,
+          "name": "Larkspur",
+          "temper": "warden",
+          "buildings": 21,
+          "people": 78,
+          "glow": 45,
+          "defeated": false
+        }
+      ],
+      "broken": [
+        "day 2: flag 14 lists a good 170 that is gone"
+      ]
+    },
+    {
+      "name": "teams",
+      "seed": "russet-heron-417",
+      "days": 0,
+      "winner": -1,
+      "winReason": "",
+      "msPerDay": {
+        "median": 1199,
+        "max": 1199,
+        "first": 1199,
+        "last": 1199
+      },
+      "players": [
+        {
+          "player": 0,
+          "name": "the first settlement",
+          "temper": "steward",
+          "buildings": 18,
+          "people": 45,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 1,
+          "name": "Harrowgate",
+          "temper": "trader",
+          "buildings": 17,
+          "people": 40,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 2,
+          "name": "Greystrand",
+          "temper": "warden",
+          "buildings": 19,
+          "people": 40,
+          "glow": 51,
+          "defeated": false
+        },
+        {
+          "player": 3,
+          "name": "Larkspur",
+          "temper": "warden",
+          "buildings": 9,
+          "people": 41,
+          "glow": 50,
+          "defeated": false
+        }
+      ],
+      "broken": [
+        "day 1: flag 13 lists a good 258 that is gone"
+      ]
+    }
+  ]
+}

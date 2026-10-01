@@ -315,6 +315,7 @@ export class Economy {
       },
     });
     land.aquifer = this.ecology.aquifer;
+    land.flagServes = (t) => (this.flagAt(t)?.building ?? -1) >= 0;
     this.culture = new Culture(this);
     this.adversity = new Adversity(this);
     this.diplomacy = new Diplomacy(this);

@@ -2,8 +2,10 @@ import * as THREE from "three/webgpu";
 import type { Planet } from "../sim/planet/planet";
 
 /**
- * Glowing outline of the hovered tile: a closed line strip (the WebGPU renderer has no LineLoop,
- * so the first corner is repeated at the end).
+ * Glowing ring round the hovered spot. Spots are the corners of the ground's triangles (where
+ * flags and buildings stand, as in Serf City), so the ring sits on the corner, a third of the way
+ * out toward the neighbouring triangles. A closed line strip (the WebGPU renderer has no
+ * LineLoop, so the first point is repeated at the end).
  */
 export class TileHighlight {
   readonly line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
@@ -29,12 +31,14 @@ export class TileHighlight {
     const R = planet.params.radius;
     const cs = grid.cornersOf(tile);
     const attr = this.line.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const h = Math.max(0, terrain.elevation[tile] as number);
+    const r = R + h + 0.15;
+    const p = new THREE.Vector3();
+    const centre = new THREE.Vector3(...grid.centerOf(tile));
     for (let k = 0; k < cs.length; k++) {
       const c = cs[k] as number;
-      let h = 0;
-      for (let j = 0; j < 3; j++) h += Math.max(0, terrain.elevation[grid.cornerTiles[c * 3 + j] as number] as number);
-      const r = R + h / 3 + 0.12;
-      attr.setXYZ(k, (grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
+      p.set(grid.corners[c * 3] as number, grid.corners[c * 3 + 1] as number, grid.corners[c * 3 + 2] as number).lerp(centre, 0.55).normalize().multiplyScalar(r);
+      attr.setXYZ(k, p.x, p.y, p.z);
     }
     attr.setXYZ(cs.length, attr.getX(0), attr.getY(0), attr.getZ(0));
     attr.needsUpdate = true;
