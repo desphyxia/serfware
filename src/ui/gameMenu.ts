@@ -1,5 +1,5 @@
 import { HostLobby, JoinLobby, randomRoom } from "../net/lobby";
-import type { SaveFile } from "../net/session";
+import { MODE_NAMES, type PlayMode, type SaveFile, type SessionPlayer } from "../net/session";
 import { webrtcAvailable } from "../net/webrtc";
 import { SteamHostLobby, SteamJoinLobby } from "../net/steamLobby";
 import { desktop } from "../platform/bridge";
@@ -22,7 +22,7 @@ export interface MenuHost {
   exportCurrent(): string;
   importText(text: string): void;
   seed(): string;
-  startSession(lobby: HostLobby, mode: "shared" | "neighbours"): void;
+  startSession(lobby: HostLobby, mode: PlayMode): void;
   joined(lobby: JoinLobby): void;
   notify(text: string, kind?: "info" | "warn" | "good"): void;
 }
@@ -34,7 +34,8 @@ export class GameMenu extends Panel {
   private readonly saveList: HTMLElement;
   private readonly mpBody: HTMLElement;
   private lobby: HostLobby | JoinLobby | null = null;
-  private selectTab: (name: string) => void = () => {};
+  /** Switch to a tab by name (Multiplayer, Saves, …). */
+  selectTab: (name: string) => void = () => {};
   /** Steam is running (desktop build): multiplayer goes through Steam lobbies. */
   private steamName = "";
 
@@ -168,13 +169,14 @@ export class GameMenu extends Panel {
     const name = h("input", { type: "text", id: "mp-name", value: "Player" }) as HTMLInputElement;
     const server = h("input", { type: "text", id: "mp-server", value: defaultServer(), placeholder: "Leave empty for invite codes" }) as HTMLInputElement;
     const room = h("input", { type: "text", id: "mp-room", value: randomRoom() }) as HTMLInputElement;
-    const mode = h("select", { id: "mp-mode" }, h("option", { value: "shared" }, "Co-op: shared keep"), h("option", { value: "neighbours" }, "Co-op: neighbours")) as HTMLSelectElement;
-    const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim() });
+    const mode = h("select", { id: "mp-mode" }, ...(Object.keys(MODE_NAMES) as PlayMode[]).map((m) => h("option", { value: m }, MODE_NAMES[m]))) as HTMLSelectElement;
+    const watch = h("input", { type: "checkbox", id: "mp-watch" }) as HTMLInputElement;
+    const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });
     const steam = this.steamName
       ? [
           h("h3", { class: "sub" }, "Steam"),
           h("p", { class: "hint" }, `Signed in as ${this.steamName}. Host a friends-only lobby and invite friends from the Steam overlay; they can also join from your profile.`),
-          h("div", { class: "btn-row" }, h("button", { class: "btn primary", onclick: () => void this.openSteamHost(mode.value as "shared" | "neighbours") }, "Host on Steam")),
+          h("div", { class: "btn-row" }, h("button", { class: "btn primary", onclick: () => void this.openSteamHost(mode.value as PlayMode) }, "Host on Steam")),
           h("h3", { class: "sub" }, "Direct (WebRTC)"),
         ]
       : [];
@@ -186,17 +188,19 @@ export class GameMenu extends Panel {
       h("div", { class: "row" }, h("label", { for: "mp-server" }, "Server"), server, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-room" }, "Room"), room, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-mode" }, "Mode"), mode, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-watch" }, "Join to watch"), watch, h("span")),
+      h("p", { class: "hint" }, "A player who drops out is kept by a steward (the AI) until they join again with the same name. Anyone joining a game in progress watches."),
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => void this.openHost(opts(), mode.value as "shared" | "neighbours") }, "Host a game"),
+        h("button", { class: "btn primary", onclick: () => void this.openHost(opts(), mode.value as PlayMode) }, "Host a game"),
         h("button", { class: "btn", onclick: () => void this.openJoin(opts()) }, "Join"),
       ),
     );
   }
 
   /** Host a friends-only Steam lobby (desktop build). */
-  async openSteamHost(mode: "shared" | "neighbours"): Promise<SteamHostLobby | null> {
+  async openSteamHost(mode: PlayMode): Promise<SteamHostLobby | null> {
     const bridge = desktop();
     if (!bridge) return null;
     this.lobby?.close();
@@ -206,11 +210,11 @@ export class GameMenu extends Panel {
     const players = h("ul", { class: "player-list" });
     const render = () => {
       status.textContent = lobby.status;
-      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+      players.replaceChildren(...lobby.players.map((p) => playerRow(p)));
     };
     lobby.subscribe(render);
     this.mpBody.replaceChildren(
-      h("h3", { class: "sub" }, `Steam lobby · ${mode === "shared" ? "shared keep" : "neighbours"}`),
+      h("h3", { class: "sub" }, `Steam lobby · ${MODE_NAMES[mode]}`),
       status,
       players,
       h(
@@ -254,7 +258,7 @@ export class GameMenu extends Panel {
     const players = h("ul", { class: "player-list" });
     const render = () => {
       status.textContent = lobby.status;
-      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+      players.replaceChildren(...lobby.players.map((p) => playerRow(p)));
     };
     lobby.subscribe(render);
     this.host.joined(lobby);
@@ -290,7 +294,7 @@ export class GameMenu extends Panel {
   }
 
   /** Programmatic entry used by the UI and by the multiplayer test. */
-  async openHost(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }, mode: "shared" | "neighbours"): Promise<HostLobby> {
+  async openHost(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }, mode: PlayMode): Promise<HostLobby> {
     this.lobby?.close();
     const lobby = new HostLobby(o);
     this.lobby = lobby;
@@ -301,11 +305,11 @@ export class GameMenu extends Panel {
     let inviteId = "";
     const render = () => {
       status.textContent = lobby.status;
-      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+      players.replaceChildren(...lobby.players.map((p) => playerRow(p, mode, (t) => lobby.setTeam(p.id, t))));
     };
     lobby.subscribe(render);
     this.mpBody.replaceChildren(
-      h("h3", { class: "sub" }, `Hosting · ${mode === "shared" ? "shared keep" : "neighbours"}`),
+      h("h3", { class: "sub" }, `Hosting · ${MODE_NAMES[mode]}`),
       status,
       players,
       h(
@@ -359,7 +363,7 @@ export class GameMenu extends Panel {
     return lobby;
   }
 
-  async openJoin(o: { name: string; server: string; room: string; ice?: RTCIceServer[] }): Promise<JoinLobby> {
+  async openJoin(o: { name: string; server: string; room: string; ice?: RTCIceServer[]; spectate?: boolean }): Promise<JoinLobby> {
     this.lobby?.close();
     const lobby = new JoinLobby(o);
     this.lobby = lobby;
@@ -368,7 +372,7 @@ export class GameMenu extends Panel {
     const inviteArea = h("textarea", { class: "report-text", rows: 3, placeholder: "Paste the host's invite code", "aria-label": "Invite code" }) as HTMLTextAreaElement;
     const render = () => {
       status.textContent = lobby.status;
-      players.replaceChildren(...lobby.players.map((p) => h("li", {}, `${p.id + 1}. ${p.name}`)));
+      players.replaceChildren(...lobby.players.map((p) => playerRow(p)));
     };
     lobby.subscribe(render);
     this.host.joined(lobby);
@@ -422,4 +426,11 @@ export class GameMenu extends Panel {
 
 export function saveMeta(id: string, s: SaveFile): SaveMeta {
   return { id, name: s.name, createdAt: s.createdAt, seed: s.seed, tick: s.tick, mode: s.mode };
+}
+
+/** A lobby row: number, name, and the team (the host can move players between teams) or "watching". */
+function playerRow(p: SessionPlayer, mode?: PlayMode, setTeam?: (team: number) => void): HTMLElement {
+  const label = p.spectator ? `${p.name} · watching` : `${p.id + 1}. ${p.name}${p.team !== undefined && (mode === undefined || mode === "teams") ? ` · ${p.team === 0 ? "Team Dawn" : "Team Dusk"}` : ""}`;
+  if (!setTeam || mode !== "teams" || p.spectator) return h("li", {}, label);
+  return h("li", {}, label, " ", h("button", { class: "btn small", onclick: () => setTeam(p.team === 0 ? 1 : 0) }, "Switch team"));
 }

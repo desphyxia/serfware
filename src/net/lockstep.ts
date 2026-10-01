@@ -2,7 +2,7 @@ import type { CommandResult } from "../sim/econ/economy";
 import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
 import type { World } from "../sim/world";
-import { Session, type SessionInfo } from "./session";
+import { Session, type LoggedCommand, type SessionInfo } from "./session";
 import type { NetMessage, Transport } from "./transport";
 
 /** Ticks per lockstep turn (200 ms). */
@@ -20,6 +20,17 @@ export interface TurnPacket extends NetMessage {
   /** Checksum of the sender's world at the start of turn `sumTurn`. */
   sum: number;
   sumTurn: number;
+}
+
+/** What a rejoining player (or a late spectator) needs to catch up with a game in progress. */
+export interface CatchUp {
+  log: LoggedCommand[];
+  tick: number;
+  /** Turn packets already exchanged for turns from `startTurn` on. */
+  packets: TurnPacket[];
+  startTurn: number;
+  /** First turn the newcomer sends its own packet for (spectators: never). */
+  sendFrom: number;
 }
 
 /**
@@ -41,18 +52,72 @@ export class LockstepSession extends Session {
   private hostSpeed = 1;
   private resumeAt: { tick: number; value: number } | null = null;
   private readonly isHost: boolean;
+  /** Joined a game in progress: every turn from the first needs its packets. */
+  private readonly resumed: boolean;
+  /**
+   * Host only: players who dropped out, and the turn they are back from (Infinity: still away).
+   * The host sends empty turns for them so nobody waits, and a steward keeps their settlement.
+   */
+  private readonly absent = new Map<number, number>();
 
   constructor(
     world: World,
     info: SessionInfo,
     localPlayer: number,
     private readonly transport: Transport,
+    resume?: CatchUp,
   ) {
     super(world, info, localPlayer);
     this.isHost = localPlayer === 0;
-    this.startTurn = Math.ceil(world.tick / TURN_TICKS);
-    this.sentThrough = this.startTurn + INPUT_DELAY - 1;
+    this.resumed = !!resume;
+    this.startTurn = resume ? resume.startTurn : Math.ceil(world.tick / TURN_TICKS);
+    this.sentThrough = resume ? resume.sendFrom - 1 : this.startTurn + INPUT_DELAY - 1;
     transport.onMessage((msg, from) => this.receive(msg, from));
+    if (resume) for (const p of resume.packets) this.receive(p, "history");
+  }
+
+  /** The players the game waits for (not spectators). */
+  private get playing(): number[] {
+    return this.info.players.filter((p) => !p.spectator).map((p) => p.id);
+  }
+
+  /** Host: a player's connection dropped. A steward takes over; the game goes on without them. */
+  dropPlayer(player: number): void {
+    if (!this.isHost || player === 0 || !this.playing.includes(player) || this.absent.get(player) === Infinity) return;
+    this.absent.set(player, Infinity);
+    this.pending.push({ t: "steward", of: player, on: true, player: 0 });
+    this.fillAbsent();
+  }
+
+  /**
+   * Host: a dropped player is back (or a spectator arrives late). Everything they need to catch
+   * up; they send their own turns again from a few turns ahead, when the steward hands over.
+   */
+  catchUp(player: number, spectator = false): CatchUp {
+    const startTurn = Math.ceil(this.world.tick / TURN_TICKS);
+    const sendFrom = spectator ? Number.MAX_SAFE_INTEGER : this.sentThrough + 2;
+    if (!spectator && this.absent.has(player)) {
+      this.absent.set(player, sendFrom);
+      this.pending.push({ t: "steward", of: player, on: false, player: 0 });
+      this.fillAbsent();
+    }
+    if (spectator && !this.info.players.some((p) => p.id === player)) this.info.players.push({ id: player, name: `Spectator ${player - 99}`, spectator: true });
+    const packets: TurnPacket[] = [];
+    for (const [turn, m] of this.packets) if (turn >= startTurn) packets.push(...m.values());
+    return { log: [...this.log], tick: this.world.tick, packets, startTurn, sendFrom };
+  }
+
+  /** Host: empty turns for absent players, through the last turn we have sent for. */
+  private fillAbsent(): void {
+    for (const [pl, until] of this.absent) {
+      for (let t = this.turn; t <= this.sentThrough && t < until; t++) {
+        if (this.packets.get(t)?.has(pl)) continue;
+        const pkt: TurnPacket = { type: "turn", turn: t, player: pl, cmds: [], sum: 0, sumTurn: -1 };
+        this.receive(pkt, "local");
+        this.transport.broadcast(pkt);
+      }
+      if (until <= this.sentThrough) this.absent.delete(pl);
+    }
   }
 
   private get turn(): number {
@@ -60,6 +125,7 @@ export class LockstepSession extends Session {
   }
 
   submit(cmd: Command): CommandResult {
+    if (this.spectating) return { ok: false, reason: "You are watching this game." };
     const withPlayer = { ...cmd, player: this.player };
     const reason = this.world.check(withPlayer);
     if (reason) return { ok: false, reason };
@@ -91,6 +157,8 @@ export class LockstepSession extends Session {
     const p = msg as unknown as TurnPacket;
     let m = this.packets.get(p.turn);
     if (!m) this.packets.set(p.turn, (m = new Map()));
+    // First packet wins (a dropped player's late packet never replaces the host's empty turn).
+    if (m.has(p.player)) return;
     m.set(p.player, p);
     this.checkSum(p.player, p.sumTurn, p.sum);
     // The host relays client packets to the other clients (star topology).
@@ -128,6 +196,7 @@ export class LockstepSession extends Session {
       this.packets.delete(k - 10);
     }
     const target = k + INPUT_DELAY;
+    if (this.spectating) return;
     if (this.sentThrough < target) {
       const pkt: TurnPacket = {
         type: "turn",
@@ -142,14 +211,15 @@ export class LockstepSession extends Session {
       this.sentThrough = target;
       this.receive(pkt, "local");
       this.transport.broadcast(pkt);
+      if (this.isHost && this.absent.size) this.fillAbsent();
     }
   }
 
   private ready(k: number): boolean {
-    if (k < this.startTurn + INPUT_DELAY) return true;
+    if (!this.resumed && k < this.startTurn + INPUT_DELAY) return true;
     const m = this.packets.get(k);
     if (!m) return false;
-    for (const pl of this.info.players) if (!m.has(pl.id)) return false;
+    for (const pl of this.playing) if (!m.has(pl)) return false;
     return true;
   }
 
@@ -210,7 +280,7 @@ export class LockstepSession extends Session {
     if (this.desynced) return "Out of sync. Please send a bug report (F8).";
     if (this.waitingSince && performance.now() - this.waitingSince > 1200) {
       const m = this.packets.get(this.turn);
-      const missing = this.info.players.filter((p) => !m?.has(p.id)).map((p) => p.name);
+      const missing = this.info.players.filter((p) => !p.spectator && !m?.has(p.id)).map((p) => p.name);
       return `Waiting for ${missing.join(", ") || "players"}…`;
     }
     return null;

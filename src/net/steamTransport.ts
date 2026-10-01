@@ -43,8 +43,16 @@ export class SteamTransport implements Transport {
   }
 
   /** Set who we talk to (the lobby's other members for a host, the owner for a guest). */
+  private leftHandlers: ((peer: string) => void)[] = [];
+
+  onPeerLeft(fn: (peer: string) => void): void {
+    this.leftHandlers.push(fn);
+  }
+
   setPeers(ids: readonly string[]): void {
+    const gone = this.list.filter((p) => !ids.includes(p));
     this.list = [...ids];
+    for (const p of gone) for (const h of this.leftHandlers) h(p);
     for (let i = 0; i < this.early.length; ) {
       const e = this.early[i]!;
       if (this.list.includes(e.from)) {

@@ -54,6 +54,24 @@ export class DiplomacyPanel extends Panel {
     for (let q = 0; q < eco.keeps.length; q++) {
       if (q === me || eco.keeps[q] === undefined) continue;
       others++;
+      if (eco.allied(me, q)) {
+        rows.push(
+          h(
+            "section",
+            { class: `dip-card ally${eco.defeated[q] ? " fallen" : ""}` },
+            h("h3", {}, eco.playerName(q), h("span", { class: "dip-temper ally" }, "Ally")),
+            h("p", { class: "dip-line" }, "Your team: you share sight and may lay roads on each other's land, and win together."),
+            eco.defeated[q]
+              ? ""
+              : h(
+                  "div",
+                  { class: "dip-actions" },
+                  ...(["plank", "stone", "bread", "fish"] as const).map((g) => h("button", { class: "btn", title: `Send 5 ${g} from your Hearthship's stores`, onclick: () => this.command({ t: "send", to: q, good: g, count: 5, player: me }) }, `Send 5 ${g}`)),
+                ),
+          ),
+        );
+        continue;
+      }
       const temper = this.personality(q);
       const mine = live.filter((t) => t.a === q || t.b === q);
       const ours = held.filter((p) => p.owner === me && p.captive === q).length;

@@ -916,3 +916,5 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .panel.diplomacy .dip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .panel.diplomacy .dip-actions .btn { font-size: 0.85em; padding: 4px 9px; }
 .panel.diplomacy .btn:disabled { opacity: 0.45; cursor: default; }
+.panel.diplomacy .dip-temper.ally { background: rgba(110, 160, 220, 0.4); }
+.panel.diplomacy .dip-card.ally { border-color: rgba(110, 160, 220, 0.45); }
