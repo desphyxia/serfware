@@ -246,6 +246,8 @@ export class InfoPanel extends Panel {
           body.push(h("p", { class: "hint" }, `About ${left} loads left in reach. Food for ${b.food} more.`));
         }
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));
+        const work = eco.productivity(b);
+        if (work !== null) body.push(h("p", { class: "hint", title: "The share of the day the worker spent at work, not waiting for goods or a free flag." }, `Productivity: ${work}%.`));
         if (b.output > 0) body.push(h("p", { class: "hint" }, `${b.output} finished, waiting to go out.`));
       }
       if (b.burn > 0) body.push(h("p", { class: "status warn" }, "On fire! A well within five steps would put it out."));
@@ -286,6 +288,8 @@ export class InfoPanel extends Panel {
       title.textContent = "Road";
       const c = r.carrier >= 0 ? eco.settlers[r.carrier] : null;
       body.push(h("p", { class: "status" }, `${r.tiles.length - 1} steps long · carrier ${c ? STATE_TEXT[c.state] ?? c.state : "not assigned yet"}`));
+      const busy = eco.roadProductivity(r);
+      if (busy !== null) body.push(h("p", { class: busy >= 80 ? "status warn" : "hint", title: "The share of the day the carrier was busy. A road that stays above 80% calls extra carriers." }, `Busy ${busy}% of the day${busy >= 80 ? " (a busy road)" : ""}.`));
       body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(r.tiles[1] as number) }, "Remove road")));
     }
     this.body.replaceChildren(...body);

@@ -46,6 +46,8 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** Worker states that count as work for a building's productivity (resting and waiting do not). */
+const WORKING = new Set(["out", "work", "back", "craft", "mining", "drop", "enter"]);
 /** Spots a geologist samples around his flag before going home. */
 const GEOLOGIST_SAMPLES = 12;
 /** A "found" notice is skipped when the same ore is already marked this close. */
@@ -90,6 +92,9 @@ export interface Road {
   carrier: number;
   /** Extra carriers called to a busy road (Serf City's rule; see helperCap). */
   helpers: number[];
+  /** Ticks the carrier worked today, and the day before (-1 until a day has passed). */
+  busy: number;
+  busyPrev: number;
   alive: boolean;
 }
 
@@ -145,6 +150,9 @@ export interface Building {
   dig: number;
   /** Stores: 0 takes goods in, 1 keeps what it holds but takes no more, 2 carries its goods out to other stores. */
   mode: number;
+  /** Ticks the worker spent working today, and the day before (-1 until a day has passed). */
+  busy: number;
+  busyPrev: number;
   /** How near another player's land is: 0 far (inland), 1 near, 2 close (the frontier). */
   threat: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
@@ -1139,7 +1147,7 @@ export class Economy {
   }
 
   private createRoad(a: number, b: number, tiles: number[], owner: number): Road {
-    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], alive: true };
+    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], busy: 0, busyPrev: -1, alive: true };
     this.roads.push(r);
     (this.flags[a] as Flag).roads.push(r.id);
     (this.flags[b] as Flag).roads.push(r.id);
@@ -1184,6 +1192,8 @@ export class Economy {
       frontier: false,
       dig: 0,
       mode: STORE_IN,
+      busy: 0,
+      busyPrev: -1,
       threat: 0,
       stranded: -1,
       siege: [],
@@ -3541,12 +3551,51 @@ export class Economy {
       }
       return;
     }
-    if (s.role === "carrier") this.stepCarrier(s);
-    else if (s.role === "builder") this.stepBuilder(s);
+    // Productivity (as in Settlers 2): the share of the day a worker or road carrier is at work.
+    if (s.role === "carrier") {
+      const road = this.roads[s.road];
+      if (road && road.carrier === s.id && s.state !== "idle" && s.state !== "goto") road.busy++;
+      this.stepCarrier(s);
+    } else if (s.role === "builder") this.stepBuilder(s);
     else if (s.role === "geologist") this.stepGeologist(s);
     else if (s.role === "warden") this.stepWarden(s);
     else if (s.role === "attacker") this.stepAttacker(s);
-    else this.stepWorker(s);
+    else {
+      const b = this.buildings[s.building];
+      if (b && WORKING.has(s.state)) b.busy++;
+      this.stepWorker(s);
+    }
+  }
+
+  /** How much of the day the building's worker was at work: the last full day, else today so far (percent), or null. */
+  productivity(b: Building): number | null {
+    if (!b.built || !(b.def.job || b.def.produces)) return null;
+    return this.share(b.busy, b.busyPrev);
+  }
+
+  /** How much of the day the road's carrier was busy (percent), or null if it has none. */
+  roadProductivity(r: Road): number | null {
+    return r.carrier < 0 ? null : this.share(r.busy, r.busyPrev);
+  }
+
+  private share(today: number, before: number): number | null {
+    if (before >= 0) return Math.min(100, Math.round((100 * before) / this.dayTicks));
+    const into = this.tick % this.dayTicks;
+    return into < this.dayTicks / 8 ? null : Math.min(100, Math.round((100 * today) / into));
+  }
+
+  /** Daily: today's work becomes yesterday's. */
+  private closeDay(): void {
+    for (const b of this.buildings)
+      if (b.alive) {
+        b.busyPrev = b.busy;
+        b.busy = 0;
+      }
+    for (const r of this.roads)
+      if (r.alive) {
+        r.busyPrev = r.busy;
+        r.busy = 0;
+      }
   }
 
   // ------------------------------------------------------------------ nature
@@ -3631,6 +3680,7 @@ export class Economy {
     if (this.tick % hour !== 0 && !daily) return;
     const hourIndex = Math.floor(this.tick / hour);
     if (daily) {
+      this.closeDay();
       for (const k of this.keeps) if (k !== undefined) (this.buildings[k] as Building).levy = 0;
       this.restSoil();
       this.weather();
@@ -4185,7 +4235,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev);
     for (const u of this.rotateUntil) h.int(u ?? -1);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);

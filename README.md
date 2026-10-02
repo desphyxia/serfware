@@ -81,6 +81,12 @@ Lantern buildings are staffed by the strongest free warden (rank first, then ski
 distance). Economy panel → Tools → **Rotate wardens** (Serf City's "cycle knights") lasts half
 a day: lanterns near a border swap their weakest warden on watch for a stronger free one.
 
+## Productivity
+
+As in Settlers 2, a workshop, farm, mine or other workplace shows its **productivity**: the share of
+the last game day its worker spent at work, not waiting for goods or for room on the flag. A road
+shows how busy its carrier was; a road that stays above 80% calls extra carriers.
+
 ## Stores
 
 A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):
