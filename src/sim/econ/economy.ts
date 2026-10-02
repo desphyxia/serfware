@@ -508,6 +508,40 @@ export class Economy {
   readonly startScores: number[] = [];
 
   /**
+   * Ore for every start: coal and iron within 10 steps of the Hearthship, gold within 14 and
+   * granite within 10. Where a kind is missing, a small deposit (a core and a rim) is laid in the
+   * nearest hills that have none of the four, so no one starts without the means to make tools.
+   */
+  guaranteeOre(): void {
+    const land = this.land;
+    const needs: [Deposit, number][] = [[Deposit.Coal, 10], [Deposit.Iron, 10], [Deposit.Gold, 14], [Deposit.Granite, 10]];
+    for (let p = 0; p < this.keeps.length; p++) {
+      const keep = this.buildings[this.keeps[p] ?? -1];
+      if (!keep) continue;
+      for (const [kind, reach] of needs) {
+        const within = land.ring(keep.tile, reach);
+        if (within.some((t) => land.deposit[t] === kind)) continue;
+        // The nearest hill (four steps or more from the Hearthship) with no ore under it yet.
+        const near = new Set<number>(land.ring(keep.tile, 3));
+        let site = -1;
+        for (let k = 4; k <= reach && site < 0; k++) {
+          const ring = land.ring(keep.tile, k).filter((t) => !near.has(t));
+          for (const t of ring) near.add(t);
+          site = ring.find((t) => land.isMountain(t) && land.isLand(t) && land.deposit[t] === Deposit.None && land.use[t] === Use.Free) ?? -1;
+        }
+        if (site < 0) continue;
+        land.deposit[site] = kind;
+        land.depositAmount[site] = 28;
+        for (const n of land.planet.grid.neighborsOf(site))
+          if (land.isMountain(n) && land.isLand(n) && land.deposit[n] === Deposit.None) {
+            land.deposit[n] = kind;
+            land.depositAmount[n] = 18;
+          }
+      }
+    }
+  }
+
+  /**
    * Fair starts, the last step: where no site came close enough, bring the poorer starts up to
    * within 5 % of the richest with more ore in the hills around them and better soil.
    */
