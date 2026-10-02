@@ -42,6 +42,25 @@ multiplayer needs `npm run dev` or the desktop build (which plays through Steam 
 Press M for the game menu. Saves are the seed plus every command; loading replays them.
 "Copy save" puts the save on the clipboard so it can be attached to bug reports.
 
+## Roads and carriers
+
+Transport follows Serf City's rules (studied from Freeserf's source):
+
+- A road gets more carriers when goods queue on it: up to 2 on a road of 4 tiles, rising to 11
+  on the longest roads. The extra carriers go home after three idle hours.
+- A carrier arriving at a full flag swaps its good for one that goes back over its road, so two
+  full flags never block each other. It also takes a good back rather than walk back empty.
+- Goods take the road that brings them closer with the shortest queue.
+- Supplies go round the buildings that want them: each building's claim is its distribution
+  weight, halved for every one it already holds or has on the way. Sites whose builder has
+  arrived come first. Goods already on their way into a store go on to a building that needs
+  them, instead of being taken out again later.
+- Economy panel → Transport sets which goods carriers pick up first. Goods that have waited an
+  hour move up the list by themselves.
+
+`npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
+growth over 12 game days on several seeds.
+
 ## Territory, rivals and fog
 
 Your border is made of light. Lantern posts, lamp houses and beacon towers are lit once a warden

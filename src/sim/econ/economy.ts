@@ -45,6 +45,17 @@ const TICKS_PER_TILE_OFFROAD = 16;
 const BUILD_TICKS_PER_MATERIAL = 45;
 const SUPPLY_INTERVAL = 5;
 const MAX_ROAD_TILES = 24;
+/**
+ * Carriers a road may have in all, by its length (as in Serf City): one on a short road, more
+ * on long ones. Extra carriers are called when goods queue (see dispatch) and go home when idle.
+ */
+export function helperCap(length: number): number {
+  return length >= 24 ? 15 : length >= 18 ? 11 : length >= 13 ? 8 : length >= 10 ? 6 : length >= 7 ? 4 : length >= 6 ? 3 : length >= 4 ? 2 : 1;
+}
+/** Goods queued one way on a road before another carrier is called. */
+const QUEUE_FOR_HELPER = 3;
+/** Places a good moves up the transport priority for each hour it waits on a flag. */
+const RANK_PER_HOUR = 6;
 
 export interface Flag {
   id: number;
@@ -65,6 +76,8 @@ export interface Road {
   b: number;
   tiles: number[];
   carrier: number;
+  /** Extra carriers called to a busy road (Serf City's rule; see helperCap). */
+  helpers: number[];
   alive: boolean;
 }
 
@@ -76,6 +89,8 @@ export interface Good {
   dest: number;
   /** Carrier that promised to move it, or -1. */
   carrier: number;
+  /** Tick it was put down on its flag (goods that wait long go first). */
+  since: number;
   alive: boolean;
 }
 
@@ -141,7 +156,21 @@ export interface Prefs {
   tools: Record<string, number>;
   /** Share of warden places to fill, near other players' borders and further inside. */
   garrison: { frontier: number; inland: number };
+  /** Transport priority: goods carriers pick up first, first in the list first (good ids). */
+  transport: string[];
 }
+
+/**
+ * Default transport priority, after Serf City's: building materials first, then what feeds the
+ * smithies and the people, tools and arms, and gold last. Goods not listed (mods) come after.
+ */
+export const DEFAULT_TRANSPORT = [
+  "plank", "stone", "skystone", "glass", "iron", "coal", "peat", "log", "obsidian", "ironore", "salt",
+  "bread", "fish", "meat", "fruit", "honey", "shellfish", "glowcap",
+  "blade", "bow", "mount",
+  "hammer", "shovel", "pick", "axe", "saw", "rod", "cleaver", "scythe", "crook", "tongs",
+  "livestock", "flour", "grain", "relic", "gold", "goldore",
+];
 
 export type Role = "carrier" | "builder" | "worker" | "geologist" | "warden" | "attacker";
 
@@ -158,6 +187,8 @@ export interface Settler {
   /** Good type carried, or -1. */
   carrying: number;
   carryGood: number;
+  /** Carriers in a swap: the flag where a place is kept for the good they bring back, or -1. */
+  back: number;
   state: string;
   timer: number;
   target: number;
@@ -197,6 +228,7 @@ export type Command = (
   | { t: "geologist"; flagTile: number }
   | { t: "prio"; key: string; target: string; value: number }
   | { t: "toolprio"; tool: string; value: number }
+  | { t: "transport"; good: string; to: number }
   | { t: "garrison"; zone: "frontier" | "inland"; value: number }
   | { t: "attack"; target: number; count: number }
   | { t: "hedge"; tile: number }
@@ -625,7 +657,7 @@ export class Economy {
     }
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
-    this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison })) as Prefs;
+    this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison, transport: DEFAULT_TRANSPORT })) as Prefs;
     this.glow[player] = 60;
     this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1, variety: 0.6, joy: 0.5, wonder: 0.4 };
     this.hungry[player] = false;
@@ -742,6 +774,14 @@ export class Economy {
       case "toolprio":
         (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
+      case "transport": {
+        if (!GOOD_INDEX.has(cmd.good)) return { ok: false, reason: "Unknown good." };
+        const list = (this.prefs[p] as Prefs).transport;
+        const rest = list.filter((x) => x !== cmd.good);
+        rest.splice(Math.max(0, Math.min(rest.length, Math.round(cmd.to))), 0, cmd.good);
+        (this.prefs[p] as Prefs).transport = rest;
+        return { ok: true };
+      }
       case "attack":
         return this.cmdAttack(cmd.target, cmd.count, p);
       case "hedge":
@@ -999,7 +1039,7 @@ export class Economy {
   }
 
   private createRoad(a: number, b: number, tiles: number[], owner: number): Road {
-    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, alive: true };
+    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], alive: true };
     this.roads.push(r);
     (this.flags[a] as Flag).roads.push(r.id);
     (this.flags[b] as Flag).roads.push(r.id);
@@ -1084,6 +1124,7 @@ export class Economy {
     const left = road.tiles.slice(0, i + 1);
     const right = road.tiles.slice(i);
     const carrier = road.carrier;
+    const helpers = [...road.helpers];
     const { a, b } = road;
     // Detach the old road without sending the carrier home; it keeps working on one half.
     road.alive = false;
@@ -1108,6 +1149,8 @@ export class Economy {
       s.pi = 0;
       s.prog = 0;
     }
+    for (const id of helpers) this.dismissCarrier(this.settlers[id] as Settler, road, a, b);
+    road.helpers = [];
     this.rerouteAll();
     return { ok: true };
   }
@@ -1131,14 +1174,19 @@ export class Economy {
     if (!road.alive) return;
     road.alive = false;
     this.detachRoad(road);
-    if (road.carrier >= 0) {
-      const s = this.settlers[road.carrier] as Settler;
-      if (s.carryGood >= 0) this.dropCarriedGoodAt(s, s.roadIdx < road.tiles.length / 2 ? road.a : road.b);
-      this.releaseReservations(s);
-      this.sendHome(s);
-    }
+    if (road.carrier >= 0) this.dismissCarrier(this.settlers[road.carrier] as Settler, road, road.a, road.b);
+    for (const id of [...road.helpers]) this.dismissCarrier(this.settlers[id] as Settler, road, road.a, road.b);
     road.carrier = -1;
+    road.helpers = [];
     this.rerouteAll();
+  }
+
+  /** A carrier leaves its road: what it carried is put down at the nearer end, then it goes home. */
+  private dismissCarrier(s: Settler, road: Road, a: number, b: number): void {
+    if (!s?.alive) return;
+    if (s.carryGood >= 0) this.dropCarriedGoodAt(s, s.roadIdx < road.tiles.length / 2 ? a : b);
+    this.releaseReservations(s);
+    this.sendHome(s);
   }
 
   private removeFlag(f: Flag): void {
@@ -1199,6 +1247,7 @@ export class Economy {
     if (flag.alive && flag.goods.length < FLAG_CAPACITY) {
       g.flag = flagId;
       g.carrier = -1;
+      g.since = this.tick;
       flag.goods.push(g.id);
     } else this.destroyGood(g);
     s.carryGood = -1;
@@ -1237,8 +1286,8 @@ export class Economy {
       for (const rid of flag.roads) {
         const road = this.roads[rid] as Road;
         const other = road.a === f ? road.b : road.a;
-        // Congested flags cost a little more, so goods spread over parallel roads.
-        const w = road.tiles.length - 1 + (this.flags[other] as Flag).goods.length * 0.25;
+        // Plain road lengths: congestion is weighed live, at each flag (see hopFrom).
+        const w = road.tiles.length - 1;
         const nd = (dist[f] as number) + w;
         if (nd < (dist[other] as number)) {
           dist[other] = nd;
@@ -1330,6 +1379,30 @@ export class Economy {
     return table[b.built ? b.def.id : "site"] ?? 1;
   }
 
+  /**
+   * How strongly a building calls for one more of a good (Serf City's rule): its distribution
+   * weight, halved for every one it already holds or has on the way, so supplies go round the
+   * buildings that want them instead of filling one first. A construction site whose builder
+   * has not arrived yet calls at a quarter of that: materials go first where work can start.
+   */
+  claim(b: Building, type: number): number {
+    let w = this.priority(b, type);
+    let held = 0;
+    if (!b.built) {
+      // A site set to the lowest priority still gets its materials, last.
+      w = Math.max(w, 1e-6);
+      const onSite = b.delivered.reduce((a, v) => a + v, 0) - b.consumed;
+      held = (b.pending[type] as number) + Math.max(0, Math.min(onSite, b.delivered[type] as number));
+      const builder = b.builder >= 0 ? this.settlers[b.builder] : undefined;
+      const working = !!builder?.alive && builder.state !== "goto";
+      return (w / 2 ** held) * (working ? 1 : 0.25);
+    }
+    if (w <= 0) return 0;
+    const key = inputKeyFor(b.def, type);
+    for (const g of key ? goodsFor(key) : [type]) held += (b.stock[g] as number) + (b.pending[g] as number);
+    return w / 2 ** held;
+  }
+
   /** Take a tool of `type` from any of the player's storages; returns the type or -1. */
   private takeTool(owner: number, type: number): number {
     for (const s of this.buildings) {
@@ -1350,10 +1423,14 @@ export class Economy {
     let best = -1;
     let bestD = Infinity;
     const owner = (this.flags[g.flag] as Flag).owner;
+    let bestClaim = 0;
     for (const b of this.buildings) {
       if (!b.alive || b.owner !== owner || this.need(b, g.type) <= 0) continue;
-      const d = this.route(g.flag, b.flag).dist / Math.max(0.05, this.priority(b, g.type));
-      if (d < bestD) {
+      const d = this.route(g.flag, b.flag).dist;
+      if (d === Infinity) continue;
+      const c = this.claim(b, g.type);
+      if (c > bestClaim + 1e-12 || (Math.abs(c - bestClaim) <= 1e-12 && d < bestD)) {
+        bestClaim = c;
         bestD = d;
         best = b.id;
       }
@@ -1375,39 +1452,135 @@ export class Economy {
   }
 
   private nextHop(g: Good): number {
-    if (g.dest < 0) return -1;
-    const dest = this.buildings[g.dest] as Building;
-    if (dest.flag === g.flag) return -2;
-    return this.route(g.flag, dest.flag).next;
+    return this.nextHopFrom(g, g.flag);
   }
 
-  /** Storage buildings send goods out to buildings that need them, highest priority first. */
+  /**
+   * The next flag for a good at `from` on its way to `to`, as Serf City chooses: of the roads
+   * that bring it closer, the one whose length, remaining distance and queue cost least. A road
+   * with goods already queued its way, or with no carrier free, costs more, so goods spread over
+   * parallel roads instead of piling up. Only roads that make progress count, so goods never loop.
+   */
+  private hopFrom(from: number, to: number): number {
+    const base = this.route(from, to);
+    if (base.next < 0) return -1;
+    const here = this.flags[from] as Flag;
+    if (here.roads.length <= 2) return base.next;
+    let best = base.next;
+    let bestCost = Infinity;
+    for (const rid of here.roads) {
+      const road = this.roads[rid] as Road;
+      if (!road.alive) continue;
+      const other = road.a === from ? road.b : road.a;
+      const rest = other === to ? 0 : this.route(other, to).dist;
+      if (!(rest < base.dist)) continue;
+      const cost = road.tiles.length - 1 + rest + this.queued(road, from) * 1.5 + (this.freeCarriers(road) > 0 ? 0 : 2);
+      if (cost < bestCost - 1e-9 || (Math.abs(cost - bestCost) <= 1e-9 && other < best)) {
+        bestCost = cost;
+        best = other;
+      }
+    }
+    return best;
+  }
+
+  /** Goods lying at `from` that the shortest routes send along this road (not yet picked up). */
+  private queued(road: Road, from: number): number {
+    const to = road.a === from ? road.b : road.a;
+    let n = 0;
+    for (const gid of (this.flags[from] as Flag).goods) {
+      const g = this.goods[gid] as Good;
+      if (g.carrier >= 0 || g.dest < 0) continue;
+      const dest = this.buildings[g.dest] as Building;
+      if (dest.flag !== from && this.route(from, dest.flag).next === to) n++;
+    }
+    return n;
+  }
+
+  /** Carriers on a road that are free (waiting, or on their way to it). */
+  private freeCarriers(road: Road): number {
+    let n = 0;
+    for (const id of [road.carrier, ...road.helpers]) {
+      const st = this.settlers[id]?.state;
+      if (st === "idle" || st === "center" || st === "goto") n++;
+    }
+    return n;
+  }
+
+  /**
+   * Storage buildings send goods out to buildings that need them, one at a time to whichever
+   * calls strongest (see claim), from the nearest store that has one.
+   */
   private supply(): void {
     const order = this.buildings.filter((b) => b.alive);
+    // Goods lying on flags on their way into storage, by type: these are sent on to a building
+    // that needs them before anything is taken out of a store (no carrying the same good twice).
+    const toStore = new Map<number, Good[]>();
+    for (const g of this.goods) {
+      if (!g.alive || g.carrier >= 0 || g.dest < 0 || g.flag < 0) continue;
+      const d = this.buildings[g.dest] as Building;
+      if (!d.def.storage || (this.flags[g.flag] as Flag).goods.indexOf(g.id) < 0) continue;
+      let list = toStore.get(g.type);
+      if (!list) toStore.set(g.type, (list = []));
+      list.push(g);
+    }
     for (let type = 0; type < GOODS.length; type++) {
-      const wanting = order.filter((b) => this.need(b, type) > 0).sort((x, y) => this.priority(y, type) - this.priority(x, type) || x.id - y.id);
-      for (const b of wanting) {
-        let need = this.need(b, type);
-        while (need > 0) {
-          let src: Building | null = null;
-          let bestD = Infinity;
-          for (const s of this.buildings) {
-            if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || (s.stock[type] as number) <= 0) continue;
-            const sf = this.flags[s.flag] as Flag;
-            if (sf.goods.length + sf.reserved >= FLAG_CAPACITY) continue;
-            const d = this.route(s.flag, b.flag).dist;
-            if (d < bestD) {
-              bestD = d;
-              src = s;
-            }
+      const wanting = order.filter((b) => this.need(b, type) > 0);
+      while (wanting.length) {
+        let b = wanting[0] as Building;
+        let bc = -1;
+        for (const x of wanting) {
+          const c = this.claim(x, type);
+          if (c > bc + 1e-12) {
+            bc = c;
+            b = x;
           }
-          if (!src || bestD === Infinity) break;
-          src.stock[type]!--;
-          const g = this.spawnGood(type, src.flag);
+        }
+        if (bc <= 0) {
+          wanting.splice(wanting.indexOf(b), 1);
+          continue;
+        }
+        // A good already under way to a store, nearer than any store, is sent on instead.
+        const moving = toStore.get(type);
+        let redirect = -1;
+        let redirectD = Infinity;
+        for (let i = 0; moving && i < moving.length; i++) {
+          const g = moving[i] as Good;
+          if ((this.flags[g.flag] as Flag).owner !== b.owner) continue;
+          const d = this.route(g.flag, b.flag).dist;
+          if (d < redirectD) {
+            redirectD = d;
+            redirect = i;
+          }
+        }
+        let src: Building | null = null;
+        let bestD = Infinity;
+        for (const s of this.buildings) {
+          if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || (s.stock[type] as number) <= 0) continue;
+          const sf = this.flags[s.flag] as Flag;
+          if (sf.goods.length + sf.reserved >= FLAG_CAPACITY) continue;
+          const d = this.route(s.flag, b.flag).dist;
+          if (d < bestD) {
+            bestD = d;
+            src = s;
+          }
+        }
+        if (redirect >= 0 && redirectD <= bestD) {
+          const g = (moving as Good[]).splice(redirect, 1)[0] as Good;
+          (this.buildings[g.dest] as Building).pending[type]!--;
           g.dest = b.id;
           b.pending[type]!++;
-          need--;
+          if (this.need(b, type) <= 0) wanting.splice(wanting.indexOf(b), 1);
+          continue;
         }
+        if (!src || bestD === Infinity) {
+          wanting.splice(wanting.indexOf(b), 1);
+          continue;
+        }
+        src.stock[type]!--;
+        const g = this.spawnGood(type, src.flag);
+        g.dest = b.id;
+        b.pending[type]!++;
+        if (this.need(b, type) <= 0) wanting.splice(wanting.indexOf(b), 1);
       }
     }
   }
@@ -1425,7 +1598,7 @@ export class Economy {
   }
 
   private spawnGood(type: number, flagId: number): Good {
-    const g: Good = { id: this.goods.length, type, flag: flagId, dest: -1, carrier: -1, alive: true };
+    const g: Good = { id: this.goods.length, type, flag: flagId, dest: -1, carrier: -1, since: this.tick, alive: true };
     this.goods.push(g);
     (this.flags[flagId] as Flag).goods.push(g.id);
     return g;
@@ -1494,6 +1667,7 @@ export class Economy {
       prog: 0,
       carrying: -1,
       carryGood: -1,
+      back: -1,
       state: "goto",
       timer: 0,
       target: -1,
@@ -1514,6 +1688,7 @@ export class Economy {
     if (s.role === "carrier" && s.road >= 0) {
       const road = this.roads[s.road] as Road;
       if (road.carrier === s.id) road.carrier = -1;
+      road.helpers = road.helpers.filter((id) => id !== s.id);
     }
     if (s.role === "worker" && s.building >= 0) {
       const b = this.buildings[s.building] as Building;
@@ -1545,9 +1720,13 @@ export class Economy {
   }
 
   private dispatch(): void {
-    // Carriers for roads without one.
+    // Carriers for roads without one (a helper already there takes over first).
     for (const r of this.roads) {
       if (!r.alive || r.carrier >= 0) continue;
+      if (r.helpers.length) {
+        r.carrier = r.helpers.shift() as number;
+        continue;
+      }
       const pick = this.pickPerson(r.a, "carrier") ?? this.pickPerson(r.b, "carrier");
       if (!pick) continue;
       const home = pick.origin;
@@ -1560,6 +1739,23 @@ export class Economy {
       s.road = r.id;
       s.roadIdx = mid;
       r.carrier = s.id;
+    }
+    // Busy roads call more carriers, up to what their length allows.
+    for (const r of this.roads) {
+      if (!r.alive || r.carrier < 0 || 1 + r.helpers.length >= helperCap(r.tiles.length - 1)) continue;
+      if (Math.max(this.queued(r, r.a), this.queued(r, r.b)) < QUEUE_FOR_HELPER) continue;
+      if (this.freeCarriers(r) > 0) continue;
+      const pick = this.pickPerson(r.a, "carrier") ?? this.pickPerson(r.b, "carrier");
+      if (!pick) continue;
+      const mid = Math.floor(r.tiles.length / 2);
+      const toA = this.roadPath(pick.origin.flag, r.a);
+      const toB = toA ? null : this.roadPath(pick.origin.flag, r.b);
+      if (!toA && !toB) continue;
+      const approach = toA ? [...toA, ...r.tiles.slice(1, mid + 1)] : [...(toB as number[]), ...[...r.tiles].reverse().slice(1, r.tiles.length - mid)];
+      const s = this.spawnSettler("carrier", pick.origin, approach, pick.person);
+      s.road = r.id;
+      s.roadIdx = mid;
+      r.helpers.push(s.id);
     }
     for (const b of this.buildings) {
       if (!b.alive || b.stranded >= 0 || this.defeated[b.owner]) continue;
@@ -2262,7 +2458,12 @@ export class Economy {
       const f = this.flags[s.target];
       if (f) f.reserved = Math.max(0, f.reserved - 1);
     }
+    if (s.back >= 0) {
+      const f = this.flags[s.back];
+      if (f) f.reserved = Math.max(0, f.reserved - 1);
+    }
     s.target = -1;
+    s.back = -1;
     for (const g of this.goods) if (g.alive && g.carrier === s.id && g.id !== s.carryGood) g.carrier = -1;
   }
 
@@ -2291,10 +2492,16 @@ export class Economy {
           const [fromFlag, good] = pick;
           const g = this.goods[good] as Good;
           g.carrier = s.id;
+          s.timer = 0;
           const toFlag = fromFlag === road.a ? road.b : road.a;
           const into = this.nextHopFrom(g, toFlag) === -2 || (this.buildings[g.dest]?.flag ?? -1) === toFlag;
-          if (!into) {
-            (this.flags[toFlag] as Flag).reserved++;
+          const tf = this.flags[toFlag] as Flag;
+          if (!into && tf.goods.length + tf.reserved >= FLAG_CAPACITY) {
+            // A swap: promise the good that comes back, which frees the place this one takes.
+            const back = this.returnGood(road, toFlag, -1);
+            if (back >= 0) (this.goods[back] as Good).carrier = s.id;
+          } else if (!into) {
+            tf.reserved++;
             s.target = toFlag;
           }
           s.carryGood = good;
@@ -2303,6 +2510,10 @@ export class Economy {
         } else if (s.roadIdx !== Math.floor(end / 2)) {
           walkAlong(Math.floor(end / 2));
           s.state = "center";
+        } else if (road.helpers.includes(s.id) && ++s.timer > this.dayTicks / 8) {
+          // An extra carrier with nothing to do for three hours goes home.
+          s.timer = 0;
+          this.sendHome(s);
         }
         return;
       }
@@ -2326,6 +2537,12 @@ export class Economy {
             return;
           }
           flag.goods.splice(i, 1);
+          // A swap: the place this good leaves is kept for the one coming back.
+          const other = fromFlag === road.a ? road.b : road.a;
+          if (s.target < 0 && (this.flags[other] as Flag).goods.some((id) => (this.goods[id] as Good).carrier === s.id)) {
+            flag.reserved++;
+            s.back = fromFlag;
+          }
           s.carrying = g.type;
           s.state = "carry";
           walkAlong(s.roadIdx === 0 ? end : 0);
@@ -2346,20 +2563,15 @@ export class Economy {
             }
             return;
           }
-          const flag = this.flags[atFlag] as Flag;
-          if (s.target >= 0) {
-            flag.reserved = Math.max(0, flag.reserved - 1);
-            s.target = -1;
-          }
-          g.flag = atFlag;
-          g.carrier = -1;
-          flag.goods.push(g.id);
-          if (g.dest >= 0 && !(this.buildings[g.dest] as Building).alive) g.dest = -1;
-          s.carryGood = -1;
-          s.carrying = -1;
-          s.state = "idle";
+          if (!this.dropAt(s, road, atFlag)) s.state = "wait";
         }
         return;
+      case "wait": {
+        // At a full flag with nothing to swap: wait until there is room or something comes back.
+        const atFlag = s.roadIdx === 0 ? road.a : road.b;
+        if (this.dropAt(s, road, atFlag)) return;
+        return;
+      }
       case "enter":
         if (this.walk(s)) {
           const g = this.goods[s.carryGood] as Good;
@@ -2379,16 +2591,118 @@ export class Economy {
     }
   }
 
+  /**
+   * Put the carried good down at a flag. At a full flag the carrier first picks up a good that
+   * goes back over its road (a swap, as in Serf City); if there is none it can't put it down
+   * yet (false). Then, if a good waits to go back, it takes it instead of walking back empty.
+   */
+  private dropAt(s: Settler, road: Road, at: number): boolean {
+    const flag = this.flags[at] as Flag;
+    const g = this.goods[s.carryGood] as Good;
+    const back = road.a === at ? road.b : road.a;
+    const bf = this.flags[back] as Flag;
+    const fits = (gid: number) => {
+      const x = this.goods[gid] as Good;
+      const into = this.nextHopFrom(x, back) === -2 || (this.buildings[x.dest]?.flag ?? -1) === back;
+      return into || s.back === back || bf.goods.length + bf.reserved < FLAG_CAPACITY;
+    };
+    let swap = -1;
+    if (s.target < 0 && flag.goods.length >= FLAG_CAPACITY) {
+      swap = this.returnGood(road, at, s.id);
+      if (swap < 0 || !fits(swap)) return false;
+      flag.goods.splice(flag.goods.indexOf(swap), 1);
+    }
+    if (s.target >= 0) {
+      flag.reserved = Math.max(0, flag.reserved - 1);
+      s.target = -1;
+    }
+    g.flag = at;
+    g.carrier = -1;
+    g.since = this.tick;
+    flag.goods.push(g.id);
+    if (g.dest >= 0 && !(this.buildings[g.dest] as Building).alive) g.dest = -1;
+    s.carryGood = -1;
+    s.carrying = -1;
+    s.state = "idle";
+    if (swap < 0) {
+      swap = this.returnGood(road, at, s.id);
+      if (swap < 0 || !fits(swap)) {
+        this.releaseReservations(s);
+        return true;
+      }
+      flag.goods.splice(flag.goods.indexOf(swap), 1);
+    }
+    this.takeBack(s, road, back, swap);
+    return true;
+  }
+
+  /** Carry a good (already off its flag) back over the road to `back`. */
+  private takeBack(s: Settler, road: Road, back: number, gid: number): void {
+    const g = this.goods[gid] as Good;
+    const into = this.nextHopFrom(g, back) === -2 || (this.buildings[g.dest]?.flag ?? -1) === back;
+    const bf = this.flags[back] as Flag;
+    g.carrier = s.id;
+    if (s.back === back) {
+      // The place kept since the swap began.
+      s.back = -1;
+      if (into) bf.reserved = Math.max(0, bf.reserved - 1);
+      else s.target = back;
+    } else if (!into) {
+      bf.reserved++;
+      s.target = back;
+    }
+    s.carryGood = gid;
+    s.carrying = g.type;
+    s.timer = 0;
+    s.state = "carry";
+    const end = road.tiles.length - 1;
+    const from = s.roadIdx;
+    const to = from === 0 ? end : 0;
+    this.setPath(s, from <= to ? road.tiles.slice(from, to + 1) : road.tiles.slice(to, from + 1).reverse());
+  }
+
   private nextHopFrom(g: Good, flag: number): number {
     if (g.dest < 0) return -1;
     const dest = this.buildings[g.dest] as Building;
     if (dest.flag === flag) return -2;
-    return this.route(flag, dest.flag).next;
+    return this.hopFrom(flag, dest.flag);
   }
 
   /** Pick the oldest good at either end of the road that wants to travel along it. */
+  /**
+   * A good at `at` that wants to travel back over this road (the carrier takes it on the way
+   * back): one already promised to `carrier`, else the highest in transport priority. -1 if none.
+   */
+  private returnGood(road: Road, at: number, carrier: number): number {
+    const back = road.a === at ? road.b : road.a;
+    let best = -1;
+    for (const gid of (this.flags[at] as Flag).goods) {
+      const g = this.goods[gid] as Good;
+      if (g.carrier >= 0 && g.carrier !== carrier) continue;
+      if (g.dest < 0) this.assignDestination(g);
+      if (this.nextHop(g) !== back) continue;
+      if (g.carrier === carrier && carrier >= 0) return gid;
+      if (best < 0 || this.transportRank(road.owner, g.type) < this.transportRank(road.owner, (this.goods[best] as Good).type)) best = gid;
+    }
+    return best;
+  }
+
+  /** Where a good stands in a player's transport priority (lower goes first). */
+  transportRank(owner: number, type: number): number {
+    const list = this.prefs[owner]?.transport ?? DEFAULT_TRANSPORT;
+    const i = list.indexOf(GOODS[type]?.id ?? "");
+    return i >= 0 ? i : list.length + type;
+  }
+
   private chooseTransfer(road: Road): [number, number] | null {
     const options: [number, number][] = [];
+    // Transport priority, with waiting: each hour a good waits moves it RANK_PER_HOUR places up,
+    // so goods low in the order still move when the roads are busy.
+    const hour = Math.max(1, Math.round(this.dayTicks / 24));
+    const rank = (gid: number) => {
+      const g = this.goods[gid] as Good;
+      return this.transportRank(road.owner, g.type) - Math.floor((this.tick - g.since) / hour) * RANK_PER_HOUR;
+    };
     for (const [from, to] of [
       [road.a, road.b],
       [road.b, road.a],
@@ -2403,17 +2717,21 @@ export class Economy {
         if (hop !== to) continue;
         const dest = this.buildings[g.dest] as Building;
         const intoBuilding = dest.flag === to;
-        if (!intoBuilding && target.goods.length + target.reserved >= FLAG_CAPACITY) continue;
-        options.push([from, gid]);
-        break;
+        // A full flag can still take a good if one there goes back the other way: the carrier
+        // swaps them (as in Serf City), so two full flags never block each other.
+        if (!intoBuilding && target.goods.length + target.reserved >= FLAG_CAPACITY && this.returnGood(road, to, -1) < 0) continue;
+        // At each end the good highest in the transport priority goes first (older on ties).
+        const prev = options.findIndex((o) => o[0] === from);
+        if (prev < 0) options.push([from, gid]);
+        else if (rank(gid) < rank((options[prev] as [number, number])[1])) options[prev] = [from, gid];
       }
     }
     if (options.length === 0) return null;
-    // Serve the fuller flag first; ties go to the older good.
+    // Of the two ends: the higher priority good, then the fuller flag, then the older good.
     options.sort((x, y) => {
       const fx = (this.flags[x[0]] as Flag).goods.length;
       const fy = (this.flags[y[0]] as Flag).goods.length;
-      return fy - fx || x[1] - y[1];
+      return rank(x[1]) - rank(y[1]) || fy - fx || x[1] - y[1];
     });
     return options[0] as [number, number];
   }
@@ -3636,6 +3954,7 @@ export class Economy {
     h.int(this.flags.length).int(this.roads.length).int(this.buildings.length);
     for (const s of this.settlers) if (s.alive) h.int(s.id).int(s.path[s.pi] ?? -1).int(s.prog).int(s.carrying);
     for (const f of this.flags) if (f.alive) h.int(f.goods.length);
+    for (const r of this.roads) if (r.alive && r.helpers.length) h.int(r.id).int(r.helpers.length);
     let wear = 0;
     for (let t = 0; t < this.land.wear.length; t += 13) wear += this.land.wear[t] as number;
     h.int(wear);
