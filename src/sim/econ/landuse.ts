@@ -455,8 +455,10 @@ export class LandUse {
     if (def.terrain === "skyreef" && this.region[t] !== Region.Skyreef && !this.ring(t, 2).some((m) => this.region[m] === Region.Skyreef)) return false;
     // Treehouses go up an ancient giant (which stays standing).
     if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
+    // A quay may found a foothold on free ground a ferry can reach.
+    const foothold = def.ferry !== undefined && this.territory[t] === 0 && (this.footholdAt?.(flagTile, owner) ?? false);
     // Large buildings may go on a slope the builders can level (see LEVEL_SLOPE).
-    return this.canBuild(t, flagTile, !!def.large, owner, def.large ? MAX_LEVEL_SLOPE : 1.3);
+    return this.canBuild(t, flagTile, !!def.large, owner, def.large ? MAX_LEVEL_SLOPE : 1.3, false, foothold);
   }
 
   /** How much ground must be dug away before a building of this size can go up here (0: none). */
@@ -487,12 +489,12 @@ export class LandUse {
   }
 
   /** A flag or road of `owner` may go here. */
-  roadable(t: number, owner = 0): boolean {
+  roadable(t: number, owner = 0, foothold = false): boolean {
     // Ice roads: frozen lakes can be crossed (until they thaw).
-    if (this.isIce(t)) return this.mayRoad(t, owner) && this.use[t] === Use.Free;
+    if (this.isIce(t)) return this.mayRoad(t, owner, foothold) && this.use[t] === Use.Free;
     return (
       this.isLand(t) &&
-      this.mayRoad(t, owner) &&
+      this.mayRoad(t, owner, foothold) &&
       (this.use[t] === Use.Free || this.use[t] === Use.Blocked) &&
       this.feature[t] !== Feature.Tree &&
       this.feature[t] !== Feature.Rock &&
@@ -507,29 +509,29 @@ export class LandUse {
   }
 
   /** Own land, or a partner's under a shared-roads treaty. */
-  mayRoad(t: number, owner: number): boolean {
+  mayRoad(t: number, owner: number, foothold = false): boolean {
     const o = this.territory[t] as number;
-    return o === owner + 1 || (o > 0 && ((this.roadShare[owner] ?? 0) & (1 << (o - 1))) !== 0);
+    return o === owner + 1 || (foothold && o === 0) || (o > 0 && ((this.roadShare[owner] ?? 0) & (1 << (o - 1))) !== 0);
   }
 
-  canPlaceFlag(t: number, owner = 0): boolean {
-    if (!(this.roadable(t, owner) || this.use[t] === Use.Road)) return false;
+  canPlaceFlag(t: number, owner = 0, foothold = false): boolean {
+    if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
     if (this.use[t] === Use.Blocked) return false;
     // Flags need breathing room: no neighbouring flag.
     for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
-    return this.territory[t] === owner + 1;
+    return this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0);
   }
 
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
-  canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3, onGiant = false): boolean {
+  canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3, onGiant = false, foothold = false): boolean {
     const grid = this.planet.grid;
-    if (!this.isLand(t) || this.territory[t] !== owner + 1) return false;
+    if (!this.isLand(t) || !(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return false;
     const f = this.feature[t];
     if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap || f === Feature.Ruin))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
-    if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 : this.canPlaceFlag(flagTile, owner))) return false;
+    if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 || (foothold && this.territory[flagTile] === 0) : this.canPlaceFlag(flagTile, owner, foothold))) return false;
     for (const n of grid.neighborsOf(t)) {
       // Small buildings may stand shoulder to shoulder (as in Serf City); a large one needs room
       // around it, and so does anything next to a large one.
@@ -546,17 +548,22 @@ export class LandUse {
   largeAt: ((tile: number) => boolean) | null = null;
   /** Set by the economy: is the building on this tile a lantern building (it holds wardens)? */
   lanternAt: ((tile: number) => boolean) | null = null;
+  /**
+   * Set by the economy: can a quay be founded on free (unclaimed) ground with its flag on this
+   * tile, because one of the owner's finished quays has a ferry reaching it?
+   */
+  footholdAt: ((flagTile: number, owner: number) => boolean) | null = null;
 
-  bestFlagTile(t: number, owner = 0): number {
+  bestFlagTile(t: number, owner = 0, foothold = false): number {
     const grid = this.planet.grid;
     let best = -1;
     let bestScore = Infinity;
     // A free flag of ours next to the spot serves the new building; a flag that already serves
     // another building is passed over for a fresh flag on another side, if there is room.
-    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag && this.territory[n] === owner + 1 && !this.flagServes?.(n)) return n;
+    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag && (this.territory[n] === owner + 1 || (foothold && this.territory[n] === 0)) && !this.flagServes?.(n)) return n;
     for (const n of grid.neighborsOf(t)) {
       if (this.use[n] === Use.Flag) continue;
-      if (!this.canPlaceFlag(n, owner)) continue;
+      if (!this.canPlaceFlag(n, owner, foothold)) continue;
       const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + n * 1e-9;
       if (s < bestScore) {
         bestScore = s;

@@ -1040,7 +1040,8 @@
         "plank": 3,
         "stone": 1
       },
-      "ferry": 8
+      "ferry": 8,
+      "claim": 3
     },
     {
       "id": "harbour",
@@ -1053,7 +1054,8 @@
         "plank": 6,
         "stone": 4
       },
-      "ferry": 14
+      "ferry": 14,
+      "claim": 4
     },
     {
       "id": "boatyard",
