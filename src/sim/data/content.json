@@ -1030,6 +1030,32 @@
       "sight": 16
     },
     {
+      "id": "quay",
+      "name": "Quay",
+      "category": "storage",
+      "description": "A landing on the shore where a ferry ties up. It stores goods like a small storehouse. Link two quays with a ferry across up to 8 steps of water.",
+      "storage": true,
+      "terrain": "coast",
+      "cost": {
+        "plank": 3,
+        "stone": 1
+      },
+      "ferry": 8
+    },
+    {
+      "id": "harbour",
+      "name": "Harbour",
+      "category": "storage",
+      "description": "A quay with a jetty and a crane. Ferries from here cross up to 14 steps of water. Upgrade a quay to a harbour for planks and stone.",
+      "storage": true,
+      "terrain": "coast",
+      "cost": {
+        "plank": 6,
+        "stone": 4
+      },
+      "ferry": 14
+    },
+    {
       "id": "boatyard",
       "name": "Boatyard",
       "category": "materials",
