@@ -123,6 +123,41 @@ ipcMain.on("steam:overlay", (_e, dialog) => {
   const d = { friends: 0, settings: 3, achievements: 6 }[dialog];
   if (client && d !== undefined) client.overlay.activateDialog(d);
 });
+// Steam Workshop: each creation is one JSON file (creation.json) in its own content folder.
+ipcMain.handle("steam:workshopUpload", async (_e, item) => {
+  if (!client) return { itemId: "", needsAgreement: false };
+  const dir = fs.mkdtempSync(path.join(app.getPath("temp"), "seedfall-workshop-"));
+  fs.writeFileSync(path.join(dir, "creation.json"), String(item.json));
+  let itemId = item.itemId ? BigInt(item.itemId) : null;
+  let needsAgreement = false;
+  if (itemId === null) {
+    const created = await client.workshop.createItem();
+    itemId = created.itemId;
+    needsAgreement = !!created.needsToAcceptAgreement;
+  }
+  await client.workshop.updateItem(itemId, {
+    title: String(item.title).slice(0, 120),
+    description: String(item.description).slice(0, 7000),
+    tags: (item.tags || []).map(String),
+    contentPath: dir,
+    changeNote: "Uploaded from Seedfall",
+    visibility: 0 /* public */,
+  });
+  return { itemId: String(itemId), needsAgreement };
+});
+ipcMain.handle("steam:workshopItems", () => {
+  if (!client) return [];
+  const out = [];
+  for (const id of client.workshop.getSubscribedItems()) {
+    const info = client.workshop.installInfo(id);
+    const file = info && path.join(info.folder, "creation.json");
+    if (file && fs.existsSync(file)) out.push({ itemId: String(id), json: fs.readFileSync(file, "utf8") });
+  }
+  return out;
+});
+ipcMain.on("steam:openWorkshop", () => {
+  if (client) client.overlay.activateToWebPage(`https://steamcommunity.com/app/${client.utils.getAppId()}/workshop/`);
+});
 ipcMain.handle("steam:cloudEnabled", () => !!client && client.cloud.isEnabledForAccount() && client.cloud.isEnabledForApp());
 ipcMain.handle("steam:cloudWrite", (_e, name, text) => !!client && client.cloud.writeFile(String(name), String(text)));
 ipcMain.handle("steam:cloudRead", (_e, name) => (client && client.cloud.fileExists(String(name)) ? client.cloud.readFile(String(name)) : null));

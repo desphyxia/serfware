@@ -81,7 +81,7 @@ export function tileCount(size: GridSize): number {
   return vertexCountFor(GRID_SIZES[size]);
 }
 
-export function buildPlanetGrid(freq: number, rng: Rng, forcedStyle?: WellStyle): PlanetGrid {
+export function buildPlanetGrid(freq: number, rng: Rng, forcedStyle?: WellStyle, placed?: readonly Vec3[]): PlanetGrid {
   const geo = buildGeodesic(freq);
   const rings = buildRings(geo);
   const V = geo.vertexCount;
@@ -98,7 +98,9 @@ export function buildPlanetGrid(freq: number, rng: Rng, forcedStyle?: WellStyle)
   }
   const style = forcedStyle ?? rng.pick(WELL_STYLES);
   const sources: Vec3[] = pentagons.map((p) => [rotated[p * 3] as number, rotated[p * 3 + 1] as number, rotated[p * 3 + 2] as number]);
-  const wanted = generateWellTargets(rng, style, sources);
+  const generated = generateWellTargets(rng, style, sources);
+  // The world painter may place the Star Wells itself (twelve directions).
+  const wanted = placed?.length === 12 ? placed.map((p) => norm([p[0], p[1], p[2]])) : generated;
   const assignment = assignTargets(sources, wanted);
   let targets: Vec3[] = pentagons.map((_, i) => wanted[assignment[i] as number] as Vec3);
 

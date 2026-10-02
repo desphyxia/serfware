@@ -58,7 +58,9 @@ export interface Trigger {
 
 export interface ScenarioDef {
   id: string;
-  kind: "tutorial" | "chapter" | "scenario";
+  kind: "tutorial" | "chapter" | "scenario" | "custom";
+  /** Custom scenarios: who made it. */
+  author?: string;
   /** Chapters: their number in The Long Voyage. */
   chapter?: number;
   title: string;

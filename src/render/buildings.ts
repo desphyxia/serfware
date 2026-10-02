@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import * as kit from "./kit";
 import type { Part } from "./kit";
+import { BUILDING_INDEX, BUILDINGS } from "../sim/econ/defs";
 
 /**
  * Every building, built from the kit (see kit.ts). Each has a signature element for its trade,
@@ -1063,7 +1064,8 @@ const BUILDERS: Record<string, (b: Build) => void> = {
 export function buildBuilding(id: string, variant: number): THREE.BufferGeometry {
   const rng = new kit.Rng(variant * 7919 + id.length * 31 + id.charCodeAt(0));
   const b = new Build(rng);
-  (BUILDERS[id] ?? house)(b);
+  const looks = BUILDINGS[BUILDING_INDEX.get(id) ?? -1]?.looks;
+  (BUILDERS[id] ?? (looks ? BUILDERS[looks] : undefined) ?? house)(b);
   const g = kit.assemble(b.parts);
   g.computeBoundingBox();
   const bb = g.boundingBox as THREE.Box3;

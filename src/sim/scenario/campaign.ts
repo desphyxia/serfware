@@ -278,8 +278,16 @@ export const SCENARIOS: ScenarioDef[] = [
 
 export const ALL_SCENARIOS: ScenarioDef[] = [TUTORIAL, ...VOYAGE, ...SCENARIOS];
 
+/** Scenarios made in the scenario editor (or downloaded), known on this machine by id. */
+const CUSTOM = new Map<string, ScenarioDef>();
+
+/** Make a custom scenario playable by id (the editor, a file, the Workshop, a multiplayer start). */
+export function registerScenario(def: ScenarioDef): void {
+  CUSTOM.set(def.id, def);
+}
+
 export function scenarioById(id: string): ScenarioDef | undefined {
-  return ALL_SCENARIOS.find((s) => s.id === id);
+  return ALL_SCENARIOS.find((s) => s.id === id) ?? CUSTOM.get(id);
 }
 
 /** The seed and world options a scenario is played with. */

@@ -25,5 +25,8 @@ contextBridge.exposeInMainWorld("seedfallDesktop", {
   cloudRead: (name) => ipcRenderer.invoke("steam:cloudRead", name),
   cloudList: () => ipcRenderer.invoke("steam:cloudList"),
   cloudDelete: (name) => ipcRenderer.invoke("steam:cloudDelete", name),
+  workshopUpload: (item) => ipcRenderer.invoke("steam:workshopUpload", item),
+  workshopItems: () => ipcRenderer.invoke("steam:workshopItems"),
+  openWorkshop: () => ipcRenderer.send("steam:openWorkshop"),
   quit: () => ipcRenderer.send("app:quit"),
 });

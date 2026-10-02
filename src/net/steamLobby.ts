@@ -1,7 +1,7 @@
 import type { DesktopBridge, SteamLobbyInfo } from "../platform/bridge";
 import type { LockstepSession } from "./lockstep";
 import { HostLobby, JoinLobby, type LobbyOptions } from "./lobby";
-import type { SessionMode } from "./session";
+import type { Creative, SessionMode } from "./session";
 import { SteamTransport } from "./steamTransport";
 
 /** Most players a Steam lobby admits (the game's player limit). */
@@ -51,9 +51,9 @@ export class SteamHostLobby extends HostLobby {
     this.changed();
   }
 
-  override start(seed: string, mode: Exclude<SessionMode, "solo">, scenario?: string): LockstepSession {
+  override start(seed: string, mode: Exclude<SessionMode, "solo">, scenario?: string, creative?: Creative): LockstepSession {
     void this.bridge.setLobbyJoinable(false);
-    return super.start(seed, mode, scenario);
+    return super.start(seed, mode, scenario, creative);
   }
 
   override close(): void {

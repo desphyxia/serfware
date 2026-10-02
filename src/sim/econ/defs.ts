@@ -75,6 +75,8 @@ export interface BuildingDef {
   rail?: boolean;
   /** Solar kilns: now and then the focused heat sets dry growth next door alight. */
   fireRisk?: number;
+  /** Mod buildings: which base building's model to borrow. */
+  looks?: string;
 }
 
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];
