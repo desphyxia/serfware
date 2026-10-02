@@ -73,6 +73,8 @@ export const DEPOSIT_IDS = ["none", "coal", "iron", "gold", "granite"] as const;
 
 export const FIELD_RIPE = 4;
 export const FIELD_GROWTH_TICKS = 450;
+/** A deposit with fewer loads than this gets a small signpost (as in Serf City). */
+export const SMALL_DEPOSIT = 12;
 /** How long a geologist's signpost stands. */
 export const SIGN_TICKS = 6000;
 
@@ -109,6 +111,8 @@ export class LandUse {
   /** Geologist signposts: 0 none, 1 nothing found, 2.. Deposit + 1. */
   readonly sign: Uint8Array;
   readonly signExpire: Int32Array;
+  /** 1 where the signpost marks a small deposit. */
+  readonly signSmall: Uint8Array;
   signVersion = 0;
   /** Footpath wear from settlers walking off-road (desire paths). */
   readonly wear: Uint16Array;
@@ -184,6 +188,7 @@ export class LandUse {
     this.fish = new Uint8Array(n);
     this.sign = new Uint8Array(n);
     this.signExpire = new Int32Array(n);
+    this.signSmall = new Uint8Array(n);
     this.spacing = Math.sqrt((4 * Math.PI) / n);
     this.mud = new Float32Array(n);
     this.snowCover = new Float32Array(n);
@@ -359,6 +364,11 @@ export class LandUse {
     const e = this.planet.terrain.elevation[t] as number;
     const b = this.planet.terrain.biome[t] as Biome;
     return e > this.planet.terrain.params.mountainHeight * 0.3 || b === Biome.Rock || b === Biome.Snow;
+  }
+
+  /** Ground worth surveying: a mountain, or within reach (two steps) of one where a mine could stand. */
+  surveyable(t: number): boolean {
+    return this.isMountain(t) || this.ring(t, 2).some((n) => this.isMountain(n));
   }
 
   /** Water within two steps. */
