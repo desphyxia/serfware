@@ -97,6 +97,18 @@ within a season. Take a Hearthship and that settlement falls. You can also win b
 the 12 Star Wells for a day. Battle stakes (Settings → World) are Wounded by default, or Mortal.
 Weaponsmiths make blades, bowyers bows, and stables mounts; gold in storage pays for promotions.
 
+
+Rules taken from Serf City (studied from Freeserf's source):
+
+- **War morale.** Wardens fighting on an enemy's land fight at three-quarters strength if their
+  settlement holds none of the world's gold, rising to full strength at half of it or more
+  (counted in stores). Defenders on their own land don't need it.
+- **A fallen lantern decides the land around it.** When a lantern is taken, the land within its
+  light goes to whoever has the nearest lantern now, even where the old owner also had light.
+- **Three garrison levels.** Frontier (enemy land a few steps from the light), near (a short way
+  off) and inland, each with its own slider in the Economy panel (Tools).
+- **Who goes first.** Choose whether the strongest or the weakest wardens go on an attack.
+
 ## Living world
 
 Rain gathers into rivers that run to the sea; basins fill into lakes. Weather fronts drift with

@@ -259,8 +259,8 @@ export class Game {
       },
       following: () => this.following,
       player: () => this.session.player,
-      attack: (target, count) => {
-        if (this.command({ t: "attack", target, count })) this.toasts.show(`${count} warden${count === 1 ? "" : "s"} set out.`, "good");
+      attack: (target, count, order) => {
+        if (this.command({ t: "attack", target, count, order })) this.toasts.show(`${count} warden${count === 1 ? "" : "s"} set out.`, "good");
       },
     });
     this.economyPanel = new EconomyPanel(
