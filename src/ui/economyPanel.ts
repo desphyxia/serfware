@@ -41,6 +41,8 @@ function targetName(id: string): string {
 export class EconomyPanel extends Panel {
   private readonly pages: Record<string, HTMLElement> = {};
   private active = "Stock";
+  /** The transport order last drawn (redrawn when a command changes it). */
+  private transportKey = "";
 
   constructor(
     private readonly eco: () => Economy,
@@ -50,7 +52,7 @@ export class EconomyPanel extends Panel {
   ) {
     super("economy", "Economy", { width: 380, className: "economy" });
     const tabs = h("div", { class: "tabs", role: "tablist" });
-    for (const name of ["Stock", "People", "Distribution", "Tools"]) {
+    for (const name of ["Stock", "People", "Distribution", "Transport", "Tools"]) {
       const page = h("div", { class: "form" });
       this.pages[name] = page;
       tabs.append(
@@ -152,6 +154,33 @@ export class EconomyPanel extends Panel {
     }
     const prefs = eco.prefs[pl];
     if (!prefs) return;
+    if (this.active === "Transport") {
+      // Every good in transport order: carriers pick up the higher one first (goods that have
+      // waited long move up on their own, so nothing is stuck for good).
+      const order = [...prefs.transport.filter((id) => GOODS.some((g) => g.id === id)), ...GOODS.map((g) => g.id).filter((id) => !prefs.transport.includes(id))];
+      const key = order.join();
+      if (!full && key === this.transportKey) return;
+      this.transportKey = key;
+      const move = (id: string, to: number) => this.command({ t: "transport", good: id, to });
+      (this.pages.Transport as HTMLElement).replaceChildren(
+        h("p", { class: "hint" }, "Carriers pick up goods higher in this list first. Goods that have waited a while move up by themselves, so nothing waits for ever."),
+        h(
+          "ol",
+          { class: "transport-list" },
+          ...order.map((id, i) =>
+            h(
+              "li",
+              {},
+              h("span", {}, GOODS.find((g) => g.id === id)?.name ?? id),
+              h("button", { class: "btn", "aria-label": `Move ${id} up`, disabled: i === 0, onclick: () => move(id, i - 1) }, "▲"),
+              h("button", { class: "btn", "aria-label": `Move ${id} down`, disabled: i === order.length - 1, onclick: () => move(id, i + 1) }, "▼"),
+              h("button", { class: "btn", "aria-label": `Move ${id} to the top`, disabled: i === 0, onclick: () => move(id, 0) }, "Top"),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     if (!full) {
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[data-g]")) {
         if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "inland"]);
