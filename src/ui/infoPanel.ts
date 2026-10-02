@@ -1,6 +1,6 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
-import { FLAG_CAPACITY, type Economy } from "../sim/econ/economy";
+import { FLAG_CAPACITY, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
@@ -49,7 +49,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -220,6 +220,15 @@ export class InfoPanel extends Panel {
         body.push(h("h3", { class: "sub" }, "Stock"));
         body.push(h("div", { class: "chips" }, ...b.stock.map((n, i) => goodChip(i, n))));
         body.push(h("p", { class: "hint" }, `${b.residents} settlers resting inside.`));
+        if (!eco.keeps.includes(b.id) && b.owner === this.actions.player()) {
+          const modes = [
+            [STORE_IN, "In", "Takes in goods from the roads."],
+            [STORE_STOP, "Stop", "Keeps what it has but takes no more."],
+            [STORE_OUT, "Out", "Carries its goods out to your other stores."],
+          ] as const;
+          body.push(h("h3", { class: "sub" }, "Goods"));
+          body.push(h("div", { class: "btn-row" }, ...modes.map(([m, label, tip]) => h("button", { class: b.mode === m ? "btn small on" : "btn small", title: tip, onclick: () => this.actions.storeMode(b.id, m) }, label))));
+        }
       } else if (!b.built) {
         const connected = eco.route(eco.buildings[eco.keeps[b.owner] as number]!.flag, b.flag).dist !== Infinity;
         body.push(h("p", { class: connected ? "status" : "status warn" }, connected ? (b.dig > 0 ? (b.builder >= 0 ? `Builder levelling the ground (${b.dig} to dig).` : "Waiting for a builder to level the ground.") : b.builder >= 0 ? "Builder at work." : "Waiting for a builder.") : "Not connected. Build a road from this flag to your roads."));

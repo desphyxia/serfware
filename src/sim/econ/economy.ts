@@ -46,6 +46,12 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** Store modes, as in Serf City: In takes goods, Stop only holds them, Out empties the store into the others. */
+export const STORE_IN = 0;
+export const STORE_STOP = 1;
+export const STORE_OUT = 2;
+/** An emptying store sends one good out this often (ticks). */
+const EMPTY_INTERVAL = 10;
 const MAX_ROAD_TILES = 24;
 /**
  * Carriers a road may have in all, by its length (as in Serf City): one on a short road, more
@@ -133,6 +139,8 @@ export interface Building {
   frontier: boolean;
   /** Ground still to be dug away before building can start (large buildings on a slope). */
   dig: number;
+  /** Stores: 0 takes goods in, 1 keeps what it holds but takes no more, 2 carries its goods out to other stores. */
+  mode: number;
   /** How near another player's land is: 0 far (inland), 1 near, 2 close (the frontier). */
   threat: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
@@ -235,6 +243,7 @@ export type Command = (
   | { t: "prio"; key: string; target: string; value: number }
   | { t: "toolprio"; tool: string; value: number }
   | { t: "transport"; good: string; to: number }
+  | { t: "storeMode"; building: number; mode: number }
   | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
   | { t: "hedge"; tile: number }
@@ -784,6 +793,22 @@ export class Economy {
       case "toolprio":
         (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
+      case "storeMode": {
+        const b = this.buildings[cmd.building];
+        if (!b || !b.alive || b.owner !== p || !b.def.storage) return { ok: false, reason: "That isn't one of your stores." };
+        if (this.keeps.includes(b.id)) return { ok: false, reason: "The Hearthship always takes goods in." };
+        if (cmd.mode !== STORE_IN && cmd.mode !== STORE_STOP && cmd.mode !== STORE_OUT) return { ok: false, reason: "Unknown store mode." };
+        if (b.mode === cmd.mode) return { ok: true };
+        b.mode = cmd.mode;
+        // Goods on their way here are sent somewhere else, as in Serf City.
+        if (cmd.mode !== STORE_IN)
+          for (const g of this.goods) {
+            if (!g.alive || g.dest !== b.id) continue;
+            b.pending[g.type] = Math.max(0, (b.pending[g.type] as number) - 1);
+            g.dest = -1;
+          }
+        return { ok: true };
+      }
       case "transport": {
         if (!GOOD_INDEX.has(cmd.good)) return { ok: false, reason: "Unknown good." };
         const list = (this.prefs[p] as Prefs).transport;
@@ -957,6 +982,10 @@ export class Economy {
       case Use.Building: {
         const b = this.buildings[ref] as Building;
         if (this.keeps.includes(b.id)) return { ok: false, reason: "The Hearthship can't be demolished." };
+        if (b.def.storage) {
+          const held = b.stock.reduce((a, n) => a + n, 0);
+          if (held > 0) return { ok: false, reason: `This store still holds ${held} goods. Set it to Out and wait until it is empty.` };
+        }
         this.removeBuilding(b);
         return { ok: true };
       }
@@ -1101,6 +1130,7 @@ export class Economy {
       lit: false,
       frontier: false,
       dig: 0,
+      mode: STORE_IN,
       threat: 0,
       stranded: -1,
       siege: [],
@@ -1482,7 +1512,7 @@ export class Economy {
     }
     if (best < 0) {
       for (const b of this.buildings) {
-        if (!b.alive || !b.def.storage || !b.built || b.owner !== owner) continue;
+        if (!b.alive || !b.def.storage || !b.built || b.owner !== owner || b.mode !== STORE_IN) continue;
         const d = this.route(g.flag, b.flag).dist;
         if (d < bestD) {
           bestD = d;
@@ -1627,6 +1657,37 @@ export class Economy {
         b.pending[type]!++;
         if (this.need(b, type) <= 0) wanting.splice(wanting.indexOf(b), 1);
       }
+    }
+  }
+
+  /**
+   * Stores set to Out carry their goods to the others, most urgent first (the transport list),
+   * one at a time so the store's flag isn't flooded.
+   */
+  private emptyStores(): void {
+    for (const b of this.buildings) {
+      if (!b.alive || !b.built || !b.def.storage || b.mode !== STORE_OUT) continue;
+      const flag = this.flags[b.flag] as Flag;
+      if (flag.goods.length + flag.reserved >= FLAG_CAPACITY) continue;
+      let type = -1;
+      for (let t = 0; t < GOODS.length; t++)
+        if ((b.stock[t] as number) > 0 && (type < 0 || this.transportRank(b.owner, t) < this.transportRank(b.owner, type))) type = t;
+      if (type < 0) continue;
+      let to: Building | null = null;
+      let bestD = Infinity;
+      for (const s of this.buildings) {
+        if (s === b || !s.alive || !s.built || !s.def.storage || s.owner !== b.owner || s.mode !== STORE_IN) continue;
+        const d = this.route(b.flag, s.flag).dist;
+        if (d < bestD) {
+          bestD = d;
+          to = s;
+        }
+      }
+      if (!to) continue;
+      b.stock[type]!--;
+      const g = this.spawnGood(type, b.flag);
+      g.dest = to.id;
+      to.pending[type]!++;
     }
   }
 
@@ -3995,6 +4056,7 @@ export class Economy {
     this.tick = tick;
     if (tick % SUPPLY_INTERVAL === 0) {
       this.supply();
+      if (tick % EMPTY_INTERVAL === 0) this.emptyStores();
       this.dispatch();
       for (const g of this.goods) if (g.alive && g.dest < 0 && g.carrier < 0) this.assignDestination(g);
     }
@@ -4048,7 +4110,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);
     let vents = 0;
