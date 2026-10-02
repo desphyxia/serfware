@@ -39,7 +39,11 @@ import { AlmanacPanel } from "./ui/almanac";
 import { DiplomacyPanel } from "./ui/diplomacy";
 import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
 import { scenarioWorld } from "./sim/scenario/campaign";
-import type { PlayMode } from "./net/session";
+import type { Creative, PlayMode } from "./net/session";
+import { creationText, download, library, PainterPanel, ScenarioEditor, type SavedWorld } from "./ui/creative";
+import { stroke, type WorldPaint } from "./sim/planet/paint";
+import type { GridSize } from "./sim/planet/grid";
+import { scenarioById } from "./sim/scenario/campaign";
 import type { AiLevel } from "./sim/ai/personality";
 import type { Difficulty } from "./sim/econ/adversity";
 import { LAYER_OF, type MusicLayer } from "./audio/music";
@@ -109,6 +113,10 @@ export class Game {
   private readonly diplomacy: DiplomacyPanel;
   private readonly objectives = new ObjectivesPanel();
   private readonly story = new StoryPanel();
+  private readonly scenarioEditor = new ScenarioEditor();
+  /** The world painter, while painting: the world being painted and its toolbox. */
+  private painting: { seed: string; size?: GridSize; paint: WorldPaint; undo: WorldPaint[]; id: string; pickedWell: number } | null = null;
+  private readonly painter: PainterPanel;
   /** The scenario whose ending has been told (so it is told once). */
   private storyTold = "";
   private surveys = new Map<number, World>();
@@ -165,7 +173,8 @@ export class Game {
     this.loading = h("div", { class: "loading", hidden: true }, h("div", { class: "loading-seed" }), h("div", { class: "loading-msg" }, "Shaping the planet…"));
     container.append(this.loading);
 
-    this.world = new World(seed, { rivals: this.rivals });
+    library.register();
+    this.world = new World(seed, { rivals: this.rivals, mods: library.enabledMods() });
     this.session = new SoloSession(this.world);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 9000);
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
@@ -309,8 +318,36 @@ export class Game {
       seed: () => this.world.seed,
       startSession: (lobby, mode, scenario) => this.startHosted(lobby, mode, scenario),
       playScenario: (id) => this.playScenario(id),
+      create: {
+        paint: (w) => this.paintWorld(w),
+        playWorld: (w) => this.playWorld(w),
+        editScenario: (def) => (this.menu.hide(), this.scenarioEditor.open(def)),
+        playScenario: (id) => this.playScenario(id),
+        notify: (text, kind) => this.toasts.show(text, kind),
+      },
       joined: (lobby) => this.watchJoin(lobby),
       notify: (text, kind) => this.toasts.show(text, kind),
+    });
+    this.scenarioEditor.onPlay = (id) => this.playScenario(id);
+    this.scenarioEditor.currentSeed = () => this.world.seed;
+    this.scenarioEditor.onSaved = () => this.menu.refreshCreate();
+    this.painter = new PainterPanel({
+      undo: () => this.paintUndo(),
+      reset: () => this.paintStroke(null),
+      save: (name) => this.paintSave(name),
+      play: () => {
+        const w = this.paintedWorld(this.painter.name);
+        if (w) this.playWorld(w);
+      },
+      scenario: () => {
+        const w = this.paintSave(this.painter.name);
+        if (w) this.scenarioEditor.open(undefined, w);
+      },
+      exportFile: (name) => {
+        const w = this.paintedWorld(name);
+        if (w) download(`${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.seedfall-world.json`, creationText({ kind: "world", data: w }));
+      },
+      close: () => this.closePainter(),
     });
     this.radial = new RadialMenu((id) => this.tools.set(id));
     this.reticle = document.createElement("div");
@@ -342,6 +379,8 @@ export class Game {
       this.diplomacy.root,
       this.objectives.root,
       this.story.root,
+      this.scenarioEditor.root,
+      this.painter.root,
       this.warp,
       this.menu.root,
       this.debug.root,
@@ -1169,6 +1208,113 @@ export class Game {
     this.focusPlayer(0, stage === "world" ? 40 : 120);
   }
 
+  /** Open the world painter: on a saved painted world, or on this world's seed. */
+  paintWorld(saved?: SavedWorld): void {
+    this.menu.hide();
+    const seed = saved?.seed ?? this.session.world.seed;
+    this.painting = { seed, size: saved?.size ?? this.session.world.planet.params.size, paint: structuredClone(saved?.paint ?? { strokes: [] }), undo: [], id: saved?.id ?? `world-${Date.now().toString(36)}`, pickedWell: -1 };
+    this.painter.name = saved?.name ?? `${seed} (painted)`;
+    this.painter.root.hidden = false;
+    document.body.classList.add("painting");
+    this.rebuildPainted(false);
+    this.toasts.show("World painter: click the ground to paint. Ctrl+Z undoes.", "info");
+  }
+
+  /** Make the painted world again (a survey world: just the planet, nobody on it yet). */
+  private rebuildPainted(keepCamera = true): void {
+    const p = this.painting;
+    if (!p) return;
+    const t0 = performance.now();
+    const w = new World(p.seed, { survey: true, size: p.size, paint: p.paint, mods: library.enabledMods() });
+    this.useSession(new SoloSession(w), keepCamera);
+    if (!keepCamera) this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(w.planet.grid.pentagons[0]!)), 70);
+    this.speed = 0;
+    this.painter.setStatus(`${p.paint.strokes.length} stroke${p.paint.strokes.length === 1 ? "" : "s"}${p.paint.wells ? " · Star Wells placed" : ""} · ${(performance.now() - t0).toFixed(0)} ms`);
+  }
+
+  /** Add a stroke (or start over with null) and remake the world. */
+  private paintStroke(add: WorldPaint["strokes"][number] | null, wells?: WorldPaint["wells"]): void {
+    const p = this.painting;
+    if (!p) return;
+    p.undo.push(structuredClone(p.paint));
+    if (p.undo.length > 60) p.undo.shift();
+    if (add) p.paint.strokes.push(add);
+    else if (wells) p.paint.wells = wells;
+    else p.paint = { strokes: [] };
+    this.rebuildPainted();
+  }
+
+  private paintUndo(): void {
+    const p = this.painting;
+    const prev = p?.undo.pop();
+    if (!p || !prev) return;
+    p.paint = prev;
+    this.rebuildPainted();
+  }
+
+  /** A click while painting: a stroke where the brush is, or moving a Star Well. */
+  private paintClick(tile: number): void {
+    const p = this.painting;
+    if (!p || tile < 0) return;
+    const grid = this.world.planet.grid;
+    const dir = grid.centerOf(tile) as [number, number, number];
+    const b = this.painter.state;
+    if (b.brush === "well") {
+      if (p.pickedWell < 0) {
+        const i = grid.pentagons.findIndex((w) => w === tile || grid.neighborsOf(w).includes(tile));
+        if (i < 0) return void this.toasts.show("Click a Star Well first (the five-sided tiles).", "info");
+        p.pickedWell = i;
+        return void this.toasts.show("Now click where it should be.", "info");
+      }
+      const wells = grid.pentagons.map((w) => grid.centerOf(w) as [number, number, number]);
+      const others = wells.filter((_, i) => i !== p.pickedWell);
+      // Star Wells keep their distance: at least 17° apart, as the generator keeps them.
+      if (others.some((o) => o[0] * dir[0] + o[1] * dir[1] + o[2] * dir[2] > Math.cos((17 * Math.PI) / 180))) {
+        p.pickedWell = -1;
+        return void this.toasts.show("Too close to another Star Well.", "warn");
+      }
+      wells[p.pickedWell] = [dir[0], dir[1], dir[2]];
+      p.pickedWell = -1;
+      this.paintStroke(null, wells.map((v) => [Math.round(v[0] * 1e5) / 1e5, Math.round(v[1] * 1e5) / 1e5, Math.round(v[2] * 1e5) / 1e5]));
+      return;
+    }
+    const v = b.brush === "raise" || b.brush === "lower" ? b.strength : b.brush === "level" ? (this.world.planet.terrain.elevation[tile] as number) : b.brush === "region" ? b.region : b.brush === "ore" ? b.ore : undefined;
+    this.paintStroke(stroke(b.brush, dir, b.size, v));
+  }
+
+  private paintedWorld(name: string): SavedWorld | null {
+    const p = this.painting;
+    return p ? { id: p.id, name, seed: p.seed, size: p.size, paint: structuredClone(p.paint) } : null;
+  }
+
+  private paintSave(name: string): SavedWorld | null {
+    const w = this.paintedWorld(name);
+    if (!w) return null;
+    this.toasts.show(library.saveWorld(w) ? `Saved "${name}" (Game menu, Create).` : "Couldn't save here: export it instead.", "good");
+    this.menu.refreshCreate();
+    return w;
+  }
+
+  private endPainting(): void {
+    this.painting = null;
+    this.painter.root.hidden = true;
+    document.body.classList.remove("painting");
+  }
+
+  private closePainter(): void {
+    const seed = this.painting?.seed ?? this.world.seed;
+    this.endPainting();
+    void this.newWorld(seed);
+  }
+
+  /** Play a painted world as an ordinary game (with the usual rivals and settings). */
+  playWorld(w: SavedWorld): void {
+    this.endPainting();
+    this.menu.hide();
+    this.useSession(new SoloSession(new World(w.seed, { size: w.size, paint: w.paint, rivals: this.rivals, stakes: this.stakes, difficulty: this.difficulty, aiLevel: this.aiLevel, mods: library.enabledMods() })));
+    this.toasts.show(`Playing "${w.name}".`, "good");
+  }
+
   /** Play a scenario alone: a new world for it, then its story. */
   playScenario(id: string): void {
     const sw = scenarioWorld(id);
@@ -1413,7 +1559,7 @@ export class Game {
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel })));
+    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel, mods: library.enabledMods() })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -1424,7 +1570,7 @@ export class Game {
   }
 
   /** Swap in a new world and session (new game, load, or multiplayer start). */
-  useSession(session: Session): void {
+  useSession(session: Session, keepCamera = false): void {
     this.session.close();
     this.scene.remove(this.view.group);
     this.view.dispose();
@@ -1440,12 +1586,14 @@ export class Game {
     this.bindVoyages();
     this.sky.snapAir(this.world.atmosphere);
     this.scene.add(this.view.group);
-    this.cam = this.makeCamera(this.gfx.canvas);
+    if (!keepCamera) this.cam = this.makeCamera(this.gfx.canvas);
     this.hoverTile = -1;
     this.info.select(null);
     this.following = -1;
     this.tools.set("select");
-    this.focusStart();
+    if (!keepCamera) this.focusStart();
+    // Painting ends when another world is put in play (a new game, a load, a scenario).
+    if (!keepCamera && this.painting) this.endPainting();
     this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
     session.onDesync = (detail) => {
       crash.capture({ kind: "desync", message: detail });
@@ -1590,7 +1738,11 @@ export class Game {
 
   private startHosted(lobby: HostLobby, mode: PlayMode, scenario?: string): void {
     const seed = scenario ? (scenarioWorld(scenario)?.seed ?? this.world.seed) : this.world.seed;
-    this.useSession(lobby.start(seed, mode, scenario));
+    // Whatever the world is made from travels with the start: a custom scenario, or my mods.
+    const def = scenario ? scenarioById(scenario) : undefined;
+    const mods = library.enabledMods();
+    const creative: Creative | undefined = def?.kind === "custom" ? { custom: def } : !scenario && mods.length ? { mods } : undefined;
+    this.useSession(lobby.start(seed, mode, scenario, creative));
     if (scenario) this.tellIntro();
     this.menu.hide();
     this.toasts.show(`Game started with ${lobby.players.length} players.`, "good");
@@ -1795,6 +1947,7 @@ export class Game {
         return;
       }
       if (d.button === 0) {
+        if (this.painting) return this.paintClick(this.hoverTile);
         if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
         this.tools.click(this.hoverTile);
@@ -1813,6 +1966,9 @@ export class Game {
       } else if (e.key === "F8") {
         e.preventDefault();
         this.report.show();
+      } else if (this.painting && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        this.paintUndo();
       } else if (e.key === "Escape") {
         this.escape();
       } else if (e.key === " ") {

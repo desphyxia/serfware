@@ -52,6 +52,15 @@ export interface DesktopBridge {
   cloudList(): Promise<string[]>;
   cloudDelete(name: string): Promise<boolean>;
 
+  /**
+   * Steam Workshop (optional: older desktop builds lack it). Upload a creation (scenario, world or
+   * mod) as one JSON file; resolves to the item id, or "" if Steam refused. `workshopItems` reads
+   * the creations the player is subscribed to (the files Steam downloaded).
+   */
+  workshopUpload?(item: { title: string; description: string; tags: string[]; json: string; itemId?: string }): Promise<{ itemId: string; needsAgreement: boolean }>;
+  workshopItems?(): Promise<{ itemId: string; json: string }[]>;
+  openWorkshop?(): void;
+
   quit(): void;
 }
 

@@ -152,7 +152,7 @@ describe("custom scenarios", () => {
 
   it("are plain data: saved with the world and played again from the save", () => {
     const json = JSON.parse(JSON.stringify(def)) as ScenarioDef;
-    const s = new SoloSession(new World(json.seed, { ...json.opts, scenario: json.id, ...(undefined as never) }));
+    const s = new SoloSession(new World(json.seed, { ...json.opts, scenario: json.id }));
     expect(s.world.scenario).toBeNull(); // not known on this machine until registered
     const made = creativeOf(s.world);
     expect(made?.mods?.[0]?.id).toBe("cider-press");
