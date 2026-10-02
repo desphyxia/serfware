@@ -1,6 +1,6 @@
 import type { World } from "../world";
 import { BUILDINGS, buildingType, GOOD_INDEX, type BuildingDef } from "./defs";
-import { Feature } from "./landuse";
+import { Feature, Use } from "./landuse";
 
 /**
  * Simple site planner: finds a spot for a building near the keep and connects it with a road.
@@ -181,4 +181,60 @@ export function demoBattle(w: World, p = 0, q = 1): number {
   for (let i = 0; i < 1500; i++) w.step();
   w.command({ t: "attack", target: target.id, count: 99, player: p });
   return target.id;
+}
+
+/**
+ * A settlement boxed in by forest or rock: when ground that could be built on cannot be reached by
+ * road, put a woodcutter (trees) or a quarry (rocks) where it can clear the first obstacle between
+ * the road network and that ground. Returns what it did: a clearing site built, a forester taken down, or nothing.
+ */
+export function clearForest(w: World, player: number): "built" | "forester" | null {
+  const eco = w.economy;
+  const land = w.land;
+  const grid = land.planet.grid;
+  const c = grid.center;
+  const lantern = BUILDINGS[buildingType("lantern")] as BuildingDef;
+  const flags = eco.flags.filter((f) => f.alive && f.owner === player);
+  if (!flags.length) return null;
+  const d2 = (a: number, b: number) => (c[a * 3]! - c[b * 3]!) ** 2 + (c[a * 3 + 1]! - c[b * 3 + 1]!) ** 2 + (c[a * 3 + 2]! - c[b * 3 + 2]!) ** 2;
+  const nearestFlags = (t: number, n: number) =>
+    flags
+      .map((f) => [d2(f.tile, t), f.tile] as const)
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+      .slice(0, n)
+      .map(([, ft]) => ft);
+  // Ground one could build on: reachable by road from the network, or not.
+  const targets: [number, number, number][] = [];
+  for (let t = 0; t < land.territory.length; t++) {
+    if (land.territory[t] !== player + 1 || !land.isLand(t)) continue;
+    const ft = land.bestFlagTile(t, player);
+    if (ft < 0 || !land.canBuildDef(t, ft, lantern, player)) continue;
+    const near = nearestFlags(ft, 1)[0] as number;
+    targets.push([d2(near, ft), t, ft]);
+  }
+  targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const open = (x: number) => land.roadable(x, player);
+  const through = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && (land.feature[x] === Feature.Tree || land.feature[x] === Feature.Rock));
+  for (const [, t, ft] of targets.slice(0, 12)) {
+    const sources = nearestFlags(ft, 4);
+    if (sources.some((s) => land.findPath(s, ft, (x) => open(x) && x !== t, 1500))) return null;
+    let best: number[] | null = null;
+    for (const s of sources) {
+      const path = land.findPath(s, ft, (x) => through(x) && x !== t, 1500);
+      if (path && (!best || path.length < best.length)) best = path;
+    }
+    if (!best) continue;
+    const blocker = best.find((x) => land.feature[x] === Feature.Tree || land.feature[x] === Feature.Rock);
+    if (blocker === undefined) continue;
+    const type = land.feature[blocker] === Feature.Tree ? "woodcutter" : "quarry";
+    // Close to the blocker first; a woodcutter reaches 6 tiles, so anything within 5 will do.
+    const sites = land.ring(blocker, 5).filter((x) => land.territory[x] === player + 1).sort((a, b) => d2(a, blocker) - d2(b, blocker) || a - b);
+    if (placeOn(w, type, sites, player, true, 40) >= 0) return "built";
+    // No reachable site: the foresters are probably planting faster than the woodcutters fell. Take one down.
+    const forester = eco.buildings
+      .filter((b) => b.alive && b.owner === player && b.def.id === "forester")
+      .sort((a, b) => d2(a.tile, blocker) - d2(b.tile, blocker) || a.id - b.id)[0];
+    if (forester && w.command({ t: "demolish", tile: forester.tile, player }).ok) return "forester";
+  }
+  return null;
 }
