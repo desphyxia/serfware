@@ -166,7 +166,11 @@ export class GameRenderer {
     const key = `${g.msaa}:${g.bloom}:${g.ao}:${g.dof}`;
     if (key === this.built || !this.ready) return;
     this.built = key;
-    const scenePass = pass(this.scene, this.camera, { samples: g.msaa });
+    // GTAO reads the depth buffer with textureGather, which WebGPU does not allow on a
+    // multisampled texture: with ambient occlusion on, WebGPU renders the scene pass without
+    // MSAA (FXAA still smooths edges). WebGL2 resolves the samples first, so it keeps MSAA.
+    const samples = g.ao && this.backend === "WebGPU" ? 0 : g.msaa;
+    const scenePass = pass(this.scene, this.camera, { samples });
     scenePass.setMRT(
       mrt({
         output,
