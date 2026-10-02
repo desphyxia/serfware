@@ -1,6 +1,6 @@
 import { BUILDINGS, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { frontierTiles, placeConnected, placeOn } from "../econ/planner";
+import { clearForest, frontierTiles, placeConnected, placeOn } from "../econ/planner";
 import { goodId } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
@@ -189,7 +189,16 @@ export class AiBuilder {
     want(idle >= 6 && count("woodcutter") < 2 + Math.floor(idle / 8), near("woodcutter", Feature.Tree));
     want(idle >= 6 && count("quarry") < 2 + Math.floor(idle / 12), near("quarry", Feature.Rock));
     want(lanterns < 3 + Math.floor(mine.length / 3), grow());
-    attempt(wants, lv.wants);
+    // Nothing could be placed with hands idle: perhaps forest or rock has boxed the settlement in.
+    if (!attempt(wants, lv.wants) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
+      const did = clearForest(w, pl);
+      if (!did) this.resting.set("clear", this.thoughts + 12);
+      // With a forester taken down, no new one until the way is clear.
+      if (did === "forester") {
+        this.resting.set("forester", this.thoughts + 60);
+        this.resting.set("clear", this.thoughts + 12);
+      }
+    }
   }
 
   /** Diplomacy: offer what this temperament wants, and get its prisoners home. */
