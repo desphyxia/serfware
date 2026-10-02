@@ -1,3 +1,4 @@
+import { t } from "../core/i18n";
 import { copyText, h } from "./dom";
 
 const ICONS = {
@@ -27,10 +28,10 @@ export class Hud {
     const toolbar = h(
       "nav",
       { class: "toolbar", "aria-label": "Game menu" },
-      btn("Game menu", "M", ICONS.menu, actions.menu),
-      btn("Report a bug", "F8", ICONS.bug, actions.report),
-      btn("Debug", "F3", ICONS.debug, actions.debug),
-      btn("Settings", "Esc", ICONS.settings, actions.settings),
+      btn(t("Game menu"), "M", ICONS.menu, actions.menu),
+      btn(t("Report a bug"), "F8", ICONS.bug, actions.report),
+      btn(t("Debug"), "F3", ICONS.debug, actions.debug),
+      btn(t("Settings"), "Esc", ICONS.settings, actions.settings),
     );
     this.bugLine = h("button", { class: "bugline", title: "Click to copy. Include this line in bug reports." }) as HTMLButtonElement;
     this.bugLine.addEventListener("click", () => {

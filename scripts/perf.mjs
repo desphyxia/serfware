@@ -8,7 +8,7 @@ const seed = process.argv[2] ?? "russet-heron-417";
 const browser = await launch();
 try {
   const rows = [];
-  for (const preset of ["low", "medium", "high"]) {
+  for (const preset of ["low", "medium", "high", "deck", "handheld"]) {
     const { page } = await openGame(browser, { seed, width: 960, height: 600 });
     // Terrain detail applies at load: store the preset, then reload.
     await page.evaluate((preset) => window.__seedfall.game.settings.applyPreset(preset), preset);

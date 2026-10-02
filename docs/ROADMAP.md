@@ -50,7 +50,7 @@ Each batch has a GitHub issue (#1–#28) with its detailed scope.
 | 24 | Campaign: tutorial, The Long Voyage, scenarios | #24 |
 | 25 | Creative: world painter, scenario editor, mods, Workshop | #25 |
 | 26 | Presentation: photo mode, time-lapse, postcards, async letters (done) | #26 |
-| 27 | Scale, handheld tuning, accessibility, localisation | #27 |
+| 27 | Scale, handheld tuning, accessibility, localisation (done in part, see README) | #27 |
 | 28 | Release candidate: soak tests, leak hunting, balance, stability | #28 |
 
 Stretch after release: ranked play on curated seeds, persistent frontier servers.

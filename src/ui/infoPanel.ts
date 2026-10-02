@@ -4,7 +4,7 @@ import { EXPLORE_REACH, FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
-import { GOOD_COLORS } from "../render/econView";
+import { swatch } from "./swatch";
 import { h, Panel } from "./dom";
 
 export type Selection = { kind: "building" | "flag" | "road" | "person"; id: number } | null;
@@ -38,7 +38,7 @@ function goodChip(type: number, count: number | string): HTMLElement {
   return h(
     "span",
     { class: "chip-good" },
-    h("i", { style: `background:${GOOD_COLORS[g?.id ?? ""] ?? "#fff"}` }),
+    swatch(g?.id ?? ""),
     `${g?.name ?? "?"} ${count}`,
   );
 }
@@ -353,7 +353,7 @@ export class StockBar {
     const food = goodsFor("food").reduce((s, g) => s + (totals[g] ?? 0), 0);
     this.root.replaceChildren(
       ...["log", "stone", "plank"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
-      h("span", { class: "chip-good" }, h("i", { style: "background:#d98f4e" }), `Food ${food}`),
+      h("span", { class: "chip-good" }, swatch("bread"), `Food ${food}`),
       ...["coal", "iron", "gold"].map((id) => goodChip(idx(id), totals[idx(id)] ?? 0)),
       h("span", { class: "chip-good pop", title: "Settlers resting / at work" }, `Settlers ${pop.idle} / ${pop.working}`),
       ...(weather ? [h("span", { class: "chip-good weather", title: weather.title }, weather.text)] : []),

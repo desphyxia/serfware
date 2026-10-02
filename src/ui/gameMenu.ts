@@ -3,6 +3,7 @@ import { MODE_NAMES, type PlayMode, type SaveFile, type SessionPlayer } from "..
 import { webrtcAvailable } from "../net/webrtc";
 import { SteamHostLobby, SteamJoinLobby } from "../net/steamLobby";
 import { desktop } from "../platform/bridge";
+import { t } from "../core/i18n";
 import { copyText, h, Panel } from "./dom";
 import { campaignPage } from "./campaign";
 import { createPage, library, type CreateHost } from "./creative";
@@ -125,8 +126,8 @@ export class GameMenu extends Panel {
         h("button", { class: "btn", onclick: () => area.value.trim() && this.host.importText(area.value) }, "Load pasted"),
       ),
       area,
-      h("h3", { class: "sub" }, "Presentation"),
-      h("div", { class: "btn-row" }, h("button", { class: "btn", onclick: () => this.host.timelapse() }, "Time-lapse"), h("button", { class: "btn", onclick: () => this.host.photo() }, "Photo mode (F2)"), h("button", { class: "btn", onclick: () => this.host.letters() }, "Letters (F4)")),
+      h("h3", { class: "sub" }, t("Presentation")),
+      h("div", { class: "btn-row" }, h("button", { class: "btn", onclick: () => this.host.timelapse() }, t("Time-lapse")), h("button", { class: "btn", onclick: () => this.host.photo() }, t("Photo mode (F2)")), h("button", { class: "btn", onclick: () => this.host.letters() }, t("Letters (F4)"))),
       h("h3", { class: "sub" }, "Saved games (this browser)"),
       this.saveList,
       h("p", { class: "hint" }, "Saves store the seed and every command, and replay them on load. An autosave is kept every two minutes."),

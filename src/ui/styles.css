@@ -1098,3 +1098,51 @@ body.photo-clean #app > :not(canvas):not(.photo-panel) {
   margin: 6px 0;
 }
 .timelapse[hidden] { display: none; }
+
+/* ---------- Accessibility: good swatches carry a shape as well as a colour ---------- */
+i.sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+i.sw-circle {
+  border-radius: 50%;
+}
+i.sw-square {
+  border-radius: 1px;
+}
+i.sw-diamond {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+i.sw-triangle {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+:root {
+  --text-scale: 1;
+}
+.panel,
+.chip-good,
+.toast,
+.bugline {
+  font-size: calc(13px * var(--ui-scale) * var(--text-scale));
+}
+.captions {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+  z-index: 7;
+}
+.captions span {
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: calc(14px * var(--ui-scale) * var(--text-scale));
+}

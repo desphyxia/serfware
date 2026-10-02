@@ -1,4 +1,5 @@
 import { BUILDINGS, GOODS, type BuildingDef, type Category } from "../sim/econ/defs";
+import { t, tr } from "../core/i18n";
 import { h } from "./dom";
 
 export type ToolId = "select" | "flag" | "road" | "demolish" | string;
@@ -25,13 +26,13 @@ export const ICONS: Record<string, string> = {
 };
 
 export const CATEGORIES: { id: Category; label: string; key: string }[] = [
-  { id: "materials", label: "Materials", key: "3" },
-  { id: "food", label: "Food", key: "4" },
-  { id: "metal", label: "Mining", key: "5" },
-  { id: "storage", label: "Homes", key: "6" },
-  { id: "lantern", label: "Lanterns", key: "7" },
-  { id: "terra", label: "Terraform", key: "8" },
-  { id: "decor", label: "Decor", key: "9" },
+  { id: "materials", label: tr("Materials"), key: "3" },
+  { id: "food", label: tr("Food"), key: "4" },
+  { id: "metal", label: tr("Mining"), key: "5" },
+  { id: "storage", label: tr("Homes"), key: "6" },
+  { id: "lantern", label: tr("Lanterns"), key: "7" },
+  { id: "terra", label: tr("Terraform"), key: "8" },
+  { id: "decor", label: tr("Decor"), key: "9" },
 ];
 
 /** Hedgerows are planted with the Food tools, though they are not buildings. */
@@ -125,15 +126,15 @@ export class BuildBar {
       this.buttons.set(id, b);
       bar.append(b);
     };
-    add("select", "Select", "Esc", ICONS.select!, "Inspect buildings, flags and roads.", () => this.pick("select"));
-    add("flag", "Flag", "1", ICONS.flag!, "Place a flag. Flags on roads split them so more carriers can work.", () => this.pick("flag"));
-    add("road", "Road", "2", ICONS.road!, "Click a flag, then click where the road should go. Right-click to stop.", () => this.pick("road"));
-    for (const c of CATEGORIES) add(c.id, c.label, c.key, ICONS[c.id]!, `${c.label} buildings`, () => this.toggleCategory(c.id));
-    add("demolish", "Demolish", "X", ICONS.demolish!, "Remove a building, flag or road. Click twice to confirm.", () => this.pick("demolish"));
-    add("economy", "Economy", "P", ICONS.economy!, "Stock, distribution and tool priorities.", () => this.onEconomy());
-    add("system", "System", "O", ICONS.system!, "The star system: planets, orbits and launch windows.", () => this.onSystem());
-    add("almanac", "Almanac", "L", ICONS.almanac!, "What your people have learned of their world, and what it unlocks.", () => this.onAlmanac());
-    add("diplomacy", "Diplomacy", "J", ICONS.diplomacy!, "Other settlements: treaties, offers, prisoners and your name among them.", () => this.onDiplomacy());
+    add("select", t("Select"), "Esc", ICONS.select!, t("Inspect buildings, flags and roads."), () => this.pick("select"));
+    add("flag", t("Flag"), "1", ICONS.flag!, t("Place a flag. Flags on roads split them so more carriers can work."), () => this.pick("flag"));
+    add("road", t("Road"), "2", ICONS.road!, t("Click a flag, then click where the road should go. Right-click to stop."), () => this.pick("road"));
+    for (const c of CATEGORIES) add(c.id, t(c.label), c.key, ICONS[c.id]!, t("{name} buildings", { name: t(c.label) }), () => this.toggleCategory(c.id));
+    add("demolish", t("Demolish"), "X", ICONS.demolish!, t("Remove a building, flag or road. Click twice to confirm."), () => this.pick("demolish"));
+    add("economy", t("Economy"), "P", ICONS.economy!, t("Stock, distribution and tool priorities."), () => this.onEconomy());
+    add("system", t("System"), "O", ICONS.system!, t("The star system: planets, orbits and launch windows."), () => this.onSystem());
+    add("almanac", t("Almanac"), "L", ICONS.almanac!, t("What your people have learned of their world, and what it unlocks."), () => this.onAlmanac());
+    add("diplomacy", t("Diplomacy"), "J", ICONS.diplomacy!, t("Other settlements: treaties, offers, prisoners and your name among them."), () => this.onDiplomacy());
     this.popover = h("div", { class: "bb-pop", hidden: true, role: "menu" });
     this.root = h("div", { class: "buildbar-wrap" }, this.popover, bar);
   }
@@ -185,16 +186,16 @@ export class BuildBar {
   }
 
   /** Handle a key; returns true if it was a toolbar shortcut. */
-  key(key: string): boolean {
-    const k = key.toLowerCase();
-    if (k === "1") this.pick("flag");
-    else if (k === "2") this.pick("road");
-    else if (k === "x") this.pick("demolish");
-    else if (k === "p") this.onEconomy();
-    else if (k === "l") this.onAlmanac();
-    else if (k === "j") this.onDiplomacy();
+  key(key: string, actionOf: (key: string) => string | null = (k) => ({ "1": "flag", "2": "road", x: "demolish", p: "economy", l: "almanac", j: "diplomacy", ...Object.fromEntries(CATEGORIES.map((c) => [c.key, `cat-${c.id}`])) })[k.toLowerCase()] ?? null): boolean {
+    const a = actionOf(key);
+    if (a === "flag") this.pick("flag");
+    else if (a === "road") this.pick("road");
+    else if (a === "demolish") this.pick("demolish");
+    else if (a === "economy") this.onEconomy();
+    else if (a === "almanac") this.onAlmanac();
+    else if (a === "diplomacy") this.onDiplomacy();
     else {
-      const cat = CATEGORIES.find((c) => c.key === k);
+      const cat = a?.startsWith("cat-") ? CATEGORIES.find((c) => `cat-${c.id}` === a) : undefined;
       if (!cat) return false;
       this.toggleCategory(cat.id);
     }

@@ -21,29 +21,15 @@ import {
   stiltsGeometry,
 } from "./models";
 
-export const GOOD_COLORS: Record<string, string> = {
-  blade: "#c9d3de",
-  bow: "#8a5a2b",
-  mount: "#7a5236",
-  log: "#9a6a42",
-  stone: "#a9a59d",
-  plank: "#e0b27a",
-  grain: "#e2c46e",
-  flour: "#f1e6cc",
-  bread: "#d98f4e",
-  fish: "#7fc4c8",
-  livestock: "#f0c8b8",
-  meat: "#b8574a",
-  coal: "#2e2e34",
-  ironore: "#a0583f",
-  iron: "#8f96a3",
-  goldore: "#c9a24a",
-  gold: "#f0c85a",
-};
 
 const ROLE_COLORS = { carrier: new THREE.Color("#c98a4a"), builder: new THREE.Color("#4f7fb0"), worker: new THREE.Color("#6f9a4a"), geologist: new THREE.Color("#9a6fb0"), warden: new THREE.Color("#d8b25a"), attacker: new THREE.Color("#c0504a") };
 const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
+const SCRATCH_HEADING = new THREE.Vector3();
+const SCRATCH_TILE = new THREE.Vector3();
+const SCRATCH_P = new THREE.Vector3();
+const SCRATCH_UP = new THREE.Vector3();
+const SCRATCH_LOOK = new THREE.Vector3();
 const MAX_GOODS_EACH = 2500;
 const MAX_SLEDGES = 256;
 const MAX_BOATS = 96;
@@ -158,6 +144,12 @@ export class EconView {
     this.group.add(this.halos.mesh);
     this.group.name = "economy";
   }
+
+  /**
+   * Settlers beyond this distance from the point the camera looks at are not drawn or animated: they
+   * just keep their place (set by the world view each frame; null draws everyone, as from orbit).
+   */
+  cull: { center: THREE.Vector3; r2: number } | null = null;
 
   update(time: number, dt: number): void {
     this.spin(dt);
@@ -503,6 +495,14 @@ export class EconView {
     for (const s of this.eco.settlers) {
       if (!s.alive) continue;
       alive.add(s.id);
+      // Hidden, beyond the figure limit, out of sight or far from the view: keep to the tile, no animation.
+      const here0 = this.frames.pos(s.path[s.pi] as number, 0, SCRATCH_TILE);
+      if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || (this.cull && here0.distanceToSquared(this.cull.center) > this.cull.r2) || !this.seen(s.path[s.pi] as number, s.owner, true)) {
+        const far = this.display.get(s.id);
+        if (far) far.copy(here0);
+        else this.display.set(s.id, here0.clone());
+        continue;
+      }
       this.settlerTarget(s, target);
       let d = this.display.get(s.id);
       if (!d) {
@@ -510,13 +510,12 @@ export class EconView {
         this.display.set(s.id, d);
       }
       const moving = d.distanceToSquared(target) > 1e-6;
-      const heading = target.clone().sub(d);
+      const heading = SCRATCH_HEADING.copy(target).sub(d);
       if (heading.lengthSq() < 1e-8) {
         const nt = s.path[Math.min(s.pi + 1, s.path.length - 1)] as number;
         heading.copy(this.frames.pos(nt)).sub(d);
       }
       d.lerp(target, k);
-      if (HIDDEN_STATES.has(s.state) || n >= MAX_SETTLERS || !this.seen(s.path[s.pi] as number, s.owner, true)) continue;
       const look = this.looks(s);
       const carrying = s.carrying >= 0;
       let anim = s.state === "duel" ? Anim.Duel : moving ? (carrying ? Anim.Carry : Anim.Walk) : s.state === "work" ? look.work : Anim.Idle;
@@ -532,8 +531,8 @@ export class EconView {
       // Carriers on a snowy road or lake ice ride a sledge; waiting, they sit on it.
       const sledging = s.role === "carrier" && !HIDDEN_STATES.has(s.state) && nSledge < MAX_SLEDGES && land.sledging(here) && land.sledging(next);
       const bob = moving && !sledging ? Math.abs(Math.sin(time * 11 + s.id * 1.7)) * 0.025 : 0;
-      const p = d.clone().addScaledVector(d.clone().normalize(), bob);
-      this.frames.orient(p, p.clone().add(heading), q);
+      const p = SCRATCH_P.copy(d).addScaledVector(SCRATCH_UP.copy(d).normalize(), bob);
+      this.frames.orient(p, SCRATCH_LOOK.copy(p).add(heading), q);
       const colour = s.role === "warden" || s.role === "attacker" ? playerColor(s.owner) : ROLE_COLORS[s.role];
       // A crew out at sea sits in a rowing boat on the water.
       const boating = nBoat < MAX_BOATS && !land.isLand(here) && !land.isIce(here) && (land.ferry[here] === 1 || s.state === "sail" || s.state === "sailback" || s.state === "scan");

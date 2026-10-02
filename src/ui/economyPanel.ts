@@ -1,6 +1,6 @@
 import { BUILDINGS, GOODS, TOOLS } from "../sim/econ/defs";
 import type { Command, Economy } from "../sim/econ/economy";
-import { GOOD_COLORS } from "../render/econView";
+import { swatch } from "./swatch";
 import { fullName, title, tradeName, type GlowParts } from "../sim/econ/people";
 import { h, Panel } from "./dom";
 
@@ -105,7 +105,7 @@ export class EconomyPanel extends Panel {
             "div",
             { class: "stock-grid" },
             ...g.ids.map((id) =>
-              h("div", { class: "stock-cell" }, h("i", { style: `background:${GOOD_COLORS[id] ?? "#ccc"}` }), h("span", {}, GOODS[idx(id)]?.name ?? id), h("b", {}, String(totals[idx(id)] ?? 0))),
+              h("div", { class: "stock-cell" }, swatch(id), h("span", {}, GOODS[idx(id)]?.name ?? id), h("b", {}, String(totals[idx(id)] ?? 0))),
             ),
           ),
         ]),
