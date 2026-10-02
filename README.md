@@ -75,6 +75,14 @@ signpost on each: ore, or nothing. A **small** signpost marks a deposit under 20
 don't build a mine on a speck. You are told once when an ore is found, not for every signpost
 beside an earlier one of the same kind. Signposts fade after a while.
 
+## The AI rivals
+
+Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
+garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
+every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
+a toolsmith, clears away flags that lead nowhere and sites no road reaches, and puts idle hands to
+work on woodcutters and quarries. `npm run soak -- ai` measures growth and war on six seeds.
+
 ## Wardens
 
 Lantern buildings are staffed by the strongest free warden (rank first, then skill, then
