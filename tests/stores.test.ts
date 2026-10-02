@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { goodId } from "../src/sim/econ/defs";
-import { STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../src/sim/econ/economy";
+import { GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../src/sim/econ/economy";
 import { placeConnected } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
 
@@ -60,5 +60,41 @@ describe("store modes (Serf City's In, Stop and Out)", () => {
     expect([keep.stock[log], keep.stock[stone]].every((n, i) => (n as number) >= (total[i] as number))).toBe(true);
     expect(w.command({ t: "demolish", tile: store.tile }).ok).toBe(true);
     expect(store.alive).toBe(false);
+  }, 240000);
+
+  it("a store can stop, send or collect one good while taking the rest", () => {
+    const { w, eco, store, keep } = withStorehouse();
+    const log = goodId("log");
+    const stone = goodId("stone");
+    // Stop logs only: stone still comes here, logs go to the Hearthship.
+    expect(w.command({ t: "storeGood", building: store.id, good: "log", mode: GOOD_STOP }).ok).toBe(true);
+    const a = inside(eco).spawnGood(log, store.flag);
+    const b = inside(eco).spawnGood(stone, store.flag);
+    a.dest = -1;
+    b.dest = -1;
+    inside(eco).assignDestination(a);
+    inside(eco).assignDestination(b);
+    expect(a.dest).toBe(keep.id);
+    expect(b.dest).toBe(store.id);
+    // Collect logs: new logs go there first, and the Hearthship's logs are carried over.
+    expect(w.command({ t: "storeGood", building: store.id, good: "log", mode: GOOD_COLLECT }).ok).toBe(true);
+    const c = inside(eco).spawnGood(log, keep.flag);
+    c.dest = -1;
+    inside(eco).assignDestination(c);
+    expect(c.dest).toBe(store.id);
+    keep.stock[log]! += 6;
+    const heldBefore = store.stock[log]!;
+    for (let i = 0; i < 4000; i++) w.step();
+    expect(store.stock[log]!).toBeGreaterThan(heldBefore);
+    // Send stone: the store's stone is carried to the Hearthship even though the store takes goods in.
+    store.stock[stone]! += 4;
+    expect(w.command({ t: "storeGood", building: store.id, good: "stone", mode: GOOD_SEND }).ok).toBe(true);
+    for (let i = 0; i < 4000 && store.stock[stone]! > 0; i++) w.step();
+    expect(store.stock[stone]).toBe(0);
+    // The Hearthship may collect but never stop or send.
+    expect(w.command({ t: "storeGood", building: keep.id, good: "log", mode: GOOD_STOP }).ok).toBe(false);
+    expect(w.command({ t: "storeGood", building: keep.id, good: "log", mode: GOOD_SEND }).ok).toBe(false);
+    expect(w.command({ t: "storeGood", building: keep.id, good: "log", mode: GOOD_COLLECT }).ok).toBe(true);
+    expect(w.command({ t: "storeGood", building: store.id, good: "nonsense", mode: GOOD_AUTO }).ok).toBe(false);
   }, 240000);
 });

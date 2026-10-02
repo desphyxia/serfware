@@ -75,6 +75,14 @@ signpost on each: ore, or nothing. A **small** signpost marks a deposit under 20
 don't build a mine on a speck. You are told once when an ore is found, not for every signpost
 beside an earlier one of the same kind. Signposts fade after a while.
 
+## The AI rivals
+
+Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
+garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
+every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
+a toolsmith, clears away flags that lead nowhere and sites no road reaches, and puts idle hands to
+work on woodcutters and quarries. `npm run soak -- ai` measures growth and war on six seeds.
+
 ## Wardens
 
 Lantern buildings are staffed by the strongest free warden (rank first, then skill, then
@@ -97,6 +105,11 @@ A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out)
 
 A store that still holds goods can't be demolished: set it to Out and wait until it is empty.
 The Hearthship always takes goods in.
+
+Under **Settings by good** (any store) each good can be set apart, as in Settlers 2: **Stop**
+(this store takes no more of it), **Send** (it carries that good out to other stores) or
+**Collect** (it brings that good in from the other stores, and new ones are sent here first).
+The Hearthship can only collect.
 
 ## Placing things
 

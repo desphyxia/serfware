@@ -56,6 +56,11 @@ const SIGN_NEWS_RADIUS = 6;
 export const STORE_IN = 0;
 export const STORE_STOP = 1;
 export const STORE_OUT = 2;
+/** Per-good store settings, as in Settlers 2: follow the store's mode, stop taking it, send it out, or collect it from the other stores. */
+export const GOOD_AUTO = 0;
+export const GOOD_STOP = 1;
+export const GOOD_SEND = 2;
+export const GOOD_COLLECT = 3;
 /** An emptying store sends one good out this often (ticks). */
 const EMPTY_INTERVAL = 10;
 const MAX_ROAD_TILES = 24;
@@ -153,6 +158,8 @@ export interface Building {
   /** Ticks the worker spent working today, and the day before (-1 until a day has passed). */
   busy: number;
   busyPrev: number;
+  /** Stores: a setting per good (GOOD_AUTO follows `mode`). */
+  goodMode: number[];
   /** How near another player's land is: 0 far (inland), 1 near, 2 close (the frontier). */
   threat: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
@@ -256,6 +263,7 @@ export type Command = (
   | { t: "toolprio"; tool: string; value: number }
   | { t: "transport"; good: string; to: number }
   | { t: "storeMode"; building: number; mode: number }
+  | { t: "storeGood"; building: number; good: string; mode: number }
   | { t: "rotate" }
   | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
@@ -854,13 +862,18 @@ export class Economy {
         if (cmd.mode !== STORE_IN && cmd.mode !== STORE_STOP && cmd.mode !== STORE_OUT) return { ok: false, reason: "Unknown store mode." };
         if (b.mode === cmd.mode) return { ok: true };
         b.mode = cmd.mode;
-        // Goods on their way here are sent somewhere else, as in Serf City.
-        if (cmd.mode !== STORE_IN)
-          for (const g of this.goods) {
-            if (!g.alive || g.dest !== b.id) continue;
-            b.pending[g.type] = Math.max(0, (b.pending[g.type] as number) - 1);
-            g.dest = -1;
-          }
+        this.redirectRefused(b);
+        return { ok: true };
+      }
+      case "storeGood": {
+        const b = this.buildings[cmd.building];
+        if (!b || !b.alive || b.owner !== p || !b.def.storage) return { ok: false, reason: "That isn't one of your stores." };
+        const type = GOOD_INDEX.get(cmd.good);
+        if (type === undefined) return { ok: false, reason: "Unknown good." };
+        if (cmd.mode !== GOOD_AUTO && cmd.mode !== GOOD_STOP && cmd.mode !== GOOD_SEND && cmd.mode !== GOOD_COLLECT) return { ok: false, reason: "Unknown setting." };
+        if (this.keeps.includes(b.id) && (cmd.mode === GOOD_STOP || cmd.mode === GOOD_SEND)) return { ok: false, reason: "The Hearthship always takes goods in; it can collect them." };
+        b.goodMode[type] = cmd.mode;
+        this.redirectRefused(b);
         return { ok: true };
       }
       case "transport": {
@@ -1194,6 +1207,7 @@ export class Economy {
       mode: STORE_IN,
       busy: 0,
       busyPrev: -1,
+      goodMode: new Array<number>(GOODS.length).fill(GOOD_AUTO),
       threat: 0,
       stranded: -1,
       siege: [],
@@ -1573,16 +1587,7 @@ export class Economy {
         best = b.id;
       }
     }
-    if (best < 0) {
-      for (const b of this.buildings) {
-        if (!b.alive || !b.def.storage || !b.built || b.owner !== owner || b.mode !== STORE_IN) continue;
-        const d = this.route(g.flag, b.flag).dist;
-        if (d < bestD) {
-          bestD = d;
-          best = b.id;
-        }
-      }
-    }
+    if (best < 0) best = this.storeFor(owner, g.flag, g.type)?.id ?? -1;
     if (best >= 0) {
       g.dest = best;
       (this.buildings[best] as Building).pending[g.type]!++;
@@ -1723,30 +1728,91 @@ export class Economy {
     }
   }
 
+  /** Does this store take this good in? */
+  storeAccepts(b: Building, type: number): boolean {
+    const m = b.goodMode[type] ?? GOOD_AUTO;
+    return m === GOOD_COLLECT || (m === GOOD_AUTO && b.mode === STORE_IN);
+  }
+
+  /** Does this store push this good out to the others? */
+  private storeSends(b: Building, type: number): boolean {
+    const m = b.goodMode[type] ?? GOOD_AUTO;
+    return m === GOOD_SEND || (m === GOOD_AUTO && b.mode === STORE_OUT);
+  }
+
+  /** Goods on their way to a store that no longer takes them are sent somewhere else. */
+  private redirectRefused(b: Building): void {
+    for (const g of this.goods) {
+      if (!g.alive || g.dest !== b.id || this.storeAccepts(b, g.type)) continue;
+      b.pending[g.type] = Math.max(0, (b.pending[g.type] as number) - 1);
+      g.dest = -1;
+    }
+  }
+
+  /** The store that should take a good lying at a flag: one that collects it, else the nearest that accepts it. */
+  private storeFor(owner: number, flag: number, type: number, not?: Building): Building | null {
+    let best: Building | null = null;
+    let bestD = Infinity;
+    let collecting = false;
+    for (const s of this.buildings) {
+      if (s === not || !s.alive || !s.built || !s.def.storage || s.owner !== owner || !this.storeAccepts(s, type)) continue;
+      const c = s.goodMode[type] === GOOD_COLLECT;
+      if (collecting && !c) continue;
+      const d = this.route(flag, s.flag).dist;
+      if (d === Infinity) continue;
+      if ((c && !collecting) || d < bestD) {
+        collecting = collecting || c;
+        bestD = d;
+        best = s;
+      }
+    }
+    return best;
+  }
+
   /**
    * Stores set to Out carry their goods to the others, most urgent first (the transport list),
    * one at a time so the store's flag isn't flooded.
    */
   private emptyStores(): void {
     for (const b of this.buildings) {
-      if (!b.alive || !b.built || !b.def.storage || b.mode !== STORE_OUT) continue;
+      if (!b.alive || !b.built || !b.def.storage) continue;
       const flag = this.flags[b.flag] as Flag;
       if (flag.goods.length + flag.reserved >= FLAG_CAPACITY) continue;
+      // First what the store sends out, most urgent first (the transport list)...
       let type = -1;
       for (let t = 0; t < GOODS.length; t++)
-        if ((b.stock[t] as number) > 0 && (type < 0 || this.transportRank(b.owner, t) < this.transportRank(b.owner, type))) type = t;
-      if (type < 0) continue;
-      let to: Building | null = null;
-      let bestD = Infinity;
-      for (const s of this.buildings) {
-        if (s === b || !s.alive || !s.built || !s.def.storage || s.owner !== b.owner || s.mode !== STORE_IN) continue;
-        const d = this.route(b.flag, s.flag).dist;
-        if (d < bestD) {
-          bestD = d;
-          to = s;
+        if ((b.stock[t] as number) > 0 && this.storeSends(b, t) && (type < 0 || this.transportRank(b.owner, t) < this.transportRank(b.owner, type))) type = t;
+      const to = type >= 0 ? this.storeFor(b.owner, b.flag, type, b) : null;
+      // ...else what it collects from the other stores.
+      if (!to) {
+        type = -1;
+        let from: Building | null = null;
+        for (let t = 0; t < GOODS.length; t++) {
+          if (b.goodMode[t] !== GOOD_COLLECT || (type >= 0 && this.transportRank(b.owner, t) >= this.transportRank(b.owner, type))) continue;
+          let src: Building | null = null;
+          let bestD = Infinity;
+          for (const o of this.buildings) {
+            if (o === b || !o.alive || !o.built || !o.def.storage || o.owner !== b.owner || (o.stock[t] as number) <= 0 || o.goodMode[t] === GOOD_COLLECT) continue;
+            const of = this.flags[o.flag] as Flag;
+            if (of.goods.length + of.reserved >= FLAG_CAPACITY) continue;
+            const d = this.route(o.flag, b.flag).dist;
+            if (d < bestD) {
+              bestD = d;
+              src = o;
+            }
+          }
+          if (src) {
+            type = t;
+            from = src;
+          }
         }
+        if (type < 0 || !from) continue;
+        from.stock[type]!--;
+        const g = this.spawnGood(type, from.flag);
+        g.dest = b.id;
+        b.pending[type]!++;
+        continue;
       }
-      if (!to) continue;
       b.stock[type]!--;
       const g = this.spawnGood(type, b.flag);
       g.dest = to.id;
@@ -4236,6 +4302,7 @@ export class Economy {
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
     for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev);
+    for (const b of this.buildings) if (b.alive && b.def.storage) for (const m of b.goodMode) h.int(m);
     for (const u of this.rotateUntil) h.int(u ?? -1);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);

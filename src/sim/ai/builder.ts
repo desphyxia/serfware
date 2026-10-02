@@ -1,4 +1,4 @@
-import { BUILDINGS } from "../econ/defs";
+import { BUILDINGS, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
 import { frontierTiles, placeConnected, placeOn } from "../econ/planner";
 import { goodId } from "../econ/defs";
@@ -31,20 +31,74 @@ export class AiBuilder {
   /** Wishes that found no site lately, and the thought they may be tried again. */
   private readonly resting = new Map<string, number>();
 
-  /** Attack the nearest enemy lantern it can take with good odds, using as few wardens as it can. */
+  /**
+   * Attack the enemy lantern or Hearthship it can take with good odds, using as few wardens as
+   * it can. As in Settlers 2's AI, an undefended target comes first, then the weakest garrison,
+   * then the surest odds.
+   */
   private attack(w: World): boolean {
     const eco = w.economy;
     const pl = this.player;
     if (w.tick < eco.peaceUntil) return false;
     const targets = eco.buildings.filter((b) => b.alive && b.built && b.owner !== pl && b.def.light && !eco.defeated[b.owner] && !eco.attackBlocked(pl, b));
+    let best: { t: (typeof targets)[number]; count: number; held: number; odds: number } | null = null;
     for (const t of targets) {
       const pool = eco.attackersFor(pl, t).length;
       if (pool < 2) continue;
       for (let n = 2; n <= pool; n++) {
-        if (eco.attackOdds(pl, t, n) >= AI_LEVELS[this.level].odds) return w.command({ t: "attack", target: t.id, count: Math.min(pool, n + 1), player: pl }).ok;
+        const odds = eco.attackOdds(pl, t, n);
+        if (odds < AI_LEVELS[this.level].odds) continue;
+        const held = eco.defendersOf(t).length;
+        if (!best || held < best.held || (held === best.held && odds > best.odds)) best = { t, count: Math.min(pool, n + 1), held, odds };
+        break;
       }
     }
-    return false;
+    return best ? w.command({ t: "attack", target: best.t.id, count: best.count, player: pl }).ok : false;
+  }
+
+  /** Tools in demand for the buildings it has or is building, and their stock: set the toolsmith's priorities to match. */
+  private tools(w: World): void {
+    const eco = w.economy;
+    const pl = this.player;
+    const stock = eco.storageTotals(pl);
+    const need = new Map<string, number>();
+    for (const b of eco.buildings) if (b.alive && b.owner === pl && b.def.tool && (!b.built || b.worker < 0)) need.set(b.def.tool, (need.get(b.def.tool) ?? 0) + 1);
+    const prefs = eco.prefs[pl];
+    if (!prefs) return;
+    for (const t of TOOLS) {
+      const id = GOODS[t]?.id ?? "";
+      const have = stock[t] ?? 0;
+      const wanted = need.get(id) ?? 0;
+      // Short of a tool somebody is waiting for: make it first. Out of a basic tool: keep one in hand.
+      const value = wanted > have ? 1 : have < 1 ? 0.4 : 0.1;
+      if (Math.abs((prefs.tools[id] ?? 0) - value) > 0.05) w.command({ t: "toolprio", tool: id, value, player: pl });
+    }
+  }
+
+  /** Flags and roads that lead nowhere, and sites no road reaches: given a while, then cleared away. */
+  private readonly strays = new Map<string, number>();
+  private tidy(w: World): void {
+    const eco = w.economy;
+    const pl = this.player;
+    const keep = eco.buildings[eco.keeps[pl] ?? -1];
+    if (!keep) return;
+    const seen = new Set<string>();
+    const stale = (key: string) => {
+      seen.add(key);
+      const n = (this.strays.get(key) ?? 0) + 1;
+      this.strays.set(key, n);
+      return n >= 3;
+    };
+    for (const f of eco.flags) {
+      if (!f.alive || f.owner !== pl || f.building >= 0) continue;
+      const roads = f.roads.filter((r) => (eco.roads[r] as { alive: boolean }).alive);
+      if (roads.length === 1 && stale(`flag${f.id}`)) w.command({ t: "demolish", tile: f.tile, player: pl });
+    }
+    for (const b of eco.buildings) {
+      if (!b.alive || b.owner !== pl || b.built || b.def.storage) continue;
+      if (eco.route(keep.flag, b.flag).dist === Infinity && stale(`site${b.id}`)) w.command({ t: "demolish", tile: b.tile, player: pl });
+    }
+    for (const k of [...this.strays.keys()]) if (!seen.has(k)) this.strays.delete(k);
   }
 
   think(w: World): void {
@@ -53,7 +107,8 @@ export class AiBuilder {
     if (!this.started) {
       // Lighter garrisons than a cautious player: this rival would rather grow.
       this.started = true;
-      const [frontier, inland] = this.personality === "warden" ? [0.7, 0.4] : this.personality === "trader" ? [0.3, 0.15] : [0.4, 0.2];
+      // Wardens hold the border in full and the interior thin, as Settlers 2's AI does; the others keep lighter garrisons.
+      const [frontier, inland] = this.personality === "warden" ? [1, 0.25] : this.personality === "trader" ? [0.3, 0.15] : [0.4, 0.2];
       w.command({ t: "garrison", zone: "frontier", value: frontier, player: pl });
       w.command({ t: "garrison", zone: "near", value: (frontier + inland) / 2, player: pl });
       w.command({ t: "garrison", zone: "inland", value: inland, player: pl });
@@ -68,6 +123,8 @@ export class AiBuilder {
     this.thoughts++;
     if (this.thoughts % lv.every !== 0) return;
     if (this.thoughts % 6 === 3) this.talk(w);
+    if (this.thoughts % 4 === 1) this.tools(w);
+    if (this.thoughts % 10 === 5) this.tidy(w);
     // Wardens look for a fight often, Traders seldom, Builders hardly ever.
     const temper = this.personality === "warden" ? 3 : this.personality === "trader" ? 8 : 12;
     if (this.thoughts % temper === 0 && this.attack(w)) return;
@@ -119,12 +176,18 @@ export class AiBuilder {
     want(count("apiary") < 1 && count("orchard") > 0, near("apiary"));
     // A well (or more, as the settlement grows) against fire.
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
+    // A toolsmith once the first tools are out, so woodcutters and the rest can keep taking up work.
+    want(count("toolsmith") < 1 && count("sawmill") > 0 && count("quarry") > 0 && mine.length >= 8, near("toolsmith"));
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));
     want(count("butcher") < 1 && count("pasture") > 0, near("butcher"));
     // Temperament: Builders make their town pleasant; Wardens arm.
     want(this.personality === "builder" && count("flowerbed") < Math.floor(mine.length / 10), near("flowerbed"));
     want(this.personality === "builder" && count("bench") < Math.floor(mine.length / 14), near("bench"));
     want(this.personality === "warden" && count("toolsmith") > 0 && count("weaponsmith") < 1, near("weaponsmith"));
+    // Idle hands and no room to grow: more woodcutters and quarries clear the forest and rocks that box a
+    // settlement in, and give those hands work.
+    want(idle >= 6 && count("woodcutter") < 2 + Math.floor(idle / 8), near("woodcutter", Feature.Tree));
+    want(idle >= 6 && count("quarry") < 2 + Math.floor(idle / 12), near("quarry", Feature.Rock));
     want(lanterns < 3 + Math.floor(mine.length / 3), grow());
     attempt(wants, lv.wants);
   }

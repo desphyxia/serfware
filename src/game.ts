@@ -263,6 +263,10 @@ export class Game {
         this.command({ t: "storeMode", building, mode });
         this.info.refresh();
       },
+      storeGood: (building, good, mode) => {
+        this.command({ t: "storeGood", building, good, mode });
+        this.info.refresh();
+      },
       attack: (target, count, order) => {
         if (this.command({ t: "attack", target, count, order })) this.toasts.show(`${count} warden${count === 1 ? "" : "s"} set out.`, "good");
       },
