@@ -28,6 +28,10 @@ export interface MenuHost {
   startSession(lobby: HostLobby, mode: PlayMode, scenario?: string): void;
   /** Start a scenario (tutorial, chapter, handmade) alone. */
   playScenario(id: string): void;
+  /** Presentation: watch this game again fast, photo mode, skyship letters. */
+  timelapse(): void;
+  photo(): void;
+  letters(): void;
   /** The Create tab: painter, scenario editor, mods, Workshop. */
   create: CreateHost;
   joined(lobby: JoinLobby): void;
@@ -121,6 +125,8 @@ export class GameMenu extends Panel {
         h("button", { class: "btn", onclick: () => area.value.trim() && this.host.importText(area.value) }, "Load pasted"),
       ),
       area,
+      h("h3", { class: "sub" }, "Presentation"),
+      h("div", { class: "btn-row" }, h("button", { class: "btn", onclick: () => this.host.timelapse() }, "Time-lapse"), h("button", { class: "btn", onclick: () => this.host.photo() }, "Photo mode (F2)"), h("button", { class: "btn", onclick: () => this.host.letters() }, "Letters (F4)")),
       h("h3", { class: "sub" }, "Saved games (this browser)"),
       this.saveList,
       h("p", { class: "hint" }, "Saves store the seed and every command, and replay them on load. An autosave is kept every two minutes."),

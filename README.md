@@ -238,12 +238,35 @@ The game menu's Create tab holds the creative tools:
 Creations are kept in this browser and exported as `.json` files; the Steam build shares them on
 the Workshop (see docs/STEAM.md).
 
+## Photo mode, time-lapse, postcards and letters
+
+**Photo mode (F2).** Frames the view and hides the interface. Blur (depth of field around the
+camera's focus), a time-of-day slider (moves the light up to 12 hours from the world clock) and
+seven filters (vivid, faded, noir, sepia, golden hour, frost). Everything here is only how the world
+is drawn: the simulation and the clock are untouched, so it is safe in multiplayer. **Take photo**
+saves a PNG; **Make postcard** puts the same picture on a paper card with the seed, your line (or the
+day and season) and a stamp.
+
+**Time-lapse** (Game menu, Saves tab). Plays the current solo game again from its first tick at
+×8 to ×2048 from the command log alone, with a progress bar, restart, an optional slow camera turn and
+the photo tools. When it reaches the end it compares its checksum with the game's, and says so if this
+build plays the log differently. Nobody gives orders in it. Multiplayer games are made into a
+time-lapse by saving them and loading the save first.
+
+**Skyship letters (F4).** Write a note, with or without a small picture of your settlement, and the
+game gives you a one-line code (or JSON) to hand to someone however you like. Pasting a code someone
+sent you and pressing *Receive* adds it to your Letters, with a button to visit their world's seed.
+There is no server: letters travel like saves do, and a received letter is cut to size and its
+picture checked before it is kept.
+
 ## Keys
 
 | Key | Action |
 |-----|--------|
 | Esc | Settings |
 | F3 or ` | Debug dialog |
+| F2 | Photo mode |
+| F4 | Skyship letters |
 | F8 | Report a bug (copyable report) |
 | Space | Pause / resume |
 | M | Game menu (saves, multiplayer) |

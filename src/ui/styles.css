@@ -1056,3 +1056,45 @@ body.painting .buildbar-wrap, body.painting .stockbar, body.painting .objectives
 @media (max-width: 640px) {
   .painter { top: auto; bottom: 8px; right: 8px; left: 8px; width: auto; max-height: 45vh; overflow-y: auto; }
 }
+
+/* ---------- Presentation: photo mode, letters, time-lapse ---------- */
+body.photo-clean #app > :not(canvas):not(.photo-panel) {
+  visibility: hidden;
+}
+.photo-panel {
+  top: auto;
+  bottom: 16px;
+  right: 16px;
+  opacity: 0.92;
+}
+.timelapse {
+  position: absolute;
+  left: 50%;
+  top: 60px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  z-index: 6;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+}
+.timelapse input[type="range"] {
+  width: 220px;
+}
+.letter {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+}
+.letter img {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 6px 0;
+}
+.timelapse[hidden] { display: none; }

@@ -270,3 +270,83 @@ export function resumeWorld(seed: string, mode: SessionMode, players: readonly S
   while (i < cmds.length && (cmds[i] as LoggedCommand).tick === world.tick) world.command((cmds[i++] as LoggedCommand).cmd);
   return world;
 }
+
+/**
+ * A time-lapse: a saved game played again from its first tick at any speed, from the command log
+ * alone. Nobody gives orders in it; the world is rebuilt exactly as the save was, so it ends in the
+ * same state (the checksum is compared when it reaches the end).
+ */
+export class ReplaySession extends Session {
+  readonly save: SaveFile;
+  private next = 0;
+  private startTick = 0;
+  private readonly opts: WorldOptions;
+  private readonly cmds: LoggedCommand[];
+  /** Whether the replay reached the end of the save with the same checksum. */
+  finished: boolean | null = null;
+
+  constructor(save: SaveFile, opts: WorldOptions = {}) {
+    const world = ReplaySession.fresh(save, opts);
+    super(world, { mode: "solo", seed: save.seed, players: [{ id: 0, name: "Replay", spectator: true }], scenario: save.scenario, creative: save.creative }, 0);
+    this.save = save;
+    this.opts = opts;
+    this.cmds = [...save.commands].sort((a, b) => a.tick - b.tick);
+    this.startTick = world.tick;
+    this.speed = 64;
+  }
+
+  private static fresh(save: SaveFile, opts: WorldOptions): World {
+    if (save.format !== "seedfall-save" || save.version !== 1) throw new Error("Not a Seedfall save file.");
+    const made = creativeOptions(save.creative);
+    return new World(save.seed, { ...(save.scenario ? scenarioWorld(save.scenario)?.opts : {}), ...made, ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest", aiLevel: save.aiLevel ?? "normal", teams: save.teams, goal: save.goal ?? "conquest" });
+  }
+
+  /** Progress from 0 to 1. */
+  get progress(): number {
+    const span = this.save.tick - this.startTick;
+    return span > 0 ? Math.min(1, Math.max(0, (this.world.tick - this.startTick) / span)) : 1;
+  }
+
+  /** Start over from the first tick. */
+  restart(): void {
+    this.world = ReplaySession.fresh(this.save, this.opts);
+    this.next = 0;
+    this.finished = null;
+    this.acc = 0;
+  }
+
+  submit(): CommandResult {
+    return { ok: false, reason: "A time-lapse only watches." };
+  }
+
+  setSpeed(value: number): void {
+    this.speed = value;
+  }
+
+  /** Steps for the elapsed time at the replay speed, but never longer than a frame's budget of real time. */
+  advance(ms: number): number {
+    if (this.world.tick >= this.save.tick) return 0;
+    this.acc += ms * this.speed;
+    const t0 = typeof performance !== "undefined" ? performance.now() : 0;
+    let steps = 0;
+    while (this.acc >= TICK_MS && this.world.tick < this.save.tick) {
+      this.applyDue();
+      this.stepWorld();
+      this.acc -= TICK_MS;
+      steps++;
+      if ((steps & 15) === 0 && typeof performance !== "undefined" && performance.now() - t0 > 12) {
+        this.acc = Math.min(this.acc, TICK_MS * 4);
+        break;
+      }
+    }
+    if (this.world.tick >= this.save.tick && this.finished === null) {
+      this.applyDue();
+      this.finished = this.world.checksum() === this.save.checksum;
+    }
+    return steps;
+  }
+
+  private applyDue(): void {
+    while (this.next < this.cmds.length && (this.cmds[this.next] as LoggedCommand).tick <= this.world.tick) this.world.command((this.cmds[this.next++] as LoggedCommand).cmd);
+  }
+}
