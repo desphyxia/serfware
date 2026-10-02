@@ -39,6 +39,16 @@ try {
   await page.keyboard.press("F3");
   await page.locator("#debug").waitFor({ state: "visible" });
   await page.waitForTimeout(600);
+  // Presentation: photo mode and letters open and close, and the interface hides while photographing.
+  await page.keyboard.press("F2");
+  await page.locator("#photo").waitFor({ state: "visible" });
+  if (!(await page.evaluate(() => document.body.classList.contains("photo-clean")))) throw new Error("Photo mode did not hide the interface");
+  await page.keyboard.press("F2");
+  await page.locator("#photo").waitFor({ state: "hidden" });
+  await page.keyboard.press("F4");
+  await page.locator("#letters").waitFor({ state: "visible" });
+  await page.keyboard.press("F4");
+  await page.locator("#letters").waitFor({ state: "hidden" });
 
 
   // Draw with the settings the dialogs left behind.

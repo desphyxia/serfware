@@ -27,7 +27,7 @@ import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 import { planetSeed, World, type WorldCommand } from "./sim/world";
 import { MEMORIAL, type Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
-import { makeSave, replaySave, SoloSession, type SaveFile, type Session } from "./net/session";
+import { makeSave, replaySave, ReplaySession, SoloSession, type SaveFile, type Session } from "./net/session";
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
 import { demoSettlement, placeConnected, placeOn, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
@@ -36,6 +36,7 @@ import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
+import { FILTERS, LettersPanel, newPhotoState, PhotoPanel, TimelapseBar } from "./ui/presentation";
 import { DiplomacyPanel } from "./ui/diplomacy";
 import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
 import { scenarioWorld } from "./sim/scenario/campaign";
@@ -111,6 +112,15 @@ export class Game {
   }
   private readonly systemMap: SystemMap;
   private readonly almanac: AlmanacPanel;
+  /** Photo mode, letters and the time-lapse bar (see ui/presentation). */
+  private readonly photo = newPhotoState();
+  private readonly photoPanel: PhotoPanel;
+  private readonly lettersPanel: LettersPanel;
+  private readonly timelapseBar: TimelapseBar;
+  /** The game to go back to while a time-lapse plays. */
+  private timelapseFrom: Session | null = null;
+  private orbiting = false;
+  private pendingCapture: ((c: HTMLCanvasElement) => void) | null = null;
   private readonly diplomacy: DiplomacyPanel;
   private readonly objectives = new ObjectivesPanel();
   private readonly story = new StoryPanel();
@@ -324,6 +334,26 @@ export class Game {
       () => this.world.economy,
       () => this.session.player,
     );
+    const presentation = {
+      state: this.photo,
+      capture: () => new Promise<HTMLCanvasElement>((resolve) => (this.pendingCapture = resolve)),
+      context: () => {
+        const d = this.world.localDay(this.focusLon());
+        return { seed: this.world.seed, day: d.day, player: this.world.economy.names[this.session.player] ?? "A settler", season: ["spring", "summer", "autumn", "winter"][Math.floor(this.world.climate.yearPhase(this.world.tick) * 4) % 4] as string };
+      },
+      changed: () => this.applyPhoto(),
+      notify: (text: string, kind?: "info" | "warn" | "good") => this.toasts.show(text, kind),
+    };
+    this.photoPanel = new PhotoPanel(presentation);
+    this.lettersPanel = new LettersPanel(presentation, (seed) => void this.newWorld(seed));
+    this.timelapseBar = new TimelapseBar({
+      speeds: [8, 32, 128, 512, 2048],
+      setSpeed: (v) => (this.session.speed = v),
+      restart: () => (this.session instanceof ReplaySession ? this.restartTimelapse() : undefined),
+      exit: () => this.endTimelapse(),
+      orbit: (on) => (this.orbiting = on),
+      photo: () => this.photoPanel.show(),
+    });
     this.systemMap = new SystemMap({
       home: () => this.session.world,
       player: () => this.session.player,
@@ -351,6 +381,9 @@ export class Game {
         playScenario: (id) => this.playScenario(id),
         notify: (text, kind) => this.toasts.show(text, kind),
       },
+      timelapse: () => this.startTimelapse(),
+      photo: () => (this.menu.hide(), this.photoPanel.show()),
+      letters: () => (this.menu.hide(), this.lettersPanel.show()),
       joined: (lobby) => this.watchJoin(lobby),
       notify: (text, kind) => this.toasts.show(text, kind),
     });
@@ -403,6 +436,9 @@ export class Game {
       this.systemMap.root,
       this.almanac.root,
       this.diplomacy.root,
+      this.photoPanel.root,
+      this.lettersPanel.root,
+      this.timelapseBar.root,
       this.objectives.root,
       this.story.root,
       this.scenarioEditor.root,
@@ -1996,6 +2032,12 @@ export class Game {
       if (e.key === "F3" || e.key === "`") {
         e.preventDefault();
         this.debug.toggle();
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        this.photoPanel.toggle();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        this.lettersPanel.toggle();
       } else if (e.key === "F8") {
         e.preventDefault();
         this.report.show();
@@ -2033,6 +2075,9 @@ export class Game {
     else if (this.systemMap.visible) this.systemMap.hide();
     else if (this.almanac.visible) this.almanac.hide();
     else if (this.diplomacy.visible) this.diplomacy.hide();
+    else if (this.photoPanel.visible) this.photoPanel.hide();
+    else if (this.lettersPanel.visible) this.lettersPanel.hide();
+    else if (this.timelapseFrom) this.endTimelapse();
     else this.settingsPanel.toggle();
   }
 
@@ -2267,6 +2312,22 @@ export class Game {
     }
     this.view.updateTerrain(this.camera.position);
     this.gfx.render();
+    if (this.pendingCapture) {
+      // Copy the frame while it is still on the canvas.
+      const c = document.createElement("canvas");
+      c.width = this.gfx.canvas.width;
+      c.height = this.gfx.canvas.height;
+      c.getContext("2d")?.drawImage(this.gfx.canvas, 0, 0);
+      const done = this.pendingCapture;
+      this.pendingCapture = null;
+      done(c);
+    }
+    if (this.timelapseFrom && this.session instanceof ReplaySession) {
+      const r = this.session;
+      const day = this.world.day().day;
+      this.timelapseBar.update(r.progress, r.finished === null ? `day ${day}` : r.finished ? `day ${day} · the end` : `day ${day} · this build plays it differently`);
+      if (this.orbiting) this.cam.rotate(0.12 * (dt / 1000));
+    }
 
     const day = this.world.localDay(this.focusLon());
     const where =
@@ -2309,11 +2370,65 @@ export class Game {
     const dofOn = this.settings.get().graphics.dof;
     GRADE.dofAmount.value = dofOn ? 1 - THREE.MathUtils.smoothstep(this.cam.distance, 10, 24) : 0;
     GRADE.dofFocus.value = this.cam.distance;
+    // Not set by the time-of-day grade above, so put the base values back every frame.
+    GRADE.contrast.value = 1.06;
+    GRADE.vignette.value = 0.22;
+    if (this.photo.open) {
+      GRADE.dofAmount.value = this.photo.dof;
+      const f = FILTERS[this.photo.filter];
+      GRADE.saturation.value *= f.saturation;
+      GRADE.contrast.value = 1.06 * f.contrast;
+      GRADE.exposure.value *= f.exposure;
+      GRADE.vignette.value = 0.22 + f.vignette;
+      GRADE.highlightTint.value.multiply(new THREE.Color(f.tint[0], f.tint[1], f.tint[2]));
+    }
+  }
+
+  /** Photo mode changed: show or hide the interface, and make sure the blur pass exists. */
+  private applyPhoto(): void {
+    document.body.classList.toggle("photo-clean", this.photo.open && this.photo.clean);
+    this.gfx.apply({ ...this.settings.get().graphics, dof: this.settings.get().graphics.dof || (this.photo.open && this.photo.dof > 0) });
+  }
+
+  /** Watch the game so far again, fast, from its command log (solo games and loaded saves). */
+  startTimelapse(): void {
+    if (this.timelapseFrom) return;
+    if (this.session.info.mode !== "solo" || this.session instanceof ReplaySession) {
+      this.toasts.show("A time-lapse can be made from a solo game. Save the multiplayer game and load it first.", "warn");
+      return;
+    }
+    if (this.session.log.length === 0) {
+      this.toasts.show("Nothing has happened yet to look back on.", "info");
+      return;
+    }
+    const save = makeSave(this.session, this.world.seed, BUILD.id);
+    this.menu.hide();
+    this.timelapseFrom = this.session;
+    const replay = new ReplaySession(save, this.mapOptions ? { map: this.mapOptions } : {});
+    this.useSession(replay, true);
+    this.timelapseBar.show(true);
+    this.session.speed = 128;
+  }
+
+  private restartTimelapse(): void {
+    if (!(this.session instanceof ReplaySession)) return;
+    this.session.restart();
+    this.useSession(this.session, true);
+  }
+
+  endTimelapse(): void {
+    const back = this.timelapseFrom;
+    if (!back) return;
+    this.timelapseFrom = null;
+    this.orbiting = false;
+    this.timelapseBar.show(false);
+    this.useSession(back, true);
   }
 
   private updateEnvironment(now: number, dt: number): void {
     const p = this.world.planet.params;
-    const f = this.world.day().fraction;
+    let f = this.world.day().fraction + (this.photo.open ? this.photo.hourShift : 0) / 24;
+    f -= Math.floor(f);
     // The subsolar point moves west as the planet turns east, so local noon is at lon = -theta.
     // A tidally locked planet keeps its sun fixed over longitude 0 on the equator.
     const theta = p.locked ? 0 : -(f - 0.5) * Math.PI * 2;

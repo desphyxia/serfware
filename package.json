@@ -14,6 +14,7 @@
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
     "shots": "node scripts/screenshots.mjs",
+    "presentation": "node scripts/presentation-shots.mjs",
     "perf": "node scripts/perf.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build:single && npm run smoke && npm run touch-test && npm run gpu-limits && npm run mp-test",
     "signal": "node scripts/signal.mjs",
