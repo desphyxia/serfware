@@ -1772,7 +1772,7 @@ export class Economy {
       let type = -1;
       for (let t = 0; t < GOODS.length; t++)
         if ((b.stock[t] as number) > 0 && this.storeSends(b, t) && (type < 0 || this.transportRank(b.owner, t) < this.transportRank(b.owner, type))) type = t;
-      let to = type >= 0 ? this.storeFor(b.owner, b.flag, type, b) : null;
+      const to = type >= 0 ? this.storeFor(b.owner, b.flag, type, b) : null;
       // ...else what it collects from the other stores.
       if (!to) {
         type = -1;
