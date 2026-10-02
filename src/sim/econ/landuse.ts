@@ -77,6 +77,11 @@ export const FIELD_GROWTH_TICKS = 450;
 export const SIGN_TICKS = 6000;
 
 export const TREE_MATURE = 4;
+/** Lantern buildings stand at least this many steps apart. */
+export const LANTERN_GAP = 3;
+/** Ground steeper than this must be levelled before a large building goes up (and no steeper than MAX). */
+export const LEVEL_SLOPE = 1.3;
+export const MAX_LEVEL_SLOPE = 2.6;
 /** Ticks between growth stages of a planted tree (about two in-game hours each). */
 export const TREE_GROWTH_TICKS = 600;
 
@@ -365,6 +370,10 @@ export class LandUse {
 
   /** Building-specific placement: terrain rules on top of canBuild. */
   canBuildDef(t: number, flagTile: number, def: BuildingDef, owner = 0): boolean {
+    // Lantern buildings keep their distance from each other, whoever's they are (as in Serf City,
+    // where military buildings can't stand within two steps of each other): they claim land
+    // outward, not in heaps.
+    if (def.slots && this.lanternAt && this.ring(t, LANTERN_GAP - 1).some((n) => this.use[n] === Use.Building && this.lanternAt?.(n))) return false;
     if (def.terrain === "mountain") {
       if (!this.isMountain(t)) return false;
       return this.canBuild(t, flagTile, !!def.large, owner, 3.2);
@@ -376,7 +385,15 @@ export class LandUse {
     if (def.terrain === "skyreef" && this.region[t] !== Region.Skyreef && !this.ring(t, 2).some((m) => this.region[m] === Region.Skyreef)) return false;
     // Treehouses go up an ancient giant (which stays standing).
     if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
-    return this.canBuild(t, flagTile, !!def.large, owner);
+    // Large buildings may go on a slope the builders can level (see LEVEL_SLOPE).
+    return this.canBuild(t, flagTile, !!def.large, owner, def.large ? MAX_LEVEL_SLOPE : 1.3);
+  }
+
+  /** How much ground must be dug away before a building of this size can go up here (0: none). */
+  levelWork(t: number, large: boolean): number {
+    if (!large) return 0;
+    const s = this.slope(t);
+    return s > LEVEL_SLOPE ? Math.max(1, Math.round((s - LEVEL_SLOPE + 0.3) * 4)) : 0;
   }
 
   isLand(t: number): boolean {
@@ -444,7 +461,9 @@ export class LandUse {
     if (!grid.neighborsOf(t).includes(flagTile)) return false;
     if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 : this.canPlaceFlag(flagTile, owner))) return false;
     for (const n of grid.neighborsOf(t)) {
-      if (this.use[n] === Use.Building) return false;
+      // Small buildings may stand shoulder to shoulder (as in Serf City); a large one needs room
+      // around it, and so does anything next to a large one.
+      if (this.use[n] === Use.Building && (large || this.largeAt?.(n) !== false)) return false;
       if (large && n !== flagTile && (this.use[n] !== Use.Free || this.feature[n] === Feature.Rock)) return false;
     }
     return true;
@@ -453,6 +472,10 @@ export class LandUse {
   /** Neighbour of `t` best suited as its flag: an existing flag first, else the flattest valid spot. */
   /** Set by the economy: does the flag on this tile already serve a building? */
   flagServes: ((tile: number) => boolean) | null = null;
+  /** Set by the economy: is the building on this tile a large one (the Hearthship included)? */
+  largeAt: ((tile: number) => boolean) | null = null;
+  /** Set by the economy: is the building on this tile a lantern building (it holds wardens)? */
+  lanternAt: ((tile: number) => boolean) | null = null;
 
   bestFlagTile(t: number, owner = 0): number {
     const grid = this.planet.grid;

@@ -43,6 +43,8 @@ export const FLAG_CAPACITY = 8;
 const TICKS_PER_TILE_ROAD = 11;
 const TICKS_PER_TILE_OFFROAD = 16;
 const BUILD_TICKS_PER_MATERIAL = 45;
+/** Ticks to dig away one unit of ground (see LandUse.levelWork). */
+const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
 const MAX_ROAD_TILES = 24;
 /**
@@ -129,6 +131,8 @@ export interface Building {
   lit: boolean;
   /** Lantern buildings: close to another player's border. */
   frontier: boolean;
+  /** Ground still to be dug away before building can start (large buildings on a slope). */
+  dig: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
   stranded: number;
   /** Attackers waiting at the door, and the duel being fought there. */
@@ -348,6 +352,8 @@ export class Economy {
     });
     land.aquifer = this.ecology.aquifer;
     land.flagServes = (t) => (this.flagAt(t)?.building ?? -1) >= 0;
+    land.largeAt = (t) => !!this.buildings[land.ref[t] as number]?.def.large;
+    land.lanternAt = (t) => !!this.buildings[land.ref[t] as number]?.def.slots;
     this.culture = new Culture(this);
     this.adversity = new Adversity(this);
     this.diplomacy = new Diplomacy(this);
@@ -956,6 +962,14 @@ export class Economy {
       case Use.Flag: {
         const f = this.flags[ref] as Flag;
         if (this.keeps.includes(f.building)) return { ok: false, reason: "The Hearthship needs its flag." };
+        if (f.building >= 0) {
+          this.removeFlag(f);
+          return { ok: true };
+        }
+        const roads = f.roads.map((r) => this.roads[r] as Road).filter((r) => r.alive);
+        // A junction holds a network together: take its roads away first.
+        if (roads.length >= 3) return { ok: false, reason: `This flag joins ${roads.length} roads. Demolish the roads first.` };
+        if (roads.length === 2) return this.joinAtFlag(f, roads[0] as Road, roads[1] as Road);
         this.removeFlag(f);
         return { ok: true };
       }
@@ -1082,6 +1096,7 @@ export class Economy {
       garrison: [],
       lit: false,
       frontier: false,
+      dig: 0,
       stranded: -1,
       siege: [],
       duel: null,
@@ -1096,6 +1111,7 @@ export class Economy {
     this.buildings.push(b);
     (this.flags[flagId] as Flag).building = b.id;
     const land = this.land;
+    b.dig = def.buildable === false ? 0 : land.levelWork(tile, !!def.large);
     land.use[tile] = Use.Building;
     land.ref[tile] = b.id;
     // Everything on the ground is cleared, except the giant a treehouse is built into.
@@ -1187,6 +1203,28 @@ export class Economy {
     if (s.carryGood >= 0) this.dropCarriedGoodAt(s, s.roadIdx < road.tiles.length / 2 ? a : b);
     this.releaseReservations(s);
     this.sendHome(s);
+  }
+
+  /**
+   * Take away a flag that two roads pass through, and join the roads into one (as in Serf City):
+   * what lay on the flag is lost, and the new road gets a carrier of its own.
+   */
+  private joinAtFlag(f: Flag, r1: Road, r2: Road): CommandResult {
+    const a = r1.a === f.id ? r1.b : r1.a;
+    const b = r2.a === f.id ? r2.b : r2.a;
+    if (a === b) return { ok: false, reason: "Both roads lead to the same flag. Demolish one of them first." };
+    const fa = this.flags[a] as Flag;
+    if (fa.roads.some((r) => this.roads[r]?.alive && ((this.roads[r] as Road).a === b || (this.roads[r] as Road).b === b))) return { ok: false, reason: "Those flags are already joined by another road. Demolish one of the roads first." };
+    // The joined road, from a to b, through the flag's tile.
+    const toFlag = r1.b === f.id ? [...r1.tiles] : [...r1.tiles].reverse();
+    const fromFlag = r2.a === f.id ? [...r2.tiles] : [...r2.tiles].reverse();
+    const tiles = [...toFlag, ...fromFlag.slice(1)];
+    const owner = f.owner;
+    this.removeRoad(r1);
+    this.removeRoad(r2);
+    this.removeFlag(f);
+    this.createRoad(a, b, tiles, owner);
+    return { ok: true };
   }
 
   private removeFlag(f: Flag): void {
@@ -1308,6 +1346,8 @@ export class Economy {
   need(b: Building, type: number): number {
     if (!b.alive) return 0;
     if (!b.built) {
+      // Nothing is delivered until the ground is level.
+      if (b.dig > 0) return 0;
       // Skystone builds like stone: a site short of stone takes either, counted together.
       const stone = goodId("stone");
       const sky = goodId("skystone");
@@ -2749,6 +2789,19 @@ export class Economy {
       }
       return;
     }
+    // First the ground is dug level (large buildings on a slope), then the building goes up.
+    if (b.dig > 0) {
+      s.timer++;
+      if (s.timer >= DIG_TICKS * this.speedFactor(s, "builder")) {
+        s.timer = 0;
+        b.dig--;
+        if (b.dig === 0) {
+          this.structureVersion++;
+          this.notify(b.owner, `The ground for the ${b.def.name.toLowerCase()} is level.`);
+        }
+      }
+      return;
+    }
     // Work while materials are on site.
     const onSite = b.delivered.reduce((a, v) => a + v, 0) - b.consumed;
     if (onSite > 0) {
@@ -3962,7 +4015,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);
     let vents = 0;

@@ -383,7 +383,8 @@ export class WorldView {
     if (eco.structureVersion === this.padKey) return;
     this.padKey = eco.structureVersion;
     const pads: Pad[] = [];
-    for (const b of eco.buildings) if (b.alive) pads.push({ tile: b.tile, radius: b.def.large ? 0.55 : 0.42 });
+    // Ground under a site is levelled once the builders have dug it flat.
+    for (const b of eco.buildings) if (b.alive && b.dig <= 0) pads.push({ tile: b.tile, radius: b.def.large ? 0.55 : 0.42 });
     for (const f of eco.flags) if (f.alive) pads.push({ tile: f.tile, radius: 0.2 });
     const edges: [number, number][] = [];
     for (const r of eco.roads) if (r.alive) for (let i = 0; i < r.tiles.length - 1; i++) edges.push([r.tiles[i] as number, r.tiles[i + 1] as number]);
