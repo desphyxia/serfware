@@ -61,6 +61,12 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Starting ore
+
+Every start has coal, iron and granite within 10 steps of its Hearthship and gold within 14. Where
+the generated land lacks a kind, a small deposit is laid in the nearest free hills. (A start with
+no hills in reach has none to give.)
+
 ## Wardens
 
 Lantern buildings are staffed by the strongest free warden (rank first, then skill, then

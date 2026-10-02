@@ -132,6 +132,7 @@ export class World implements WorldHost {
     this.economy.goal = opts.goal ?? "conquest";
     const fair = (opts.fairStarts ?? true) && this.players > 1;
     if (!bare) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p, fair && p > 0 ? this.economy.startScores[0] : undefined);
+    if (!bare && !opts.barren) this.economy.guaranteeOre();
     if (fair && !bare) this.economy.evenStarts();
     this.economy.diplomacy.sync();
     for (let p = this.humans; p < this.players; p++) {
