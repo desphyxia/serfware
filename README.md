@@ -121,6 +121,12 @@ carrier. A ferry works as a road for every purpose: builders, wardens and goods 
 **Upgrade to a harbour** (4 planks, 3 stone) and its ferries reach 14 steps. Taking a quay down
 ends its ferries. Boats show only on the water; nothing is drawn or painted on the sea floor.
 
+**Footholds.** A quay may also be placed on free shore outside your borders, if a finished quay's
+ferry can reach it. It costs the ferry's 3 planks up front, the ferry is made for you, and a builder
+and the materials cross to raise it. Once standing, a quay claims free ground 3 tiles around it
+(a harbour 4), with no warden: enough to build the first road, flags and woodcutters. Rival ground
+is never taken this way.
+
 ## Stores
 
 A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):

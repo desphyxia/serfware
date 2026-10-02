@@ -39,6 +39,8 @@ export interface BuildingDef {
   sight?: number;
   /** Quays and harbours: the longest ferry link from here, in steps of open water. */
   ferry?: number;
+  /** Quays and harbours: the radius of free land around them they claim once built, without wardens. */
+  claim?: number;
   workTicks?: number;
   restTicks?: number;
   /** A good id, or "tool" for the toolsmith (chosen by tool priority). */

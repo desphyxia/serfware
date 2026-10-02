@@ -405,6 +405,7 @@ export class Economy {
     land.aquifer = this.ecology.aquifer;
     land.flagServes = (t) => (this.flagAt(t)?.building ?? -1) >= 0;
     land.largeAt = (t) => !!this.buildings[land.ref[t] as number]?.def.large;
+    land.footholdAt = (flagTile, owner) => this.footholdSource(flagTile, owner) !== undefined;
     land.lanternAt = (t) => !!this.buildings[land.ref[t] as number]?.def.slots;
     this.culture = new Culture(this);
     this.adversity = new Adversity(this);
@@ -1028,10 +1029,10 @@ export class Economy {
     }
   }
 
-  private cmdFlag(tile: number, p: number): CommandResult {
+  private cmdFlag(tile: number, p: number, foothold = false): CommandResult {
     const land = this.land;
     if (land.use[tile] === Use.Flag) return { ok: false, reason: "There is already a flag here." };
-    if (!land.canPlaceFlag(tile, p)) return { ok: false, reason: "A flag can't go here." };
+    if (!land.canPlaceFlag(tile, p, foothold)) return { ok: false, reason: "A flag can't go here." };
     if (land.use[tile] === Use.Road) {
       if ((this.roads[land.ref[tile] as number] as Road).owner !== p) return { ok: false, reason: "That road isn't yours." };
       return this.splitRoad(tile);
@@ -1095,13 +1096,22 @@ export class Economy {
     if (!land.canBuildDef(tile, flagTile, def, p)) return { ok: false, reason: this.placementHint(def) };
     const existing = this.flagAt(flagTile);
     if (existing && existing.building >= 0) return { ok: false, reason: "That flag already serves a building." };
+    // A foothold on free ground: a ferry from the nearest finished quay goes with it.
+    const foothold = def.ferry !== undefined && land.territory[tile] === 0;
+    let source: Building | undefined;
+    if (foothold) {
+      source = this.footholdSource(flagTile, p);
+      if (!source) return { ok: false, reason: this.placementHint(def) };
+      if ((this.storageTotals(p)[goodId("plank")] as number) < FERRY_COST.plank) return { ok: false, reason: "A foothold needs a ferry, and a ferry needs a boat: 3 planks in your stores." };
+    }
     let flag = existing;
     if (!flag) {
-      const r = this.cmdFlag(flagTile, p);
+      const r = this.cmdFlag(flagTile, p, foothold);
       if (!r.ok) return r;
       flag = this.flagAt(flagTile) as Flag;
     }
-    this.createBuilding(type, tile, flag.id, p);
+    const site = this.createBuilding(type, tile, flag.id, p);
+    if (source) this.cmdFerry(p, source.id, site.id);
     return { ok: true };
   }
 
@@ -1158,6 +1168,21 @@ export class Economy {
       }
     }
     return null;
+  }
+
+  /** The finished quay of the player whose ferry reaches a flag tile (the nearest one), if any. */
+  footholdSource(flagTile: number, p: number): Building | undefined {
+    let best: Building | undefined;
+    let bestSteps = Infinity;
+    for (const q of this.buildings) {
+      if (!q.alive || !q.built || q.owner !== p || q.def.ferry === undefined) continue;
+      const r = this.ferryRoute((this.flags[q.flag] as Flag).tile, flagTile, q.def.ferry);
+      if (r && r.steps < bestSteps) {
+        bestSteps = r.steps;
+        best = q;
+      }
+    }
+    return best;
   }
 
   /** Quays (built or begun) a ferry from `b` could reach, nearest first, with the steps of water. */
@@ -1551,6 +1576,7 @@ export class Economy {
     // Goods heading here need a new destination.
     for (const g of this.goods) if (g.alive && g.dest === b.id) g.dest = -1;
     if (b.def.sight) this.updateVision();
+    if (b.def.claim) this.territoryDirty = true;
     this.structureVersion++;
     land.useVersion++;
     this.rerouteAll();
@@ -2798,6 +2824,17 @@ export class Economy {
         }
       });
     }
+    // A finished quay claims a little free ground around it, a foothold with no warden in it.
+    for (const b of this.buildings) {
+      if (!b.alive || !b.built || !b.def.claim || b.stranded >= 0) continue;
+      this.flood(b.tile, b.def.claim, (t, d) => {
+        if (land.territory[t] === b.owner + 1) held[t] = 1;
+        if (d < (bestD[t] as number)) {
+          bestD[t] = d;
+          bestO[t] = b.owner + 1;
+        }
+      });
+    }
     const lost: number[] = [];
     let changed = false;
     for (let t = 0; t < n; t++) {
@@ -3247,6 +3284,7 @@ export class Economy {
           this.notify(b.owner, `${b.def.name} finished.`);
           this.structureVersion++;
           if (b.def.sight) this.updateVision();
+          if (b.def.claim) this.territoryDirty = true;
           this.sendHome(s);
         }
       }

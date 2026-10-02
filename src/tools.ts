@@ -85,8 +85,9 @@ export class Tools {
       if (this.tool === "flag" || this.isBuilding(this.tool)) {
         const def = this.isBuilding(this.tool) ? BUILDINGS[BUILDING_INDEX.get(this.tool) as number] : undefined;
         for (let i = 0; i < land.territory.length; i++) {
-          if (land.territory[i] !== pl + 1) continue;
-          if (def ? land.canBuildDef(i, land.bestFlagTile(i, pl), def, pl) : land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
+          const free = def?.ferry !== undefined && land.territory[i] === 0;
+          if (land.territory[i] !== pl + 1 && !free) continue;
+          if (def ? land.canBuildDef(i, land.bestFlagTile(i, pl, free), def, pl) : land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
         }
       } else if (this.tool === "hedge") {
         for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && hedgeable(land, i)) tiles.push(i);
@@ -100,10 +101,10 @@ export class Tools {
     if (this.tool === "flag") {
       ov.setGhost("flag", t, -1, land.canPlaceFlag(t, pl));
     } else if (this.isBuilding(this.tool)) {
-      const flagTile = land.bestFlagTile(t, pl);
+      const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+      const flagTile = land.bestFlagTile(t, pl, def?.ferry !== undefined && land.territory[t] === 0);
       const eco = w.economy;
       const existing = eco.flagAt(flagTile);
-      const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
       const ok = flagTile >= 0 && !!def && land.canBuildDef(t, flagTile, def, pl) && !(existing && existing.building >= 0);
       ov.setGhost(this.tool, t, flagTile, ok);
     } else if (this.tool === "road" && this.roadStart >= 0 && t !== this.roadStart) {
@@ -199,7 +200,8 @@ export class Tools {
       }
       default: {
         if (!this.isBuilding(this.tool)) return;
-        const flagTile = land.bestFlagTile(t, pl);
+        const bdef = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+        const flagTile = land.bestFlagTile(t, pl, bdef?.ferry !== undefined && land.territory[t] === 0);
         if (flagTile < 0) {
           this.host.notify("No room for this building's flag here.", "warn");
           return;
