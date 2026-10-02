@@ -183,7 +183,7 @@ export class EconomyPanel extends Panel {
     }
     if (!full) {
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[data-g]")) {
-        if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "inland"]);
+        if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "near" | "inland"] ?? (prefs.garrison.frontier + prefs.garrison.inland) / 2);
       }
       // Only update numbers of sliders not being dragged.
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[type=range]")) {
@@ -211,15 +211,16 @@ export class EconomyPanel extends Panel {
         ]),
       );
     } else {
-      const garrison = (zone: "frontier" | "inland", label: string) => {
-        const row = slider(label, `g|${zone}`, prefs.garrison[zone], (value) => this.command({ t: "garrison", zone, value }));
+      const garrison = (zone: "frontier" | "near" | "inland", label: string) => {
+        const row = slider(label, `g|${zone}`, prefs.garrison[zone] ?? (prefs.garrison.frontier + prefs.garrison.inland) / 2, (value) => this.command({ t: "garrison", zone, value }));
         row.querySelector("input")?.setAttribute("data-g", zone);
         return row;
       };
       (this.pages.Tools as HTMLElement).replaceChildren(
         h("h3", { class: "sub" }, "Wardens"),
-        h("p", { class: "hint" }, "How full to keep lantern buildings. Frontier lanterns stand near another settlement's border. Every lit lantern keeps at least one warden."),
+        h("p", { class: "hint" }, "How full to keep lantern buildings, by how near another settlement's land is: the frontier (a few steps from it), near (a short way off) and inland. Every lit lantern keeps at least one warden."),
         garrison("frontier", "Frontier"),
+        garrison("near", "Near"),
         garrison("inland", "Inland"),
         h("h3", { class: "sub" }, "Toolsmith"),
         h("p", { class: "hint" }, "The toolsmith makes whichever tool has the highest priority for how many you already have. A tool decides who can take up a trade."),

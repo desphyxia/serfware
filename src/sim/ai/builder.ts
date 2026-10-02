@@ -55,6 +55,7 @@ export class AiBuilder {
       this.started = true;
       const [frontier, inland] = this.personality === "warden" ? [0.7, 0.4] : this.personality === "trader" ? [0.3, 0.15] : [0.4, 0.2];
       w.command({ t: "garrison", zone: "frontier", value: frontier, player: pl });
+      w.command({ t: "garrison", zone: "near", value: (frontier + inland) / 2, player: pl });
       w.command({ t: "garrison", zone: "inland", value: inland, player: pl });
     }
     const lv = AI_LEVELS[this.level];
