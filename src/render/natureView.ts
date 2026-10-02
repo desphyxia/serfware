@@ -424,6 +424,7 @@ export class NatureView {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
+    const small = new THREE.Vector3(0.62, 0.62, 0.62);
     let n = 0;
     for (let t = 0; t < land.sign.length && n < this.signs.instanceMatrix.count; t++) {
       const v = land.sign[t] as number;
@@ -433,7 +434,7 @@ export class NatureView {
       p.addScaledVector(tA, 0.9);
       this.frames.orient(p, null, q);
       q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SurfaceFrames.hash(t, 3) * 6.28));
-      m.compose(p, q, one);
+      m.compose(p, q, land.signSmall[t] ? small : one);
       this.signs.setMatrixAt(n, m);
       this.signs.setColorAt(n, colors[v] ?? (colors[0] as THREE.Color));
       n++;

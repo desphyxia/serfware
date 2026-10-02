@@ -31,7 +31,7 @@ import { Diplomacy, DIPLOMACY_COMMANDS, type DiplomacyCommand } from "./diplomac
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
-import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, GLOWCAP_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
+import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, GLOWCAP_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, SMALL_DEPOSIT, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
 
 /**
  * The Serf City core: flags, roads with one carrier each, goods handed from flag to flag,
@@ -46,6 +46,10 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** Spots a geologist samples around his flag before going home. */
+const GEOLOGIST_SAMPLES = 12;
+/** A "found" notice is skipped when the same ore is already marked this close. */
+const SIGN_NEWS_RADIUS = 6;
 /** Store modes, as in Serf City: In takes goods, Stop only holds them, Out empties the store into the others. */
 export const STORE_IN = 0;
 export const STORE_STOP = 1;
@@ -893,6 +897,7 @@ export class Economy {
   private cmdGeologist(flagTile: number, p: number): CommandResult {
     const flag = this.flagAt(flagTile);
     if (!flag || flag.owner !== p) return { ok: false, reason: "Send geologists to one of your flags." };
+    if (!this.surveyableAround(flag.tile)) return { ok: false, reason: "Nothing to survey here: there is no mountain within reach of that flag." };
     const pick = this.pickPerson(flag.id, "geologist");
     if (!pick) return { ok: false, reason: "No one is free, or that flag isn't connected to your Hearthship." };
     const path = this.roadPath(pick.origin.flag, flag.id);
@@ -902,8 +907,13 @@ export class Economy {
     const s = this.spawnSettler("geologist", pick.origin, path, pick.person);
     s.tool = hammer;
     s.home = flagTile;
-    s.visits = 8;
+    s.visits = GEOLOGIST_SAMPLES;
     return { ok: true };
+  }
+
+  /** Is there any ground a geologist could usefully sample near this flag? */
+  private surveyableAround(tile: number): boolean {
+    return this.land.ring(tile, 4).some((t) => this.land.surveyable(t));
   }
 
   /** Check a command without changing anything (for instant feedback in multiplayer). */
@@ -921,7 +931,8 @@ export class Economy {
         return land.use[cmd.tile] === Use.Free || land.use[cmd.tile] === Use.Blocked ? "Nothing to demolish here." : null;
       case "geologist": {
         const f = this.flagAt(cmd.flagTile);
-        return f && f.owner === p ? null : "Send geologists to one of your flags.";
+        if (!f || f.owner !== p) return "Send geologists to one of your flags.";
+        return this.surveyableAround(f.tile) ? null : "Nothing to survey here: there is no mountain within reach of that flag.";
       }
       default:
         return null;
@@ -3486,7 +3497,7 @@ export class Economy {
           this.sendHome(s);
           return;
         }
-        const options = land.ring(s.home, 4).filter((t) => land.walkable(t) && land.use[t] !== Use.Road && land.sign[t] === 0);
+        const options = land.ring(s.home, 4).filter((t) => land.walkable(t) && land.use[t] !== Use.Road && land.sign[t] === 0 && land.surveyable(t));
         if (!options.length) {
           this.sendHome(s);
           return;
@@ -3503,11 +3514,15 @@ export class Economy {
       case "inspect": {
         if (--s.timer > 0) return;
         const t = s.path[s.pi] as number;
-        land.sign[t] = land.deposit[t] !== Deposit.None ? (land.deposit[t] as number) + 1 : 1;
+        const found = land.deposit[t] !== Deposit.None;
+        const sign = found ? (land.deposit[t] as number) + 1 : 1;
+        // One notice per find, not per signpost: skip it if the same ore is marked close by.
+        const news = found && land.deposit[t] !== Deposit.Granite && !land.ring(t, SIGN_NEWS_RADIUS).some((n) => land.sign[n] === sign);
+        land.sign[t] = sign;
+        land.signSmall[t] = found && (land.depositAmount[t] as number) < SMALL_DEPOSIT ? 1 : 0;
         land.signExpire[t] = this.tick + SIGN_TICKS;
         land.signVersion++;
-        if (land.deposit[t] !== Deposit.None && land.deposit[t] !== Deposit.Granite)
-          this.notify(s.owner, `Geologist found ${DEPOSIT_IDS[land.deposit[t] as number]}.`);
+        if (news) this.notify(s.owner, `Geologist found ${DEPOSIT_IDS[land.deposit[t] as number]}${land.signSmall[t] ? " (a small deposit)" : ""}.`);
         s.state = "pick";
         return;
       }
@@ -3592,6 +3607,7 @@ export class Economy {
       }
       if (land.sign[t] !== 0 && (land.signExpire[t] as number) <= this.tick) {
         land.sign[t] = 0;
+        land.signSmall[t] = 0;
         land.signVersion++;
       }
       if (!land.isLand(t) && (land.fish[t] as number) > 0 && (land.fish[t] as number) < 12 && (mix32(t, this.tick) & 7) === 0) land.fish[t]!++;
