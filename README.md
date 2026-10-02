@@ -61,6 +61,17 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Stores
+
+A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):
+
+- **In** takes in goods from the roads (the default).
+- **Stop** keeps what it holds but takes no more; goods on their way here go elsewhere.
+- **Out** carries its goods, most urgent first (the Transport list), to your other stores on In.
+
+A store that still holds goods can't be demolished: set it to Out and wait until it is empty.
+The Hearthship always takes goods in.
+
 ## Placing things
 
 Placement follows Serf City's rules too:

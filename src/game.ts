@@ -259,6 +259,10 @@ export class Game {
       },
       following: () => this.following,
       player: () => this.session.player,
+      storeMode: (building, mode) => {
+        this.command({ t: "storeMode", building, mode });
+        this.info.refresh();
+      },
       attack: (target, count, order) => {
         if (this.command({ t: "attack", target, count, order })) this.toasts.show(`${count} warden${count === 1 ? "" : "s"} set out.`, "good");
       },
