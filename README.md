@@ -68,6 +68,14 @@ Settings, World, **Ore mix** (balanced, coal and iron, gold-rich, scarce gold, s
 map generator. They travel with saves and multiplayer starts. The hills setting only moves the
 start among sites with room to build, so on a hilly planet the effect can be small.
 
+**Seas** (as generated, close, mixed) joins the lands: starting from the largest, each land is linked
+to the nearest joined one, and where the water between is wider than the setting allows, shoal
+islets are raised along it. *Close* leaves no stretch of open water wider than 6 tiles (a quay's
+ferry reaches 8 steps); *mixed* allows 12 (a harbour reaches 14). Star Well islands count as lands.
+Measured on seed russet-heron-417, widest crossing before and after (close / mixed): large 16 to 6 / 12
+with 3 / 1 islets added; huge 26 to 6 / 12 with 7 / 3 added. The default leaves worlds exactly as
+they were.
+
 ## Starting ore
 
 Every start has coal, iron and granite within 10 steps of its Hearthship and gold within 14. Where

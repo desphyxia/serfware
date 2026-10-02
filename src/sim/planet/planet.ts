@@ -3,6 +3,7 @@ import { StateHasher } from "../hash";
 import type { Rng } from "../rng";
 import { buildPlanetGrid, GRID_SIZES, type GridSize, type PlanetGrid } from "./grid";
 import { generateTerrain, type Terrain } from "./terrain";
+import type { SeaReach } from "./reach";
 import { paintTerrain, type WorldPaint } from "./paint";
 
 export interface PlanetParams {
@@ -37,7 +38,7 @@ export class Planet {
     readonly terrain: Terrain,
   ) {}
 
-  static generate(rng: Rng, size?: GridSize, overrides: PlanetOverrides = {}, paint?: WorldPaint): Planet {
+  static generate(rng: Rng, size?: GridSize, overrides: PlanetOverrides = {}, paint?: WorldPaint, seas?: SeaReach): Planet {
     const pr = rng.fork("planet-params");
     const chosen: GridSize = size ?? overrides.size ?? pr.pick(["small", "medium", "medium", "large"] as const);
     const freq = GRID_SIZES[chosen];
@@ -58,7 +59,7 @@ export class Planet {
     if (overrides.gravity !== undefined) params.gravity = overrides.gravity;
     if (overrides.locked !== undefined) params.locked = overrides.locked;
     const grid = buildPlanetGrid(freq, rng.fork("grid"), undefined, paint?.wells);
-    const terrain = generateTerrain(grid, rng.fork("terrain"), params.radius, { ...(overrides.warmth !== undefined && { warmth: overrides.warmth }), ...(overrides.wetness !== undefined && { wetness: overrides.wetness }), ...(overrides.landFraction !== undefined && { landFraction: overrides.landFraction }) });
+    const terrain = generateTerrain(grid, rng.fork("terrain"), params.radius, { ...(overrides.warmth !== undefined && { warmth: overrides.warmth }), ...(overrides.wetness !== undefined && { wetness: overrides.wetness }), ...(overrides.landFraction !== undefined && { landFraction: overrides.landFraction }) }, seas);
     if (paint) paintTerrain(grid, terrain, paint);
     return new Planet(params, grid, terrain);
   }
