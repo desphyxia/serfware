@@ -73,6 +73,11 @@ Stretch after release: ranked play on curated seeds, persistent frontier servers
   weakest target and press); a Builder squeezed onto a small coastal start grows slowly; late game
   days cost up to ~4 s of simulation on a small world with four settlements (fine at normal
   speed, worth profiling for fast-forward).
+- Batch 25b: painting with a held brush (strokes while dragging; today each click remakes the
+  world, about half a second); a height and region preview under the brush; mod scripting beyond
+  data (new jobs, new kinds of building); models and icons in mods; scenario editor triggers with
+  several actions and conditions combined with "and"; Workshop ratings, update notes and preview
+  images; scenario and world thumbnails in the library.
 - Batch 24b: voiced or illustrated story beats (the story is text for now); chapter goals that
   follow the whole team in co-op (they follow player 0's settlement); a scenario editor and
   shareable scenario files; medals for finishing chapters fast or on hard; tutorial steps for

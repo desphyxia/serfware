@@ -14,6 +14,7 @@ The desktop build is the web game inside an Electron window, with Steamworks thr
 | **Achievements** | Unlocked by milestones in play (`src/platform/achievements.ts`). The ids must exist in the Steamworks partner site, and the web build toasts them instead. |
 | **Steam Cloud** | Saves are mirrored to Steam Cloud and appear on any machine (`src/platform/cloudSaves.ts`). |
 | **Controller** | The game reads gamepads directly (`src/ui/gamepad.ts`), so Steam Input's gamepad template works on the Deck and every pad. |
+| **Workshop** | Scenarios, painted worlds and mods are shared as one `creation.json` per Workshop item (`desktop/main.cjs`: `steam:workshopUpload`, `steam:workshopItems`). Game menu → Create → Share uploads; "Get my subscriptions" adds subscribed items to the library. The app needs the Workshop enabled in Steamworks (with a `scenario`, `world` and `mod` tag). |
 | **Steam Deck** | Starts fullscreen with the Deck preset: a larger UI, a 40 fps cap, and medium-light graphics. |
 
 ## Running it in development

@@ -1,4 +1,7 @@
-import { scenarioWorld } from "../sim/scenario/campaign";
+import { registerScenario, scenarioWorld } from "../sim/scenario/campaign";
+import type { ScenarioDef } from "../sim/scenario/scenario";
+import type { ModPack } from "../sim/mods";
+import type { WorldPaint } from "../sim/planet/paint";
 import type { CommandResult } from "../sim/econ/economy";
 import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
@@ -43,16 +46,48 @@ export interface SessionPlayer {
   spectator?: boolean;
 }
 
+/**
+ * What a player made that a world is built from: a custom scenario, mods, a painted world. Sent
+ * whole with a multiplayer start and kept in saves, so every machine builds the same world.
+ */
+export interface Creative {
+  custom?: ScenarioDef;
+  mods?: ModPack[];
+  paint?: WorldPaint;
+}
+
+/** The creative content of a world, for a save or a multiplayer start (undefined if none). */
+export function creativeOf(world: World): Creative | undefined {
+  const c: Creative = {};
+  if (world.scenario?.def.kind === "custom") c.custom = world.scenario.def;
+  if (world.mods.length) c.mods = world.mods;
+  if (world.paint) c.paint = world.paint;
+  return Object.keys(c).length ? c : undefined;
+}
+
+/** World options carrying the creative content (registering a custom scenario first). */
+export function creativeOptions(creative: Creative | undefined): WorldOptions {
+  if (!creative) return {};
+  if (creative.custom) registerScenario(creative.custom);
+  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }) };
+}
+
 export interface SessionInfo {
   mode: SessionMode;
   seed: string;
   players: SessionPlayer[];
   /** Co-op through a scenario (the tutorial, a chapter of The Long Voyage…). */
   scenario?: string;
+  creative?: Creative;
 }
 
 /** The world a multiplayer game starts from: how many settlements, the teams and the goal. */
-export function worldOptionsFor(mode: SessionMode, players: readonly SessionPlayer[], scenario?: string): WorldOptions {
+export function worldOptionsFor(mode: SessionMode, players: readonly SessionPlayer[], scenario?: string, creative?: Creative): WorldOptions {
+  const made = creativeOptions(creative);
+  return { ...baseOptions(mode, players, scenario), ...made };
+}
+
+function baseOptions(mode: SessionMode, players: readonly SessionPlayer[], scenario?: string): WorldOptions {
   const playing = players.filter((p) => !p.spectator).sort((a, b) => a.id - b.id);
   // A scenario in co-op: everyone builds the one settlement, in the scenario's world.
   if (scenario) return { ...scenarioWorld(scenario)?.opts, players: 1 };
@@ -162,6 +197,8 @@ export interface SaveFile {
   goal?: "conquest" | "bloom";
   /** The scenario played (tutorial, chapter, handmade), if any. */
   scenario?: string;
+  /** Custom scenario, mods and painted world, if any. */
+  creative?: Creative;
   mode: SessionMode;
   tick: number;
   checksum: number;
@@ -184,6 +221,7 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
     teams: session.world.economy.teams.length ? session.world.economy.teams.slice(0, session.world.players) : undefined,
     goal: session.world.economy.goal,
     scenario: session.world.scenario?.def.id,
+    creative: creativeOf(session.world),
     mode: session.info.mode,
     tick: session.world.tick,
     checksum: session.world.checksum(),
@@ -197,7 +235,8 @@ export function makeSave(session: Session, name: string, build: string): SaveFil
  */
 export function replaySave(save: SaveFile, opts: WorldOptions = {}, onProgress?: (f: number) => void): { world: World; matches: boolean; log: LoggedCommand[] } {
   if (save.format !== "seedfall-save" || save.version !== 1) throw new Error("Not a Seedfall save file.");
-  const world = new World(save.seed, { ...(save.scenario ? scenarioWorld(save.scenario)?.opts : {}), ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest", aiLevel: save.aiLevel ?? "normal", teams: save.teams, goal: save.goal ?? "conquest" });
+  const made = creativeOptions(save.creative);
+  const world = new World(save.seed, { ...(save.scenario ? scenarioWorld(save.scenario)?.opts : {}), ...made, ...opts, players: save.players, rivals: save.rivals ?? 0, stakes: save.stakes ?? "wounded", difficulty: save.difficulty ?? "honest", aiLevel: save.aiLevel ?? "normal", teams: save.teams, goal: save.goal ?? "conquest" });
   const cmds = [...save.commands].sort((a, b) => a.tick - b.tick);
   let i = 0;
   const log: LoggedCommand[] = [];
@@ -216,8 +255,8 @@ export function replaySave(save: SaveFile, opts: WorldOptions = {}, onProgress?:
 }
 
 /** Build the world of a game in progress from its log, up to `tick` (rejoining, spectating late). */
-export function resumeWorld(seed: string, mode: SessionMode, players: readonly SessionPlayer[], log: readonly LoggedCommand[], tick: number, extra: WorldOptions = {}, scenario?: string): World {
-  const world = new World(seed, { ...extra, ...worldOptionsFor(mode, players, scenario) });
+export function resumeWorld(seed: string, mode: SessionMode, players: readonly SessionPlayer[], log: readonly LoggedCommand[], tick: number, extra: WorldOptions = {}, scenario?: string, creative?: Creative): World {
+  const world = new World(seed, { ...extra, ...worldOptionsFor(mode, players, scenario, creative) });
   let i = 0;
   const cmds = [...log].sort((a, b) => a.tick - b.tick);
   while (world.tick < tick) {

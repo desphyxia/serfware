@@ -5,6 +5,7 @@ import { SteamHostLobby, SteamJoinLobby } from "../net/steamLobby";
 import { desktop } from "../platform/bridge";
 import { copyText, h, Panel } from "./dom";
 import { campaignPage } from "./campaign";
+import { createPage, library, type CreateHost } from "./creative";
 import { ALL_SCENARIOS } from "../sim/scenario/campaign";
 
 export interface SaveMeta {
@@ -27,6 +28,8 @@ export interface MenuHost {
   startSession(lobby: HostLobby, mode: PlayMode, scenario?: string): void;
   /** Start a scenario (tutorial, chapter, handmade) alone. */
   playScenario(id: string): void;
+  /** The Create tab: painter, scenario editor, mods, Workshop. */
+  create: CreateHost;
   joined(lobby: JoinLobby): void;
   notify(text: string, kind?: "info" | "warn" | "good"): void;
 }
@@ -37,6 +40,7 @@ const defaultServer = () => `ws://${location.hostname || "localhost"}:8787`;
 export class GameMenu extends Panel {
   private readonly saveList: HTMLElement;
   private readonly campaign: HTMLElement & { refresh?: () => void };
+  private readonly create: HTMLElement & { refresh: () => void };
   private readonly mpBody: HTMLElement;
   private lobby: HostLobby | JoinLobby | null = null;
   /** Switch to a tab by name (Multiplayer, Saves, …). */
@@ -63,6 +67,8 @@ export class GameMenu extends Panel {
     // Campaign
     this.campaign = campaignPage((id) => this.host.playScenario(id));
     addTab("Campaign", this.campaign);
+    this.create = createPage(this.host.create);
+    addTab("Create", this.create);
 
     // Saves
     const saves = h("div", { class: "form" });
@@ -140,7 +146,13 @@ export class GameMenu extends Panel {
 
   protected override onShow(): void {
     this.campaign.refresh?.();
+    this.create.refresh();
     this.refreshSaves();
+  }
+
+  /** Redraw the Create tab (a creation was saved elsewhere). */
+  refreshCreate(): void {
+    this.create.refresh();
   }
 
   private refreshSaves(): void {
@@ -183,7 +195,7 @@ export class GameMenu extends Panel {
     const room = h("input", { type: "text", id: "mp-room", value: randomRoom() }) as HTMLInputElement;
     const mode = h("select", { id: "mp-mode" }, ...(Object.keys(MODE_NAMES) as PlayMode[]).map((m) => h("option", { value: m }, MODE_NAMES[m]))) as HTMLSelectElement;
     const watch = h("input", { type: "checkbox", id: "mp-watch" }) as HTMLInputElement;
-    const scen = h("select", { id: "mp-scenario" }, h("option", { value: "" }, "Free play"), ...ALL_SCENARIOS.map((x) => h("option", { value: x.id }, x.chapter ? `The Long Voyage ${x.chapter}: ${x.title}` : x.title))) as HTMLSelectElement;
+    const scen = h("select", { id: "mp-scenario" }, h("option", { value: "" }, "Free play"), ...[...ALL_SCENARIOS, ...library.scenarios()].map((x) => h("option", { value: x.id }, x.chapter ? `The Long Voyage ${x.chapter}: ${x.title}` : x.title))) as HTMLSelectElement;
     this.mpScenario = () => scen.value || undefined;
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });
     const steam = this.steamName

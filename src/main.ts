@@ -4,13 +4,13 @@ import { captureConsole, log } from "./core/log";
 import { SettingsStore, suggestPreset } from "./core/settings";
 import { BUILD } from "./build";
 import { Game } from "./game";
-import { demoBattle, demoSettlement } from "./sim/econ/planner";
+import { demoBattle, demoSettlement, placeConnected } from "./sim/econ/planner";
 import { ReportPanel } from "./ui/reportPanel";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 
 declare global {
   interface Window {
-    __seedfall?: { ready: boolean; game?: Game; errors: () => number; lastError?: () => unknown; demo?: () => number; battle?: () => number };
+    __seedfall?: { ready: boolean; game?: Game; errors: () => number; lastError?: () => unknown; demo?: () => number; battle?: () => number; place?: (type: string) => boolean };
   }
 }
 
@@ -42,6 +42,7 @@ async function boot(): Promise<void> {
   sf.game = game;
   sf.demo = () => demoSettlement(game.world);
   sf.battle = () => demoBattle(game.world);
+  sf.place = (type: string) => placeConnected(game.world, type, { minDist: 2, maxDist: 8 });
   sf.ready = true;
 }
 

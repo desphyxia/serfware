@@ -12,6 +12,8 @@ import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet, type PlanetOverrides } from "./planet/planet";
 import { Rng } from "./rng";
+import { paintLand, type WorldPaint } from "./planet/paint";
+import { applyMods, hashMods, type ModPack } from "./mods";
 import { generateSystem, HOME_AIR, worldFor, type StarSystem } from "./system/system";
 import { Atmosphere, type AirStart } from "./climate/atmosphere";
 import type { Difficulty } from "./econ/adversity";
@@ -54,6 +56,10 @@ export interface WorldOptions {
   barren?: boolean;
   native?: boolean;
   air?: AirStart;
+  /** A painted world: brush strokes and Star Well places on top of the seed (the world painter). */
+  paint?: WorldPaint;
+  /** Mods in effect (data packs: goods, buildings, warden ranks, the start). */
+  mods?: ModPack[];
 }
 
 /**
@@ -99,14 +105,21 @@ export class World implements WorldHost {
   /** The planet's air, water and life (what terraforming works on). */
   readonly atmosphere: Atmosphere;
   tick = 0;
+  /** What was painted and which mods were on when this world was made. */
+  readonly paint: WorldPaint | undefined;
+  readonly mods: ModPack[];
   private readonly rng: Rng;
 
   constructor(seed: string, opts: WorldOptions = {}) {
     this.seed = seed;
+    this.mods = opts.mods ?? [];
+    applyMods(this.mods);
+    this.paint = opts.paint?.strokes.length || opts.paint?.wells ? opts.paint : undefined;
     this.rng = new Rng(seed);
-    this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet);
+    this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet, this.paint);
     this.land = new LandUse(this.planet);
     this.land.populate(this.rng.fork("nature"));
+    if (this.paint) paintLand(this.land, this.paint);
     if (opts.barren) World.makeBarren(this.land, opts.native ? new Rng(`${seed}:native`) : null);
     this.economy = new Economy(this.land);
     this.climate = new Climate(this.land, this.rng.fork("climate"));
@@ -254,7 +267,7 @@ export class World implements WorldHost {
     if (existing) return existing.economy;
     const p = this.system.planets[planet];
     if (!p) throw new Error(`No planet ${planet}`);
-    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.humans, startTick: this.tick });
+    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.humans, startTick: this.tick, mods: this.mods });
     this.colonies[planet] = w;
     w.economy.teams.push(...this.economy.teams);
     w.economy.names.push(...this.economy.names);
@@ -298,6 +311,8 @@ export class World implements WorldHost {
 
   checksum(): number {
     const h = new StateHasher().str(this.seed).int(this.tick);
+    hashMods(h, this.mods);
+    if (this.paint) h.int(this.paint.strokes.length);
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
     this.economy.hash(h);
