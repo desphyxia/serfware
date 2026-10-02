@@ -1,7 +1,7 @@
 import { dayInfo, START_FRACTION, ticksPerDay, type DayInfo } from "./clock";
 import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
-import { Feature, LandUse } from "./econ/landuse";
+import { Feature, HILLS, LandUse, oreMixOf, type MapOptions } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
 import { answerOffer, rivalFor, type AiLevel, type Personality } from "./ai/personality";
@@ -60,6 +60,8 @@ export interface WorldOptions {
   paint?: WorldPaint;
   /** Mods in effect (data packs: goods, buildings, warden ranks, the start). */
   mods?: ModPack[];
+  /** Map settings: the ore mix and how far the hills lie from each start. */
+  map?: MapOptions;
 }
 
 /**
@@ -107,6 +109,8 @@ export class World implements WorldHost {
   tick = 0;
   /** What was painted and which mods were on when this world was made. */
   readonly paint: WorldPaint | undefined;
+  /** The map settings in effect (undefined: all defaults). */
+  readonly map: MapOptions | undefined;
   readonly mods: ModPack[];
   private readonly rng: Rng;
 
@@ -118,10 +122,13 @@ export class World implements WorldHost {
     this.rng = new Rng(seed);
     this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet, this.paint);
     this.land = new LandUse(this.planet);
+    this.map = opts.map ? { ...(opts.map.ore && { ore: oreMixOf(opts.map.ore) }), ...(opts.map.hills && HILLS[opts.map.hills] && { hills: opts.map.hills }) } : undefined;
+    if (this.map?.ore) this.land.oreMix = oreMixOf(this.map.ore);
     this.land.populate(this.rng.fork("nature"));
     if (this.paint) paintLand(this.land, this.paint);
     if (opts.barren) World.makeBarren(this.land, opts.native ? new Rng(`${seed}:native`) : null);
     this.economy = new Economy(this.land);
+    this.economy.hills = this.map?.hills;
     this.climate = new Climate(this.land, this.rng.fork("climate"));
     this.economy.climate = this.climate;
     this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
@@ -314,6 +321,7 @@ export class World implements WorldHost {
     const h = new StateHasher().str(this.seed).int(this.tick);
     hashMods(h, this.mods);
     if (this.paint) h.int(this.paint.strokes.length);
+    if (this.map) h.int(this.land.oreMix.coal).int(this.land.oreMix.iron).int(this.land.oreMix.gold).int(this.land.oreMix.granite).str(this.map.hills ?? "");
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
     this.economy.hash(h);

@@ -3,6 +3,7 @@ import type { ScenarioDef } from "../sim/scenario/scenario";
 import type { ModPack } from "../sim/mods";
 import type { WorldPaint } from "../sim/planet/paint";
 import type { CommandResult } from "../sim/econ/economy";
+import type { MapOptions } from "../sim/econ/landuse";
 import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
 import { World, type WorldOptions } from "../sim/world";
@@ -54,6 +55,8 @@ export interface Creative {
   custom?: ScenarioDef;
   mods?: ModPack[];
   paint?: WorldPaint;
+  /** Map settings (ore mix, how far the hills lie from a start). */
+  map?: MapOptions;
 }
 
 /** The creative content of a world, for a save or a multiplayer start (undefined if none). */
@@ -62,6 +65,7 @@ export function creativeOf(world: World): Creative | undefined {
   if (world.scenario?.def.kind === "custom") c.custom = world.scenario.def;
   if (world.mods.length) c.mods = world.mods;
   if (world.paint) c.paint = world.paint;
+  if (world.map) c.map = world.map;
   return Object.keys(c).length ? c : undefined;
 }
 
@@ -69,7 +73,7 @@ export function creativeOf(world: World): Creative | undefined {
 export function creativeOptions(creative: Creative | undefined): WorldOptions {
   if (!creative) return {};
   if (creative.custom) registerScenario(creative.custom);
-  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }) };
+  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }), ...(creative.map && { map: creative.map }) };
 }
 
 export interface SessionInfo {

@@ -31,7 +31,7 @@ import { Diplomacy, DIPLOMACY_COMMANDS, type DiplomacyCommand } from "./diplomac
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
 import { captureOdds, duelChance, fatigueFor, hasBow, rankTitle, strength, VOLLEY_HIT, type Fighter } from "./combat";
-import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, GLOWCAP_RIPE, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, SMALL_DEPOSIT, TREE_GROWTH_TICKS, TREE_MATURE, Use } from "./landuse";
+import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE, GLOWCAP_RIPE, HILLS, LandUse, MEMORIAL, ORCHARD, SIGN_TICKS, SMALL_DEPOSIT, TREE_GROWTH_TICKS, TREE_MATURE, Use, type OreMix } from "./landuse";
 
 /**
  * The Serf City core: flags, roads with one carrier each, goods handed from flag to flag,
@@ -535,6 +535,8 @@ export class Economy {
       const keep = this.buildings[this.keeps[p] ?? -1];
       if (!keep) continue;
       for (const [kind, reach] of needs) {
+        // A kind left out of the ore mix is not conjured up.
+        if ((land.oreMix[DEPOSIT_IDS[kind] as keyof OreMix] ?? 1) <= 0) continue;
         const within = land.ring(keep.tile, reach);
         if (within.some((t) => land.deposit[t] === kind)) continue;
         // The nearest hill (four steps or more from the Hearthship) with no ore under it yet.
@@ -590,6 +592,34 @@ export class Economy {
     }
   }
 
+  private hillField: Int16Array | null = null;
+
+  /** How far the hills should lie from a start (a map setting), or undefined for no preference. */
+  hills: keyof typeof HILLS | undefined;
+
+  /** Steps from each tile to the nearest mountain (capped), for choosing starts by their distance to the hills. */
+  private hillDistances(): Int16Array {
+    const grid = this.land.planet.grid;
+    const dist = new Int16Array(grid.count).fill(255);
+    let edge: number[] = [];
+    for (let t = 0; t < grid.count; t++)
+      if (this.land.isLand(t) && this.land.isMountain(t)) {
+        dist[t] = 0;
+        edge.push(t);
+      }
+    for (let d = 1; d <= 40 && edge.length; d++) {
+      const next: number[] = [];
+      for (const t of edge)
+        for (const n of grid.neighborsOf(t))
+          if (dist[n] === 255) {
+            dist[n] = d;
+            next.push(n);
+          }
+      edge = next;
+    }
+    return dist;
+  }
+
   setupStart(rng: Rng, player = 0, fairTo?: number): void {
     const others = this.keeps.map((k) => (this.buildings[k] as Building).tile);
     const land = this.land;
@@ -600,6 +630,8 @@ export class Economy {
     // narrow spit of land between sea and cliffs stalls, however fair its water and ore look).
     const MIN_FLAT = 80;
     let roomy = false;
+    const hillDist = this.hills ? (this.hillField ??= this.hillDistances()) : null;
+    const hillWant = this.hills ? HILLS[this.hills]!.steps : 0;
     for (let t = 0; t < grid.count; t++) {
       if (!land.isLand(t) || grid.degree(t) === 5 || land.territory[t] !== 0) continue;
       const e = terrain.elevation[t] as number;
@@ -633,7 +665,8 @@ export class Economy {
       const score =
         fair +
         spread +
-        flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3;
+        flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3 -
+        (hillDist ? Math.min(40, Math.abs((hillDist[t] as number) - hillWant)) * 25 : 0);
       // The first roomy site found outranks every cramped one before it.
       if (flatLand >= MIN_FLAT && !roomy) {
         roomy = true;
