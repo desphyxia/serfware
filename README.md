@@ -61,6 +61,19 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Placing things
+
+Placement follows Serf City's rules too:
+
+- Demolishing a flag that only two roads pass through joins them into one road. A junction flag
+  (three or more roads) can't be removed until you remove roads.
+- Lantern buildings keep two tiles between them, whoever they belong to, so lanterns claim land
+  outward instead of in heaps.
+- Small buildings may stand side by side; a large building needs empty ground around it, and so
+  does anything next to a large one.
+- A large building may go up on a slope. A builder first digs the ground level (about 2 hours
+  per step of slope) and no materials are sent until the ground is level.
+
 ## Territory, rivals and fog
 
 Your border is made of light. Lantern posts, lamp houses and beacon towers are lit once a warden

@@ -222,7 +222,7 @@ export class InfoPanel extends Panel {
         body.push(h("p", { class: "hint" }, `${b.residents} settlers resting inside.`));
       } else if (!b.built) {
         const connected = eco.route(eco.buildings[eco.keeps[b.owner] as number]!.flag, b.flag).dist !== Infinity;
-        body.push(h("p", { class: connected ? "status" : "status warn" }, connected ? (b.builder >= 0 ? "Builder at work." : "Waiting for a builder.") : "Not connected. Build a road from this flag to your roads."));
+        body.push(h("p", { class: connected ? "status" : "status warn" }, connected ? (b.dig > 0 ? (b.builder >= 0 ? `Builder levelling the ground (${b.dig} to dig).` : "Waiting for a builder to level the ground.") : b.builder >= 0 ? "Builder at work." : "Waiting for a builder.") : "Not connected. Build a road from this flag to your roads."));
         body.push(h("h3", { class: "sub" }, "Materials delivered"));
         body.push(h("div", { class: "chips" }, ...b.cost.map((n, i) => (n > 0 ? goodChip(i, `${b.delivered[i]}/${n}`) : null)).filter((x): x is HTMLElement => !!x)));
         body.push(h("div", { class: "bar" }, h("i", { style: `width:${Math.round((b.consumed / Math.max(1, b.costTotal)) * 100)}%` })));
