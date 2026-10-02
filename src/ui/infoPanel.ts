@@ -1,6 +1,6 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
-import { FLAG_CAPACITY, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
+import { FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
@@ -49,7 +49,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -228,6 +228,32 @@ export class InfoPanel extends Panel {
           ] as const;
           body.push(h("h3", { class: "sub" }, "Goods"));
           body.push(h("div", { class: "btn-row" }, ...modes.map(([m, label, tip]) => h("button", { class: b.mode === m ? "btn small on" : "btn small", title: tip, onclick: () => this.actions.storeMode(b.id, m) }, label))));
+        }
+        if (b.owner === this.actions.player()) {
+          // Settings by good (Settlers 2's Stop, Send and Collect), kept folded away until wanted.
+          const keep = eco.keeps.includes(b.id);
+          const options: [number, string][] = keep ? [[GOOD_AUTO, "Auto"], [GOOD_COLLECT, "Collect"]] : [[GOOD_AUTO, "Auto"], [GOOD_STOP, "Stop"], [GOOD_SEND, "Send"], [GOOD_COLLECT, "Collect"]];
+          const set = b.goodMode.filter((m) => m !== GOOD_AUTO).length;
+          body.push(
+            h(
+              "details",
+              { class: "good-settings" },
+              h("summary", {}, set ? `Settings by good (${set})` : "Settings by good"),
+              h("p", { class: "hint" }, "Stop: takes no more of it. Send: carries it out to other stores. Collect: brings it in from the other stores, and new ones come here first."),
+              ...GOODS.map((g, i) =>
+                h(
+                  "label",
+                  { class: "good-setting" },
+                  `${g.name} `,
+                  h(
+                    "select",
+                    { onchange: (e: Event) => this.actions.storeGood(b.id, g.id, Number((e.target as HTMLSelectElement).value)) },
+                    ...options.map(([m, label]) => h("option", { value: String(m), ...((b.goodMode[i] ?? GOOD_AUTO) === m ? { selected: "selected" } : {}) }, label)),
+                  ),
+                ),
+              ),
+            ),
+          );
         }
       } else if (!b.built) {
         const connected = eco.route(eco.buildings[eco.keeps[b.owner] as number]!.flag, b.flag).dist !== Infinity;
