@@ -49,7 +49,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void; explore: (building: number, reach: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void; explore: (building: number, reach: number) => void; ferry: (from: number, to: number, remove: boolean) => void; upgrade: (building: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -228,6 +228,19 @@ export class InfoPanel extends Panel {
           ] as const;
           body.push(h("h3", { class: "sub" }, "Goods"));
           body.push(h("div", { class: "btn-row" }, ...modes.map(([m, label, tip]) => h("button", { class: b.mode === m ? "btn small on" : "btn small", title: tip, onclick: () => this.actions.storeMode(b.id, m) }, label))));
+        }
+        if (b.def.ferry !== undefined && b.owner === this.actions.player()) {
+          body.push(h("h3", { class: "sub" }, "Ferries"));
+          const links = eco.roads.filter((r) => r.alive && r.ferry && (r.a === b.flag || r.b === b.flag));
+          for (const r of links) {
+            const other = eco.buildings.find((o) => o.alive && o !== b && o.def.ferry !== undefined && (o.flag === r.a || o.flag === r.b));
+            if (other) body.push(h("div", { class: "btn-row" }, h("span", { class: "hint" }, `To the ${other.def.name.toLowerCase()} ${other.built ? "" : "(being built) "}${r.tiles.length - 2} steps over the water. `), h("button", { class: "btn small danger", onclick: () => this.actions.ferry(b.id, other.id, true) }, "Remove")));
+          }
+          if (!b.built) body.push(h("p", { class: "hint" }, "Finish this quay (or link it from a finished one) to run a ferry."));
+          const options = eco.ferryOptions(b).filter((o) => b.built || o.building.built);
+          if (!options.length && !links.length) body.push(h("p", { class: "hint" }, `No other quay within ${b.def.ferry} steps of water. A ferry needs a boat: 3 planks in your stores.`));
+          for (const o of options.slice(0, 6)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", onclick: () => this.actions.ferry(b.id, o.building.id, false) }, `Ferry to the ${o.building.def.name.toLowerCase()} ${o.building.built ? "" : "(being built) "}(${o.steps} steps, 3 planks)`)));
+          if (b.def.id === "quay" && b.built) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", title: "Ferries from a harbour reach 14 steps of water.", onclick: () => this.actions.upgrade(b.id) }, "Upgrade to a harbour (4 planks, 3 stone)")));
         }
         if (b.owner === this.actions.player()) {
           // Settings by good (Settlers 2's Stop, Send and Collect), kept folded away until wanted.

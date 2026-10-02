@@ -37,6 +37,8 @@ export interface BuildingDef {
   radius?: number;
   /** Sight over land and sea, in steps, without holding territory (a lighthouse). */
   sight?: number;
+  /** Quays and harbours: the longest ferry link from here, in steps of open water. */
+  ferry?: number;
   workTicks?: number;
   restTicks?: number;
   /** A good id, or "tool" for the toolsmith (chosen by tool priority). */

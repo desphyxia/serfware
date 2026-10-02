@@ -536,7 +536,7 @@ export class EconView {
       this.frames.orient(p, p.clone().add(heading), q);
       const colour = s.role === "warden" || s.role === "attacker" ? playerColor(s.owner) : ROLE_COLORS[s.role];
       // A crew out at sea sits in a rowing boat on the water.
-      const boating = s.role === "worker" && (s.state === "sail" || s.state === "sailback" || s.state === "scan") && nBoat < MAX_BOATS && !land.isLand(here) && !land.isIce(here);
+      const boating = nBoat < MAX_BOATS && !land.isLand(here) && !land.isIce(here) && (land.ferry[here] === 1 || s.state === "sail" || s.state === "sailback" || s.state === "scan");
       if (boating) {
         const bob = Math.sin(time * 1.6 + s.id) * 0.02;
         const hull = d.clone().addScaledVector(d.clone().normalize(), 0.015 + bob);
@@ -547,6 +547,11 @@ export class EconView {
         this.figures.set(n, seat, q, colour, Anim.Rest, (s.id * 0.618) % 1 * 10, look.hat, Tool.None);
         this.instanceSettler[n] = s.id;
         n++;
+        if (carrying) {
+          load.copy(seat).addScaledVector(seat.clone().normalize(), 0.12);
+          m.compose(load, q, one);
+          this.addGood(s.carrying, m);
+        }
         continue;
       }
       if (sledging) {

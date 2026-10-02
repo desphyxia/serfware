@@ -46,6 +46,9 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** A ferry needs a boat, and a quay becomes a harbour for these goods. */
+const FERRY_COST = { plank: 3 };
+const HARBOUR_UPGRADE = { plank: 4, stone: 3 };
 /** How far a boatyard crew sails from the yard, in steps, by the Near, Far and Very far settings. */
 export const EXPLORE_REACH = [10, 18, 30] as const;
 /** How far around a fishing spot, a boat's track and a lighthouse-less look-out the crew sees, in steps. */
@@ -105,6 +108,8 @@ export interface Road {
   /** Ticks the carrier worked today, and the day before (-1 until a day has passed). */
   busy: number;
   busyPrev: number;
+  /** A ferry link between two quays: water tiles, a boatman for a carrier. */
+  ferry?: boolean;
   alive: boolean;
 }
 
@@ -272,6 +277,9 @@ export type Command = (
   | { t: "storeMode"; building: number; mode: number }
   | { t: "storeGood"; building: number; good: string; mode: number }
   | { t: "explore"; building: number; reach: number }
+  | { t: "ferry"; from: number; to: number }
+  | { t: "unferry"; from: number; to: number }
+  | { t: "upgrade"; building: number }
   | { t: "rotate" }
   | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
@@ -906,6 +914,18 @@ export class Economy {
         this.redirectRefused(b);
         return { ok: true };
       }
+      case "ferry":
+        return this.cmdFerry(p, cmd.from, cmd.to);
+      case "unferry": {
+        const a = this.buildings[cmd.from];
+        const b = this.buildings[cmd.to];
+        const link = a && b && a.owner === p ? this.ferryBetween(a, b) : undefined;
+        if (!link) return { ok: false, reason: "No such ferry." };
+        this.removeRoad(link);
+        return { ok: true };
+      }
+      case "upgrade":
+        return this.cmdUpgrade(p, cmd.building);
       case "explore": {
         const b = this.buildings[cmd.building];
         if (!b || !b.alive || b.owner !== p || b.def.job !== "explore") return { ok: false, reason: "That isn't one of your boatyards." };
@@ -1086,12 +1106,112 @@ export class Economy {
   }
 
   private placementHint(def: BuildingDef): string {
+    if (def.ferry !== undefined) return `${def.name}s go on the shore with their flag right at the water's edge.`;
     if (def.terrain === "mountain") return `${def.name}s go on mountain slopes inside your border.`;
     if (def.terrain === "coast") return `${def.name}s must be built near water.`;
     if (def.terrain === "aquifer") return "There's too little groundwater here for a well. Try lower, wetter ground near rivers.";
     if (def.terrain === "saltpan") return `${def.name} pans go on the Saltglass Flats or by the sea.`;
     if (def.terrain === "vent") return `A ${def.name.toLowerCase()} must stand right next to a geothermal vent.`;
     return "You can't build here.";
+  }
+
+  /**
+   * The water a ferry between two quays crosses: from the first quay's flag out over open water to
+   * the second's. Returns the tile path (flag to flag) and the steps of water, or null.
+   */
+  ferryPath(a: Building, b: Building): { tiles: number[]; steps: number } | null {
+    const limit = Math.max(a.built ? (a.def.ferry ?? 0) : 0, b.built ? (b.def.ferry ?? 0) : 0);
+    return this.ferryRoute((this.flags[a.flag] as Flag).tile, (this.flags[b.flag] as Flag).tile, limit);
+  }
+
+  /** The same between two flag tiles, over at most `limit` steps of open water. */
+  ferryRoute(fa: number, fb: number, limit: number): { tiles: number[]; steps: number } | null {
+    const land = this.land;
+    const grid = land.planet.grid;
+    const open = (t: number) => !land.isLand(t) && !land.isIce(t);
+    const targets = new Set(grid.neighborsOf(fb).filter(open));
+    const from = grid.neighborsOf(fa).filter(open);
+    if (!targets.size || !from.length) return null;
+    const parent = new Map<number, number>();
+    const depth = new Map<number, number>();
+    const queue: number[] = [];
+    for (const t of from) {
+      parent.set(t, fa);
+      depth.set(t, 1);
+      queue.push(t);
+    }
+    for (let i = 0; i < queue.length; i++) {
+      const t = queue[i] as number;
+      const d = depth.get(t) as number;
+      if (targets.has(t)) {
+        const tiles: number[] = [fb];
+        for (let u = t; u !== fa; u = parent.get(u) as number) tiles.push(u);
+        tiles.push(fa);
+        return { tiles: tiles.reverse(), steps: d };
+      }
+      if (d >= limit) continue;
+      for (const n of grid.neighborsOf(t)) {
+        if (parent.has(n) || !open(n)) continue;
+        parent.set(n, t);
+        depth.set(n, d + 1);
+        queue.push(n);
+      }
+    }
+    return null;
+  }
+
+  /** Quays (built or begun) a ferry from `b` could reach, nearest first, with the steps of water. */
+  ferryOptions(b: Building): { building: Building; steps: number }[] {
+    if (b.def.ferry === undefined) return [];
+    const out: { building: Building; steps: number }[] = [];
+    for (const o of this.buildings) {
+      if (o === b || !o.alive || o.owner !== b.owner || o.def.ferry === undefined || this.ferryBetween(b, o)) continue;
+      const route = this.ferryPath(b, o);
+      if (route) out.push({ building: o, steps: route.steps });
+    }
+    return out.sort((x, y) => x.steps - y.steps || x.building.id - y.building.id);
+  }
+
+  /** The ferry link already joining two quays, if any. */
+  ferryBetween(a: Building, b: Building): Road | undefined {
+    return this.roads.find((r) => r.alive && r.ferry && ((r.a === a.flag && r.b === b.flag) || (r.a === b.flag && r.b === a.flag)));
+  }
+
+  /** Take goods from the player's stores if they all are there (false, and nothing taken, if not). */
+  private takeGoods(owner: number, want: Record<string, number>): boolean {
+    const stock = this.storageTotals(owner);
+    for (const [id, n] of Object.entries(want)) if ((stock[goodId(id)] as number) < n) return false;
+    for (const [id, n] of Object.entries(want))
+      for (let k = 0; k < n; k++) this.takeTool(owner, goodId(id));
+    return true;
+  }
+
+  /** A ferry between two quays: a boat (3 planks), and a boatman to row it. */
+  private cmdFerry(p: number, fromId: number, toId: number): CommandResult {
+    const a = this.buildings[fromId];
+    const b = this.buildings[toId];
+    if (!a || !b || !a.alive || !b.alive || a.owner !== p || b.owner !== p || a.def.ferry === undefined || b.def.ferry === undefined || a === b) return { ok: false, reason: "A ferry joins two of your quays." };
+    if (!a.built && !b.built) return { ok: false, reason: "Finish a quay first: a ferry starts from a finished one." };
+    if (this.ferryBetween(a, b)) return { ok: false, reason: "Those quays already have a ferry." };
+    const route = this.ferryPath(a, b);
+    if (!route) return { ok: false, reason: `Too far over the water: a quay reaches ${a.def.ferry} steps, a harbour ${BUILDINGS[buildingType("harbour")]?.ferry}.` };
+    if (!this.takeGoods(p, FERRY_COST)) return { ok: false, reason: "A ferry needs a boat: 3 planks in your stores." };
+    this.createRoad(a.flag, b.flag, route.tiles, p, true);
+    this.notify(p, `A ferry now runs across ${route.steps} steps of water.`);
+    return { ok: true };
+  }
+
+  /** A quay becomes a harbour: its ferries reach further. */
+  private cmdUpgrade(p: number, id: number): CommandResult {
+    const b = this.buildings[id];
+    if (!b || !b.alive || b.owner !== p || b.def.id !== "quay") return { ok: false, reason: "Only a quay can be upgraded." };
+    if (!b.built) return { ok: false, reason: "Finish the quay first." };
+    const harbour = BUILDINGS[buildingType("harbour")] as BuildingDef;
+    if (!this.takeGoods(p, HARBOUR_UPGRADE)) return { ok: false, reason: "An upgrade needs 4 planks and 3 stone in your stores." };
+    b.def = harbour;
+    this.structureVersion++;
+    this.notify(p, "The quay is now a harbour: its ferries reach further.");
+    return { ok: true };
   }
 
   private cmdDemolish(tile: number, p: number): CommandResult {
@@ -1207,13 +1327,17 @@ export class Economy {
     return f;
   }
 
-  private createRoad(a: number, b: number, tiles: number[], owner: number): Road {
-    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], busy: 0, busyPrev: -1, alive: true };
+  private createRoad(a: number, b: number, tiles: number[], owner: number, ferry = false): Road {
+    const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], busy: 0, busyPrev: -1, ...(ferry && { ferry }), alive: true };
     this.roads.push(r);
     (this.flags[a] as Flag).roads.push(r.id);
     (this.flags[b] as Flag).roads.push(r.id);
     for (let i = 1; i < tiles.length - 1; i++) {
       const t = tiles[i] as number;
+      if (ferry) {
+        this.land.ferry[t] = 1;
+        continue;
+      }
       this.clearShrub(t);
       this.land.use[t] = Use.Road;
       this.land.ref[t] = r.id;
@@ -1339,6 +1463,11 @@ export class Economy {
     }
     for (let i = 1; i < road.tiles.length - 1; i++) {
       const t = road.tiles[i] as number;
+      if (road.ferry) {
+        // Another ferry may still cross this water.
+        this.land.ferry[t] = this.roads.some((o) => o.alive && o !== road && o.ferry && o.tiles.includes(t)) ? 1 : 0;
+        continue;
+      }
       this.land.use[t] = Use.Free;
       this.land.ref[t] = -1;
     }
@@ -1413,6 +1542,8 @@ export class Economy {
     flag.building = -1;
     for (const id of [b.worker, b.builder, ...b.garrison]) if (id >= 0) this.sendHome(this.settlers[id] as Settler);
     b.garrison = [];
+    // A quay's ferries end with it.
+    if (b.def.ferry !== undefined) for (const r of this.roads) if (r.alive && r.ferry && (r.a === b.flag || r.b === b.flag)) this.removeRoad(r);
     if (b.def.light && b.lit) {
       b.lit = false;
       this.territoryDirty = true;
@@ -2758,7 +2889,7 @@ export class Economy {
     if (s.pi >= s.path.length - 1) return true;
     const a = s.path[s.pi] as number;
     const b = s.path[s.pi + 1] as number;
-    const onRoad = this.land.use[b] === Use.Road || this.land.use[b] === Use.Flag;
+    const onRoad = this.land.use[b] === Use.Road || this.land.use[b] === Use.Flag || this.land.ferry[b] === 1;
     // High water over the flats: wait on the shore for the ebb (causeways and stilts stay dry).
     if (this.land.flooded[b] && !this.land.causeway[b] && this.land.use[b] !== Use.Building) return false;
     // Skystone is buoyant: its carriers walk as if empty-handed, and a little quicker.
@@ -2769,7 +2900,7 @@ export class Economy {
     if (s.prog >= 1000) {
       s.prog -= 1000;
       s.pi++;
-      if (!onRoad && this.land.use[b] !== Use.Building) {
+      if (!onRoad && this.land.use[b] !== Use.Building && !this.land.ferry[b]) {
         this.land.wear[b] = Math.min(2000, (this.land.wear[b] as number) + 24);
         this.land.wearVersion++;
       }
@@ -4457,7 +4588,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach).int(b.def.ferry ?? 0);
     for (const b of this.buildings) if (b.alive && b.def.storage) for (const m of b.goodMode) h.int(m);
     for (const u of this.rotateUntil) h.int(u ?? -1);
     // What each player has charted (boats make it history, not just the lanterns' reach).

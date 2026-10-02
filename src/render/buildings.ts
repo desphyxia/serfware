@@ -430,6 +430,26 @@ function boatyard(b: Build): void {
   b.add(...kit.pennant(1.25, 0.12, -0.9, 0.5));
 }
 
+/** The quay: a stone landing with bollards, a coil of rope, a crate or two and a rowing boat alongside. */
+function quay(b: Build): void {
+  const { rng } = b;
+  b.add([kit.box(1.5, 0.16, 1.0, 0, 0, 0), kit.C.stone], [kit.box(1.5, 0.05, 1.0, 0, 0.16, 0), kit.jitter(kit.C.stoneDark, rng, 1)]);
+  for (const x of [-0.6, 0.6]) b.add([kit.cyl(0.07, 0.07, 0.22, 6, x, 0.2, 0.42), kit.C.timber]);
+  b.add(...kit.crate(-0.3, -0.1, rng, 0.12), ...kit.barrel(0.4, -0.2, rng));
+  b.add([kit.box(0.04, 0.6, 0.04, -0.7, 0.2, -0.4), kit.C.timber], [kit.box(0.5, 0.04, 0.04, -0.46, 0.78, -0.4), kit.C.timber]);
+  b.add(...kit.pennant(-0.7, 0.8, -0.4, 0.4));
+}
+
+/** The harbour: a quay with a long jetty on piles, a crane and a warehouse shed. */
+function harbour(b: Build): void {
+  const { rng } = b;
+  quay(b);
+  for (let i = 0; i < 4; i++) b.add([kit.cyl(0.06, 0.06, 0.5, 6, 1.1 + i * 0.38, -0.2, -0.35), kit.C.timber], [kit.cyl(0.06, 0.06, 0.5, 6, 1.1 + i * 0.38, -0.2, 0.35), kit.C.timber]);
+  b.add([kit.box(1.6, 0.06, 0.8, 1.9, 0.12, 0), kit.jitter("#9a7a55", rng, 2)]);
+  b.add([kit.box(0.1, 1.3, 0.1, 1.2, 0.2, -0.3), kit.C.timber], [kit.box(1.0, 0.08, 0.08, 1.65, 1.5, -0.3, 0.05), kit.C.timber], [kit.box(0.02, 0.5, 0.02, 2.05, 1.0, -0.3), "#3a3a3a"]);
+  b.add([kit.box(0.7, 0.6, 0.6, -0.6, 0.2, 0.0), kit.jitter(ROOF.brown, rng, 0.5)], ...kit.coneRoof(0.5, 0.35, 0.8, kit.jitter(ROOF.slate, rng, 0.5), rng));
+}
+
 function beacon(b: Build): void {
   const { rng } = b;
   b.add([kit.cyl(1.0, 1.15, 0.3, 10), kit.C.stoneDark], ...kit.roundTower(0.8, 2.6, 0.3, rng, "#c9bca0", 0.78));
@@ -1092,6 +1112,8 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   beacon,
   lighthouse,
   boatyard,
+  quay,
+  harbour,
 };
 
 /** Build a building's geometry; `userData.meta` carries its BuildingMeta. */

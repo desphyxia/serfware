@@ -112,6 +112,15 @@ You never steer a boat. The sea is charted three ways:
   (10 steps), **Far** (18) or **Very far** (30) to say how far it may go. Crews report islands,
   Star Wells and new land.
 
+## Quays, ferries and harbours
+
+A **quay** is a small store on the shore with its flag at the water's edge. Select a finished quay
+and choose **Ferry to** another quay (or a quay being built) within 8 steps of open water: a boat
+costs 3 planks from your stores, and a boatman rows goods and people over the water like a road's
+carrier. A ferry works as a road for every purpose: builders, wardens and goods cross on it.
+**Upgrade to a harbour** (4 planks, 3 stone) and its ferries reach 14 steps. Taking a quay down
+ends its ferries. Boats show only on the water; nothing is drawn or painted on the sea floor.
+
 ## Stores
 
 A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):

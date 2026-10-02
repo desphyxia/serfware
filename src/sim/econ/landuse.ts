@@ -193,6 +193,8 @@ export class LandUse {
   floodVersion = 0;
   /** Raised causeways over the flats: roads that stay dry at high tide. */
   readonly causeway: Uint8Array;
+  /** 1 on water tiles a ferry crosses (boats, not roads: nothing is drawn or painted on them). */
+  readonly ferry: Uint8Array;
   causewayVersion = 0;
   /** Shellfish on the flats, gathered at low tide. */
   readonly shell: Uint8Array;
@@ -242,6 +244,7 @@ export class LandUse {
     this.tidal = new Uint8Array(n);
     this.flooded = new Uint8Array(n);
     this.causeway = new Uint8Array(n);
+    this.ferry = new Uint8Array(n);
     this.shell = new Uint8Array(n);
     this.sand = new Float32Array(n);
     this.glow = new Uint8Array(n);
@@ -444,6 +447,8 @@ export class LandUse {
       return this.canBuild(t, flagTile, !!def.large, owner, 3.2);
     }
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
+    // A quay's flag stands on the water's edge, where the ferry ties up.
+    if (def.ferry !== undefined && !this.planet.grid.neighborsOf(flagTile).some((n) => !this.isLand(n) && !this.isIce(n))) return false;
     if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
     if (def.terrain === "vent" && !this.nearVent(t)) return false;
     if (def.terrain === "saltpan" && this.region[t] !== Region.SaltglassFlats && !this.isCoast(t)) return false;
@@ -602,6 +607,8 @@ export class LandUse {
 
   /** Cost of stepping from a to b: longer uphill, cheaper on roads. */
   stepCost(a: number, b: number): number {
+    // Boats cross at a steady pace.
+    if (this.ferry[b]) return 0.9;
     const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
     // Lake ice is flat: sledges fly over it on a road, feet slip and slide off one.
     if (this.isIce(b)) return road ? 0.5 : 1.15;

@@ -267,6 +267,14 @@ export class Game {
         this.command({ t: "storeMode", building, mode });
         this.info.refresh();
       },
+      ferry: (from, to, remove) => {
+        this.command(remove ? { t: "unferry", from, to } : { t: "ferry", from, to });
+        this.info.refresh();
+      },
+      upgrade: (building) => {
+        this.command({ t: "upgrade", building });
+        this.info.refresh();
+      },
       explore: (building, reach) => {
         this.command({ t: "explore", building, reach });
         this.info.refresh();
