@@ -15,10 +15,11 @@
     "smoke": "node scripts/smoke.mjs",
     "shots": "node scripts/screenshots.mjs",
     "perf": "node scripts/perf.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build:single && npm run smoke && npm run touch-test && npm run mp-test",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build:single && npm run smoke && npm run touch-test && npm run gpu-limits && npm run mp-test",
     "signal": "node scripts/signal.mjs",
     "mp-test": "node scripts/mp-test.mjs",
     "touch-test": "node scripts/touch-test.mjs",
+    "gpu-limits": "node scripts/gpu-limits-test.mjs",
     "soak": "vitest run --config soak/vitest.config.ts"
   },
   "dependencies": {
