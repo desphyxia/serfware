@@ -1,6 +1,6 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
-import { FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
+import { EXPLORE_REACH, FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
@@ -49,7 +49,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void; explore: (building: number, reach: number) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -272,6 +272,12 @@ export class InfoPanel extends Panel {
           body.push(h("p", { class: "hint" }, `About ${left} loads left in reach. Food for ${b.food} more.`));
         }
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));
+        if (b.def.job === "explore") {
+          const names = ["Near", "Far", "Very far"];
+          body.push(h("h3", { class: "sub" }, "Charting"));
+          body.push(h("p", { class: "hint" }, `The crew sails out to the nearest unexplored sea within ${EXPLORE_REACH[b.reach] ?? 18} steps of the yard and comes back to rest. Choose how far it may go.`));
+          body.push(h("div", { class: "btn-row" }, ...names.map((label, i) => h("button", { class: b.reach === i ? "btn small on" : "btn small", onclick: () => this.actions.explore(b.id, i) }, label))));
+        }
         const work = eco.productivity(b);
         if (work !== null) body.push(h("p", { class: "hint", title: "The share of the day the worker spent at work, not waiting for goods or a free flag." }, `Productivity: ${work}%.`));
         if (b.output > 0) body.push(h("p", { class: "hint" }, `${b.output} finished, waiting to go out.`));

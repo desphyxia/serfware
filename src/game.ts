@@ -267,6 +267,10 @@ export class Game {
         this.command({ t: "storeMode", building, mode });
         this.info.refresh();
       },
+      explore: (building, reach) => {
+        this.command({ t: "explore", building, reach });
+        this.info.refresh();
+      },
       storeGood: (building, good, mode) => {
         this.command({ t: "storeGood", building, good, mode });
         this.info.refresh();

@@ -1018,6 +1018,32 @@
       "slots": 5
     },
     {
+      "id": "lighthouse",
+      "name": "Lighthouse",
+      "category": "lantern",
+      "description": "A tall shore tower whose lamp sees far over land and sea. It holds no land and needs no warden; it lets you see what is out there.",
+      "terrain": "coast",
+      "cost": {
+        "plank": 3,
+        "stone": 6
+      },
+      "sight": 16
+    },
+    {
+      "id": "boatyard",
+      "name": "Boatyard",
+      "category": "materials",
+      "description": "A crew sails out from here and charts the sea around it, as far as you set (Near, Far or Very far), then rests and sails again. Build it on the coast.",
+      "terrain": "coast",
+      "cost": {
+        "plank": 4,
+        "stone": 1
+      },
+      "job": "explore",
+      "workTicks": 40,
+      "restTicks": 400
+    },
+    {
       "id": "weaponsmith",
       "name": "Weaponsmith",
       "category": "metal",

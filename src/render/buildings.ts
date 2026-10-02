@@ -398,6 +398,38 @@ function lamphouse(b: Build): void {
   b.meta.flame = new THREE.Vector3(0, 1.57, 0);
 }
 
+/**
+ * The lighthouse: a tall tapered stone tower on a rocky plinth, a gallery under a glass lamp
+ * room, a red-and-white band, and the lamp itself as the flame.
+ */
+function lighthouse(b: Build): void {
+  const { rng } = b;
+  b.add([kit.cyl(1.0, 1.2, 0.35, 10), kit.C.stoneDark], ...kit.roundTower(0.72, 3.4, 0.35, rng, "#e6e0d2", 0.62));
+  b.add(...kit.door(0, 0.35, 0.7, rng));
+  b.add([kit.cyl(0.66, 0.66, 0.4, 10, 0, 1.6), "#a8513c"], [kit.cyl(0.58, 0.58, 0.4, 10, 0, 2.4), "#a8513c"]);
+  b.add([kit.cyl(0.62, 0.62, 0.08, 10, 0, 3.75), kit.C.stone]);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    b.add([kit.box(0.04, 0.2, 0.04, Math.cos(a) * 0.58, 3.83, Math.sin(a) * 0.58), "#3a3a3a"]);
+  }
+  b.add([kit.cyl(0.36, 0.36, 0.5, 8, 0, 3.83), kit.C.window], ...kit.coneRoof(0.5, 0.5, 4.33, kit.jitter("#56657a", rng, 0.5), rng));
+  b.add(...kit.pennant(0, 4.95, 0, 0.4));
+  b.meta.flame = new THREE.Vector3(0, 4.05, 0);
+}
+
+/** The boatyard: an open timber shed over a slip, with a half-built hull on the stocks and planks to hand. */
+function boatyard(b: Build): void {
+  const { rng } = b;
+  b.add(...kit.plinth(1.3, 1.0, 0.12, rng));
+  for (const [x, z] of [[-1.0, -0.8], [1.0, -0.8], [-1.0, 0.8], [1.0, 0.8]] as const) b.add([kit.box(0.1, 1.0, 0.1, x, 0.12, z), kit.C.timber]);
+  b.add([kit.box(1.5, 0.08, 1.1, 0, 1.1, 0, 0), kit.jitter(ROOF.brown, rng, 0.5)], [kit.box(1.5, 0.08, 1.1, 0, 1.18, 0, 0.12), kit.jitter(ROOF.brown, rng, 0.5)]);
+  const hull = new THREE.SphereGeometry(0.34, 10, 4, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).scale(0.9, 0.7, 2.6).translate(0, 0.42, 0);
+  b.add([hull, "#7a5a3a"]);
+  for (let i = 0; i < 5; i++) b.add([kit.box(0.04, 0.3, 0.04, -0.28 + (i % 2) * 0.56, 0.4, -0.5 + i * 0.25), kit.C.timberLight]);
+  b.add(...kit.plankStack(1.1, 0.9, 4, rng), ...kit.barrel(-1.1, 0.95, rng));
+  b.add(...kit.pennant(1.25, 0.12, -0.9, 0.5));
+}
+
 function beacon(b: Build): void {
   const { rng } = b;
   b.add([kit.cyl(1.0, 1.15, 0.3, 10), kit.C.stoneDark], ...kit.roundTower(0.8, 2.6, 0.3, rng, "#c9bca0", 0.78));
@@ -1058,6 +1090,8 @@ const BUILDERS: Record<string, (b: Build) => void> = {
   lantern,
   lamphouse,
   beacon,
+  lighthouse,
+  boatyard,
 };
 
 /** Build a building's geometry; `userData.meta` carries its BuildingMeta. */

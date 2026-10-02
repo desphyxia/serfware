@@ -12,7 +12,7 @@ export interface GoodDef {
   arms?: boolean;
 }
 
-export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish" | "fungus" | "peat" | "ropeway" | "excavate";
+export type JobKind = "fell" | "plant" | "quarry" | "craft" | "farm" | "fish" | "mine" | "hunt" | "orchard" | "bees" | "shellfish" | "fungus" | "peat" | "ropeway" | "excavate" | "explore";
 export type Category = "storage" | "materials" | "food" | "metal" | "lantern" | "terra" | "decor";
 /** Terraforming works: what one work cycle does to a planet (see sim/climate/atmosphere). */
 export type TerraKind = "mirror" | "greenhouse" | "comet" | "seeding" | "basin" | "life" | "bank";
@@ -35,6 +35,8 @@ export interface BuildingDef {
   /** Mines: which deposit they dig. */
   resource?: "coal" | "iron" | "gold" | "granite";
   radius?: number;
+  /** Sight over land and sea, in steps, without holding territory (a lighthouse). */
+  sight?: number;
   workTicks?: number;
   restTicks?: number;
   /** A good id, or "tool" for the toolsmith (chosen by tool priority). */
