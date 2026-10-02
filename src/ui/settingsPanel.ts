@@ -2,6 +2,7 @@ import type { GraphicsSettings, PresetName, Settings, SettingsStore } from "../c
 import { DIFFICULTY, type Difficulty } from "../sim/econ/adversity";
 import { AI_LEVELS, type AiLevel } from "../sim/ai/personality";
 import { HILLS, ORE_PRESETS, type MapOptions, type OreMix } from "../sim/econ/landuse";
+import { SEAS } from "../sim/planet/reach";
 import { h, Panel } from "./dom";
 
 type Opt<T> = readonly (readonly [T, string])[];
@@ -14,6 +15,7 @@ export class SettingsPanel extends Panel {
   private readonly rivalsInput: HTMLSelectElement;
   private readonly oreInput: HTMLSelectElement;
   private readonly hillsInput: HTMLSelectElement;
+  private readonly seasInput: HTMLSelectElement;
   private readonly stakesInput: HTMLSelectElement;
   private readonly difficultyInput: HTMLSelectElement;
   private readonly levelInput: HTMLSelectElement;
@@ -115,12 +117,14 @@ export class SettingsPanel extends Panel {
     // Map settings (as in Settlers 2's map generator): the ore mix, and how far the hills lie from a start.
     this.oreInput = h("select", { id: "w-ore" }, ...Object.entries(ORE_PRESETS).map(([id, p]) => h("option", { value: id }, p.name))) as HTMLSelectElement;
     this.hillsInput = h("select", { id: "w-hills" }, h("option", { value: "" }, "As generated"), ...Object.entries(HILLS).map(([id, p]) => h("option", { value: id }, p.name))) as HTMLSelectElement;
-    w.append(this.row("Ore mix", this.oreInput, null, "w-ore"), this.row("Hills from the start", this.hillsInput, null, "w-hills"), h("p", { class: "hint" }, "Ore and hills apply to the next world you generate."));
+    this.seasInput = h("select", { id: "w-seas" }, h("option", { value: "" }, "As generated"), ...Object.entries(SEAS).map(([id, p]) => h("option", { value: id }, p.name))) as HTMLSelectElement;
+    w.append(this.row("Ore mix", this.oreInput, null, "w-ore"), this.row("Hills from the start", this.hillsInput, null, "w-hills"), this.row("Seas", this.seasInput, null, "w-seas"), h("p", { class: "hint" }, "Ore, hills and seas apply to the next world you generate. Seas raise shoal islets so every island can be reached by ferry."));
     const map = (): MapOptions | undefined => {
       const ore = this.oreInput.value;
       const hills = this.hillsInput.value as keyof typeof HILLS | "";
-      if (ore === "balanced" && !hills) return undefined;
-      return { ...(ore !== "balanced" && { ore: { ...ORE_PRESETS[ore]!.mix } }), ...(hills && { hills }) };
+      const seas = this.seasInput.value as "close" | "mixed" | "";
+      if (ore === "balanced" && !hills && !seas) return undefined;
+      return { ...(ore !== "balanced" && { ore: { ...ORE_PRESETS[ore]!.mix } }), ...(hills && { hills }), ...(seas && { seas }) };
     };
     const rivals = () => Number(this.rivalsInput.value);
     const stakes = () => this.stakesInput.value as "wounded" | "mortal";
@@ -154,6 +158,7 @@ export class SettingsPanel extends Panel {
     const m = this.world.map();
     this.oreInput.value = Object.entries(ORE_PRESETS).find(([, p]) => m?.ore && (Object.keys(p.mix) as (keyof OreMix)[]).every((k) => p.mix[k] === m.ore?.[k]))?.[0] ?? "balanced";
     this.hillsInput.value = m?.hills ?? "";
+    this.seasInput.value = m?.seas ?? "";
     this.noteDifficulty();
     this.sync(this.store.get());
   }

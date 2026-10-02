@@ -2,6 +2,7 @@ import { clamp, smoothstep } from "../dmath";
 import { SimNoise } from "../noise";
 import type { Rng } from "../rng";
 import type { PlanetGrid } from "./grid";
+import { reachSeas, type SeaReach } from "./reach";
 
 /** Placeholder biomes until the biome framework (batch 13) replaces them with data. */
 export enum Biome {
@@ -45,7 +46,7 @@ export interface Terrain {
   params: TerrainParams;
 }
 
-export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number, overrides: Partial<TerrainParams> = {}): Terrain {
+export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number, overrides: Partial<TerrainParams> = {}, seas?: SeaReach): Terrain {
   const N = grid.count;
   // Drawn first and then overridden, so a planet with overrides keeps the same random stream.
   const params: TerrainParams = {
@@ -102,6 +103,8 @@ export function generateTerrain(grid: PlanetGrid, rng: Rng, radius: number, over
     elevation[p] = Math.max(elevation[p] as number, 0.6);
     for (const n of grid.neighborsOf(p)) elevation[n] = Math.max(elevation[n] as number, 0.35);
   }
+
+  if (seas) reachSeas(grid, elevation, seas);
 
   const moisture = new Float32Array(N);
   const temperature = new Float32Array(N);

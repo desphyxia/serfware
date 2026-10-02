@@ -12,6 +12,7 @@ import { StateHasher } from "./hash";
 import type { GridSize } from "./planet/grid";
 import { Planet, type PlanetOverrides } from "./planet/planet";
 import { Rng } from "./rng";
+import { SEAS } from "./planet/reach";
 import { paintLand, type WorldPaint } from "./planet/paint";
 import { applyMods, hashMods, type ModPack } from "./mods";
 import { generateSystem, HOME_AIR, worldFor, type StarSystem } from "./system/system";
@@ -120,9 +121,9 @@ export class World implements WorldHost {
     applyMods(this.mods);
     this.paint = opts.paint?.strokes.length || opts.paint?.wells ? opts.paint : undefined;
     this.rng = new Rng(seed);
-    this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet, this.paint);
+    this.planet = Planet.generate(this.rng.fork("planet"), opts.size, opts.planet, this.paint, opts.map?.seas);
     this.land = new LandUse(this.planet);
-    this.map = opts.map ? { ...(opts.map.ore && { ore: oreMixOf(opts.map.ore) }), ...(opts.map.hills && HILLS[opts.map.hills] && { hills: opts.map.hills }) } : undefined;
+    this.map = opts.map ? { ...(opts.map.ore && { ore: oreMixOf(opts.map.ore) }), ...(opts.map.hills && HILLS[opts.map.hills] && { hills: opts.map.hills }), ...(opts.map.seas && SEAS[opts.map.seas] && { seas: opts.map.seas }) } : undefined;
     if (this.map?.ore) this.land.oreMix = oreMixOf(this.map.ore);
     this.land.populate(this.rng.fork("nature"));
     if (this.paint) paintLand(this.land, this.paint);
@@ -321,7 +322,7 @@ export class World implements WorldHost {
     const h = new StateHasher().str(this.seed).int(this.tick);
     hashMods(h, this.mods);
     if (this.paint) h.int(this.paint.strokes.length);
-    if (this.map) h.int(this.land.oreMix.coal).int(this.land.oreMix.iron).int(this.land.oreMix.gold).int(this.land.oreMix.granite).str(this.map.hills ?? "");
+    if (this.map) h.int(this.land.oreMix.coal).int(this.land.oreMix.iron).int(this.land.oreMix.gold).int(this.land.oreMix.granite).str(this.map.hills ?? "").str(this.map.seas ?? "");
     for (const v of this.rng.state()) h.int(v);
     this.planet.hash(h);
     this.economy.hash(h);

@@ -102,6 +102,8 @@ export const HILLS: Record<string, { name: string; steps: number }> = {
 export interface MapOptions {
   ore?: Partial<OreMix>;
   hills?: keyof typeof HILLS;
+  /** Raise shoal islets so every land can be ferried to: close (quay) or mixed (some need a harbour). */
+  seas?: "close" | "mixed";
 }
 
 /** A clean ore mix from whatever was asked for: whole numbers 0..100, defaults for the rest. */
