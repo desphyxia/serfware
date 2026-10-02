@@ -65,7 +65,7 @@ growth over 12 game days on several seeds.
 
 Select a flag and choose **Send geologist** (it needs a hammer and a mountain, or ground within two
 steps of one, in reach of the flag). A geologist samples 12 spots around the flag and plants a
-signpost on each: ore, or nothing. A **small** signpost marks a deposit under 12 loads, so you
+signpost on each: ore, or nothing. A **small** signpost marks a deposit under 20 loads, so you
 don't build a mine on a speck. You are told once when an ore is found, not for every signpost
 beside an earlier one of the same kind. Signposts fade after a while.
 

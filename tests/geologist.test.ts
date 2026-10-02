@@ -13,6 +13,8 @@ describe("geologists (Serf City's rules)", () => {
   it("won't go where there is no mountain in reach, and signs show how rich a deposit is", () => {
     let refused = 0;
     let surveyed = 0;
+    let smallSeen = 0;
+    let largeSeen = 0;
     for (const seed of SEEDS) {
       const w = new World(seed, { size: "tiny" });
       const tile = keepFlagTile(w);
@@ -36,12 +38,17 @@ describe("geologists (Serf City's rules)", () => {
         const dep = land.deposit[t] as number;
         expect(land.signSmall[t]).toBe(dep !== Deposit.None && (land.depositAmount[t] as number) < SMALL_DEPOSIT ? 1 : 0);
         if (dep !== Deposit.None) found++;
+        if (land.signSmall[t]) smallSeen++;
+        else if (dep !== Deposit.None) largeSeen++;
       }
       // Notices come once per find of an ore, not once per signpost.
       const ore = (w.economy.notices as { text: string }[]).filter((n) => /^Geologist found/.test(n.text)).length;
       expect(ore).toBeLessThanOrEqual(found);
     }
     expect(surveyed).toBeGreaterThan(0);
+    // Both sizes turn up (deposits hold 14 to 50 loads).
+    expect(smallSeen).toBeGreaterThan(0);
+    expect(largeSeen).toBeGreaterThan(0);
     expect(refused + surveyed).toBe(SEEDS.length);
   }, 120000);
 

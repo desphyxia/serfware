@@ -73,8 +73,8 @@ export const DEPOSIT_IDS = ["none", "coal", "iron", "gold", "granite"] as const;
 
 export const FIELD_RIPE = 4;
 export const FIELD_GROWTH_TICKS = 450;
-/** A deposit with fewer loads than this gets a small signpost (as in Serf City). */
-export const SMALL_DEPOSIT = 12;
+/** A deposit with fewer loads than this gets a small signpost (about the poorest quarter; deposits hold 14 to 50). */
+export const SMALL_DEPOSIT = 20;
 /** How long a geologist's signpost stands. */
 export const SIGN_TICKS = 6000;
 
