@@ -1033,7 +1033,7 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .scenario-editor .ed-msg { min-height: 1.2em; }
 .painter {
   position: absolute; top: 64px; right: 12px; width: 270px; padding: 12px; border-radius: 10px;
-  background: rgba(22, 26, 32, 0.9); color: #eef1f2; display: grid; gap: 8px; z-index: 20;
+  background: rgba(22, 26, 32, 0.9); color: #eef1f2; display: flex; flex-direction: column; gap: 8px; z-index: 20;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px);
 }
 .painter h3 { margin: 0; font-size: 1.05em; }
@@ -1045,6 +1045,8 @@ body.surveying .buildbar .bb:not([aria-label="System"]):not([aria-label="Select"
 .painter-status { margin: 0; font-size: 0.8em; color: #9fb0b7; }
 .painter input[type="text"] { width: 100%; box-sizing: border-box; }
 .painter .btn-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.painter .btn-row .btn { flex: 1 1 auto; }
+.painter-row input[type="range"], .painter-row select { width: 100%; }
 body.painting .buildbar-wrap, body.painting .stockbar, body.painting .objectives { display: none; }
 @media (max-width: 640px) {
   .painter { top: auto; bottom: 8px; right: 8px; left: 8px; width: auto; max-height: 45vh; overflow-y: auto; }

@@ -117,6 +117,8 @@ export class Game {
   /** The world painter, while painting: the world being painted and its toolbox. */
   private painting: { seed: string; size?: GridSize; paint: WorldPaint; undo: WorldPaint[]; id: string; pickedWell: number } | null = null;
   private readonly painter: PainterPanel;
+  /** The painter is remaking its world (which is not the end of painting). */
+  private repainting = false;
   /** The scenario whose ending has been told (so it is told once). */
   private storyTold = "";
   private surveys = new Map<number, World>();
@@ -1226,7 +1228,12 @@ export class Game {
     if (!p) return;
     const t0 = performance.now();
     const w = new World(p.seed, { survey: true, size: p.size, paint: p.paint, mods: library.enabledMods() });
-    this.useSession(new SoloSession(w), keepCamera);
+    this.repainting = true;
+    try {
+      this.useSession(new SoloSession(w), keepCamera);
+    } finally {
+      this.repainting = false;
+    }
     if (!keepCamera) this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(w.planet.grid.pentagons[0]!)), 70);
     this.speed = 0;
     this.painter.setStatus(`${p.paint.strokes.length} stroke${p.paint.strokes.length === 1 ? "" : "s"}${p.paint.wells ? " · Star Wells placed" : ""} · ${(performance.now() - t0).toFixed(0)} ms`);
@@ -1593,7 +1600,7 @@ export class Game {
     this.tools.set("select");
     if (!keepCamera) this.focusStart();
     // Painting ends when another world is put in play (a new game, a load, a scenario).
-    if (!keepCamera && this.painting) this.endPainting();
+    if (this.painting && !this.repainting) this.endPainting();
     this.view.terrain.buildAll(this.cam.focus.clone().multiplyScalar(this.world.planet.params.radius * 4));
     session.onDesync = (detail) => {
       crash.capture({ kind: "desync", message: detail });
