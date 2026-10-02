@@ -244,6 +244,7 @@ export type Command = (
   | { t: "toolprio"; tool: string; value: number }
   | { t: "transport"; good: string; to: number }
   | { t: "storeMode"; building: number; mode: number }
+  | { t: "rotate" }
   | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
   | { t: "hedge"; tile: number }
@@ -295,6 +296,8 @@ export class Economy {
   /** No attacks before this tick. */
   peaceUntil = 0;
   readonly defeated: boolean[] = [];
+  /** Per player: until this tick, lanterns near a border swap their weakest warden for a stronger free one (-1: not rotating). */
+  readonly rotateUntil: number[] = [];
   /** Player who has won, or -1. */
   winner = -1;
   winReason = "";
@@ -792,6 +795,11 @@ export class Economy {
       }
       case "toolprio":
         (this.prefs[p] as Prefs).tools[cmd.tool] = Math.max(0, Math.min(1, cmd.value));
+        return { ok: true };
+      case "rotate":
+        if (this.defeated[p]) return { ok: false, reason: "Your settlement has fallen." };
+        this.rotateUntil[p] = this.tick + Math.round(this.dayTicks / 2);
+        this.notify(p, "Rotating wardens: the strongest are called to the lanterns near the border.");
         return { ok: true };
       case "storeMode": {
         const b = this.buildings[cmd.building];
@@ -1736,7 +1744,8 @@ export class Economy {
       let d = this.route(origin.flag, flagId).dist;
       if (d === Infinity && origin !== keep && keep) d = this.route(keep.flag, flagId).dist;
       if (d === Infinity) continue;
-      const score = (p.skills[trade] ?? 0) * 40 - d * 0.1 - p.id * 1e-6;
+      // Wardens are chosen by rank first: the strongest free one takes a vacant place.
+      const score = (p.skills[trade] ?? 0) * 40 + (trade === "warden" ? p.rank * 15 : 0) - d * 0.1 - p.id * 1e-6;
       if (score > bestScore) {
         bestScore = score;
         best = { origin: this.route(origin.flag, flagId).dist === Infinity ? (keep as Building) : origin, person: p };
@@ -1906,6 +1915,22 @@ export class Economy {
         } else if (b.garrison.length > want && b.garrison.length > 1) {
           const id = [...b.garrison].reverse().find((g) => (this.settlers[g] as Settler).state === "guard");
           if (id !== undefined) this.sendHome(this.settlers[id] as Settler);
+        } else if (b.threat >= 1 && (this.rotateUntil[b.owner] ?? -1) > this.tick) {
+          // Rotation (Serf City's "cycle knights"): a stronger free warden relieves the weakest on watch.
+          let weakest = -1;
+          let weakRank = Infinity;
+          for (const g of b.garrison) {
+            const w = this.settlers[g] as Settler;
+            const rank = this.people[w.person]?.rank ?? 0;
+            if (w.state === "guard" && rank < weakRank) {
+              weakest = g;
+              weakRank = rank;
+            }
+          }
+          const pick = weakest >= 0 ? this.pickPerson(b.flag, "warden") : null;
+          if (pick && pick.person.rank > weakRank) {
+            this.sendHome(this.settlers[weakest] as Settler);
+          }
         }
       }
     }
@@ -4111,6 +4136,7 @@ export class Economy {
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
     for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode);
+    for (const u of this.rotateUntil) h.int(u ?? -1);
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);
     let vents = 0;
