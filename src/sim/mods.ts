@@ -25,7 +25,7 @@ export interface ModPack {
 }
 
 const CATEGORIES: readonly Category[] = ["storage", "materials", "food", "metal", "lantern", "terra", "decor"];
-const JOBS: readonly JobKind[] = ["fell", "plant", "quarry", "craft", "farm", "fish", "mine", "hunt", "orchard", "bees", "shellfish", "fungus", "peat", "ropeway", "excavate"];
+const JOBS: readonly JobKind[] = ["fell", "plant", "quarry", "craft", "farm", "fish", "mine", "hunt", "orchard", "bees", "shellfish", "fungus", "peat", "ropeway", "excavate", "explore"];
 /** Fields a mod may change on a base building (placement rules and special roles stay fixed). */
 const BUILDING_FIELDS = new Set(["name", "description", "cost", "workTicks", "restTicks", "inputs", "inputStock", "foodPer", "light", "warmth", "slots", "beauty", "radius", "fireRisk", "buildable"]);
 const GOOD_FIELDS = new Set(["name"]);

@@ -46,8 +46,13 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** How far a boatyard crew sails from the yard, in steps, by the Near, Far and Very far settings. */
+export const EXPLORE_REACH = [10, 18, 30] as const;
+/** How far around a fishing spot, a boat's track and a lighthouse-less look-out the crew sees, in steps. */
+const FISHING_SIGHT = 3;
+const BOAT_SIGHT = 4;
 /** Worker states that count as work for a building's productivity (resting and waiting do not). */
-const WORKING = new Set(["out", "work", "back", "craft", "mining", "drop", "enter"]);
+const WORKING = new Set(["out", "work", "back", "craft", "mining", "drop", "enter", "sail", "scan", "sailback"]);
 /** Spots a geologist samples around his flag before going home. */
 const GEOLOGIST_SAMPLES = 12;
 /** A "found" notice is skipped when the same ore is already marked this close. */
@@ -158,6 +163,8 @@ export interface Building {
   /** Ticks the worker spent working today, and the day before (-1 until a day has passed). */
   busy: number;
   busyPrev: number;
+  /** Boatyards: how far the crew explores, 0 near, 1 far, 2 very far (see EXPLORE_REACH). */
+  reach: number;
   /** Stores: a setting per good (GOOD_AUTO follows `mode`). */
   goodMode: number[];
   /** How near another player's land is: 0 far (inland), 1 near, 2 close (the frontier). */
@@ -264,6 +271,7 @@ export type Command = (
   | { t: "transport"; good: string; to: number }
   | { t: "storeMode"; building: number; mode: number }
   | { t: "storeGood"; building: number; good: string; mode: number }
+  | { t: "explore"; building: number; reach: number }
   | { t: "rotate" }
   | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
@@ -898,6 +906,13 @@ export class Economy {
         this.redirectRefused(b);
         return { ok: true };
       }
+      case "explore": {
+        const b = this.buildings[cmd.building];
+        if (!b || !b.alive || b.owner !== p || b.def.job !== "explore") return { ok: false, reason: "That isn't one of your boatyards." };
+        if (!(cmd.reach === 0 || cmd.reach === 1 || cmd.reach === 2)) return { ok: false, reason: "Choose Near, Far or Very far." };
+        b.reach = cmd.reach;
+        return { ok: true };
+      }
       case "storeGood": {
         const b = this.buildings[cmd.building];
         if (!b || !b.alive || b.owner !== p || !b.def.storage) return { ok: false, reason: "That isn't one of your stores." };
@@ -1240,6 +1255,7 @@ export class Economy {
       mode: STORE_IN,
       busy: 0,
       busyPrev: -1,
+      reach: 1,
       goodMode: new Array<number>(GOODS.length).fill(GOOD_AUTO),
       threat: 0,
       stranded: -1,
@@ -1403,6 +1419,7 @@ export class Economy {
     }
     // Goods heading here need a new destination.
     for (const g of this.goods) if (g.alive && g.dest === b.id) g.dest = -1;
+    if (b.def.sight) this.updateVision();
     this.structureVersion++;
     land.useVersion++;
     this.rerouteAll();
@@ -2707,6 +2724,16 @@ export class Economy {
         exp[t] = 1;
       });
     }
+    // Lighthouses see far without holding land.
+    for (const b of this.buildings) {
+      if (!b.alive || !b.built || !b.def.sight || b.stranded >= 0) continue;
+      const vis = this.visible[b.owner] as Uint8Array;
+      const exp = this.explored[b.owner] as Uint8Array;
+      this.flood(b.tile, b.def.sight, (t) => {
+        vis[t] = 1;
+        exp[t] = 1;
+      });
+    }
     // Allies share their sight.
     if (this.teams.length) {
       const own = this.visible.map((v) => v.slice());
@@ -3088,6 +3115,7 @@ export class Economy {
           b.builder = -1;
           this.notify(b.owner, `${b.def.name} finished.`);
           this.structureVersion++;
+          if (b.def.sight) this.updateVision();
           this.sendHome(s);
         }
       }
@@ -3308,6 +3336,58 @@ export class Economy {
     }
   }
 
+  /**
+   * A boat (or a fisher's catch) shows the sea around a point: those tiles are explored for the
+   * owner from now on. Returns what was newly seen, for the crew's report.
+   */
+  private chart(owner: number, centre: number, radius: number): { tiles: number; land: number; wells: number } {
+    const exp = (this.explored[owner] ??= new Uint8Array(this.land.planet.grid.count));
+    const seen = { tiles: 0, land: 0, wells: 0 };
+    this.flood(centre, radius, (t) => {
+      if (exp[t]) return;
+      exp[t] = 1;
+      seen.tiles++;
+      if (this.land.isLand(t)) seen.land++;
+      if (this.land.planet.grid.degree(t) === 5) seen.wells++;
+    });
+    if (seen.tiles) this.visionVersion++;
+    return seen;
+  }
+
+  /**
+   * Where a boatyard crew sails next: out through the nearest water to the nearest tile with
+   * unexplored sea beside it, within the yard's reach. Returns the tile path (the yard's own
+   * landing first), or null if everything in reach is charted.
+   */
+  private seaRoute(b: Building): number[] | null {
+    const land = this.land;
+    const grid = land.planet.grid;
+    const exp = (this.explored[b.owner] ??= new Uint8Array(grid.count));
+    const reach = EXPLORE_REACH[b.reach] ?? EXPLORE_REACH[1];
+    const parent = new Map<number, number>([[b.tile, -1]]);
+    const depth = new Map<number, number>([[b.tile, 0]]);
+    const queue = [b.tile];
+    for (let i = 0; i < queue.length; i++) {
+      const t = queue[i] as number;
+      const d = depth.get(t) as number;
+      if (d >= 3 && !land.isLand(t) && !land.isIce(t) && grid.neighborsOf(t).some((n) => !exp[n])) {
+        const path: number[] = [];
+        for (let u = t; u !== -1; u = parent.get(u) as number) path.push(u);
+        return path.reverse();
+      }
+      if (d >= reach) continue;
+      for (const n of grid.neighborsOf(t)) {
+        if (parent.has(n)) continue;
+        // The first steps may cross the landing; after that only open water.
+        if (land.isLand(n) ? d >= 2 : land.isIce(n)) continue;
+        parent.set(n, t);
+        depth.set(n, d + 1);
+        queue.push(n);
+      }
+    }
+    return null;
+  }
+
   private stepWorker(s: Settler): void {
     const b = this.buildings[s.building] as Building;
     if (!b || !b.alive) {
@@ -3349,6 +3429,18 @@ export class Economy {
             s.target = out;
             s.timer = Math.round((def.workTicks ?? 60) * this.speedFactor(s, def.id));
           } else s.timer = 15;
+          return;
+        }
+        if (def.job === "explore") {
+          const route = this.seaRoute(b);
+          if (!route) {
+            s.timer = 600;
+            return;
+          }
+          s.state = "sail";
+          s.target = route[route.length - 1] as number;
+          s.visits = -1;
+          this.setPath(s, route);
           return;
         }
         if (def.job === "ropeway") {
@@ -3500,6 +3592,8 @@ export class Economy {
         } else if (def.job === "fish" && s.home >= 0 && (land.fish[s.home] as number) > 0) {
           land.fish[s.home]!--;
           got = produced;
+          // Fishing boats chart the water where they work.
+          this.chart(b.owner, s.home, FISHING_SIGHT);
         } else if (def.job === "hunt" && this.ecology.hunt(t)) got = produced;
         else if (def.job === "fungus") {
           if (land.feature[t] === Feature.Glowcap && (land.amount[t] as number) >= GLOWCAP_RIPE) {
@@ -3525,6 +3619,35 @@ export class Economy {
         s.target = -1;
         s.home = -1;
         this.setPath(s, back ?? [t, b.tile]);
+        return;
+      }
+      case "sail":
+      case "sailback": {
+        // The crew charts the sea along its track.
+        if (s.pi !== s.visits) {
+          s.visits = s.pi;
+          this.chart(b.owner, s.path[s.pi] as number, BOAT_SIGHT);
+        }
+        if (!this.walk(s)) return;
+        if (s.state === "sail") {
+          s.state = "scan";
+          s.timer = def.workTicks ?? 40;
+        } else {
+          s.state = "rest";
+          s.timer = def.restTicks ?? 400;
+          s.target = -1;
+        }
+        return;
+      }
+      case "scan": {
+        if (--s.timer > 0) return;
+        const seen = this.chart(b.owner, s.path[s.path.length - 1] as number, BOAT_SIGHT + 2);
+        this.train(s, def.id);
+        if (seen.wells > 0) this.notify(b.owner, `The ${def.name.toLowerCase()} crew has sighted ${seen.wells === 1 ? "a Star Well" : "Star Wells"} out at sea.`);
+        else if (seen.land >= 6) this.notify(b.owner, `The ${def.name.toLowerCase()} crew has sighted new land.`);
+        s.state = "sailback";
+        s.visits = -1;
+        this.setPath(s, [...s.path].reverse());
         return;
       }
       case "back":
@@ -4334,9 +4457,15 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach);
     for (const b of this.buildings) if (b.alive && b.def.storage) for (const m of b.goodMode) h.int(m);
     for (const u of this.rotateUntil) h.int(u ?? -1);
+    // What each player has charted (boats make it history, not just the lanterns' reach).
+    for (const e of this.explored) {
+      let seen = 0;
+      for (let i = 0; i < e.length; i += 5) seen += e[i] as number;
+      h.int(seen);
+    }
     for (const p of this.people) if (p.alive) h.int(p.rank).int(p.arms).int(p.owner);
     for (const b of this.buildings) if (b.alive) h.int(Math.round(b.wear * 1000)).int(b.burn).int(b.fuelUntil);
     let vents = 0;

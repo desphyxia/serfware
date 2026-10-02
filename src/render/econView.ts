@@ -16,6 +16,7 @@ import {
   goodGeometry,
   flagGeometry,
   pennantGeometry,
+  rowboatGeometry,
   sledgeGeometry,
   stiltsGeometry,
 } from "./models";
@@ -45,6 +46,7 @@ const HIDDEN_STATES = new Set(["rest", "craft", "guard"]);
 const MAX_SETTLERS = 4000;
 const MAX_GOODS_EACH = 2500;
 const MAX_SLEDGES = 256;
+const MAX_BOATS = 96;
 
 /** Tool goods to the tool a settler holds. */
 const TOOL_OF: Record<string, Tool> = {
@@ -100,6 +102,8 @@ export class EconView {
   /** Carriers on snowy roads and lake ice ride sledges pulled by a dog. */
   private readonly sledges: THREE.InstancedMesh;
   private readonly dogs = new AnimalBatch("dog", MAX_SLEDGES);
+  /** Boatyard crews sail rowing boats. */
+  private readonly rowboats: THREE.InstancedMesh;
   /** Debug: figures that are not in the simulation (see `showPoses`). */
   private poseGallery: { p: THREE.Vector3; q: THREE.Quaternion; colour: THREE.Color; anim: Anim; phase: number; hat: Hat; tool: Tool }[] = [];
   private figureCount = 0;
@@ -142,6 +146,7 @@ export class EconView {
     this.group.add(this.figures.mesh);
     this.sledges = inst(sledgeGeometry(), propMat, MAX_SLEDGES);
     this.group.add(this.dogs.mesh);
+    this.rowboats = inst(rowboatGeometry(), propMat, MAX_BOATS);
     const goodsMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, brush: 0.3 });
     this.goodMeshes = GOODS.map((g) => inst(goodGeometry(g.id), goodsMat, MAX_GOODS_EACH));
     this.goodCounts = GOODS.map(() => 0);
@@ -493,6 +498,7 @@ export class EconView {
     const k = 1 - Math.exp(-dt * 12);
     let n = 0;
     let nSledge = 0;
+    let nBoat = 0;
     const alive = new Set<number>();
     for (const s of this.eco.settlers) {
       if (!s.alive) continue;
@@ -529,6 +535,20 @@ export class EconView {
       const p = d.clone().addScaledVector(d.clone().normalize(), bob);
       this.frames.orient(p, p.clone().add(heading), q);
       const colour = s.role === "warden" || s.role === "attacker" ? playerColor(s.owner) : ROLE_COLORS[s.role];
+      // A crew out at sea sits in a rowing boat on the water.
+      const boating = s.role === "worker" && (s.state === "sail" || s.state === "sailback" || s.state === "scan") && nBoat < MAX_BOATS && !land.isLand(here) && !land.isIce(here);
+      if (boating) {
+        const bob = Math.sin(time * 1.6 + s.id) * 0.02;
+        const hull = d.clone().addScaledVector(d.clone().normalize(), 0.015 + bob);
+        this.frames.orient(hull, hull.clone().add(heading), q);
+        m.compose(hull, q, one);
+        this.rowboats.setMatrixAt(nBoat++, m);
+        const seat = hull.clone().addScaledVector(hull.clone().normalize(), 0.1);
+        this.figures.set(n, seat, q, colour, Anim.Rest, (s.id * 0.618) % 1 * 10, look.hat, Tool.None);
+        this.instanceSettler[n] = s.id;
+        n++;
+        continue;
+      }
       if (sledging) {
         // Sitting on the back of the sledge, the load lashed in front, the dog out ahead.
         const up = p.clone().normalize();
@@ -566,6 +586,8 @@ export class EconView {
     }
     this.figureCount = n;
     this.figures.flush(n, time);
+    this.rowboats.count = nBoat;
+    this.rowboats.instanceMatrix.needsUpdate = true;
     this.sledges.count = nSledge;
     this.sledges.instanceMatrix.needsUpdate = true;
     this.dogs.flush(nSledge, time);
@@ -653,6 +675,7 @@ export class EconView {
     for (const mesh of [this.flagPoles, this.pennants, ...this.goodMeshes]) mesh.dispose();
     this.figures.mesh.geometry.dispose();
     this.sledges.dispose();
+    this.rowboats.geometry.dispose();
     this.dogs.dispose();
   }
 }

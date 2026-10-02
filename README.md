@@ -102,6 +102,16 @@ As in Settlers 2, a workshop, farm, mine or other workplace shows its **producti
 the last game day its worker spent at work, not waiting for goods or for room on the flag. A road
 shows how busy its carrier was; a road that stays above 80% calls extra carriers.
 
+## Exploring the sea
+
+You never steer a boat. The sea is charted three ways:
+- **Fishing boats:** every time a fisher lands a catch, the water around that spot is explored.
+- **Lighthouse:** a tall shore tower that sees 16 steps over land and sea. It holds no land and needs no warden.
+- **Boatyard:** build it on the open coast. Its crew sails out by itself to the nearest sea it hasn't
+  seen, charts it, comes back and rests, then goes again. Select the yard and choose **Near**
+  (10 steps), **Far** (18) or **Very far** (30) to say how far it may go. Crews report islands,
+  Star Wells and new land.
+
 ## Stores
 
 A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):
