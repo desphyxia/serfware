@@ -61,6 +61,14 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Geologists and mines
+
+Select a flag and choose **Send geologist** (it needs a hammer and a mountain, or ground within two
+steps of one, in reach of the flag). A geologist samples 12 spots around the flag and plants a
+signpost on each: ore, or nothing. A **small** signpost marks a deposit under 20 loads, so you
+don't build a mine on a speck. You are told once when an ore is found, not for every signpost
+beside an earlier one of the same kind. Signposts fade after a while.
+
 ## Wardens
 
 Lantern buildings are staffed by the strongest free warden (rank first, then skill, then
