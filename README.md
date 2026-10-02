@@ -61,6 +61,12 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Wardens
+
+Lantern buildings are staffed by the strongest free warden (rank first, then skill, then
+distance). Economy panel → Tools → **Rotate wardens** (Serf City's "cycle knights") lasts half
+a day: lanterns near a border swap their weakest warden on watch for a stronger free one.
+
 ## Stores
 
 A Storehouse has a goods mode, as in Serf City (select it, then In, Stop or Out):

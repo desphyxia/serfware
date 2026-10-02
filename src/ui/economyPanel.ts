@@ -222,6 +222,7 @@ export class EconomyPanel extends Panel {
         garrison("frontier", "Frontier"),
         garrison("near", "Near"),
         garrison("inland", "Inland"),
+        h("div", { class: "btn-row" }, h("button", { class: "btn small", title: "For half a day, lanterns near a border swap their weakest warden for a stronger free one.", onclick: () => this.command({ t: "rotate" }) }, "Rotate wardens")),
         h("h3", { class: "sub" }, "Toolsmith"),
         h("p", { class: "hint" }, "The toolsmith makes whichever tool has the highest priority for how many you already have. A tool decides who can take up a trade."),
         ...TOOLS.map((t) => {
