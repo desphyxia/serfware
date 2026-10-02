@@ -1,6 +1,6 @@
 /** Player settings, graphics presets, and persistence. */
 
-export type PresetName = "low" | "medium" | "high" | "deck";
+export type PresetName = "low" | "medium" | "high" | "deck" | "handheld";
 export type Preset = PresetName | "custom";
 
 export interface GraphicsSettings {
@@ -35,6 +35,14 @@ export interface AudioSettings {
 
 export interface InterfaceSettings {
   uiScale: number;
+  /** Text size on top of the interface scale (1 = normal). */
+  textScale: number;
+  /** Interface language id ("en" or a registered language); applies after a reload. */
+  language: string;
+  /** Colours of goods and players: "default" or "safe" (colour-blind safe); applies after a reload. */
+  palette: string;
+  /** Captions for sounds (hammering, birdsong, rain...) at the foot of the screen. */
+  captions: boolean;
   invertZoom: boolean;
   edgeScroll: boolean;
   showFps: boolean;
@@ -95,6 +103,25 @@ export const PRESETS: Record<PresetName, GraphicsSettings> = {
     dof: false,
     backend: "auto",
   },
+  /**
+   * Handhelds and weak laptops aiming at 30 fps: a lower render resolution (the interface stays
+   * sharp), no shadows, bloom or occlusion, thin vegetation and the cheap atmosphere.
+   */
+  handheld: {
+    resolutionScale: 0.7,
+    shadows: "off",
+    shadowMapSize: 1024,
+    msaa: 0,
+    bloom: false,
+    vegetation: 0.35,
+    particles: 0.3,
+    maxFps: 30,
+    terrainDetail: "low",
+    atmosphere: "simple",
+    ao: false,
+    dof: false,
+    backend: "auto",
+  },
   high: {
     resolutionScale: 1,
     shadows: "soft",
@@ -118,7 +145,7 @@ export function defaultSettings(preset: PresetName = "medium"): Settings {
     preset,
     graphics: { ...PRESETS[preset] },
     audio: { master: 0.8, music: 0.6, ambience: 0.8, effects: 0.8 },
-    ui: { uiScale: 1, invertZoom: false, edgeScroll: false, showFps: false },
+    ui: { uiScale: 1, textScale: 1, language: "en", palette: "default", captions: false, invertZoom: false, edgeScroll: false, showFps: false },
   };
 }
 
@@ -169,6 +196,8 @@ type Listener = (s: Settings) => void;
 const STORAGE_KEY = "seedfall.settings.v1";
 /** Interface scale for the Steam Deck preset. */
 export const DECK_UI_SCALE = 1.3;
+/** Interface scale for the handheld preset. */
+export const HANDHELD_UI_SCALE = 1.25;
 
 export class SettingsStore {
   private s: Settings;
@@ -195,7 +224,7 @@ export class SettingsStore {
 
   applyPreset(p: PresetName): void {
     // The Deck preset also enlarges the interface for its 7-inch screen.
-    const ui = p === "deck" ? { ...this.s.ui, uiScale: DECK_UI_SCALE } : this.s.ui;
+    const ui = p === "deck" ? { ...this.s.ui, uiScale: DECK_UI_SCALE } : p === "handheld" ? { ...this.s.ui, uiScale: HANDHELD_UI_SCALE } : this.s.ui;
     this.s = { ...this.s, preset: p, graphics: { ...PRESETS[p] }, ui };
     this.commit();
   }

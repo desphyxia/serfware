@@ -312,6 +312,8 @@ export class WorldView {
     WIND.uTime.value = p.time;
     this.nature.update(p.vegetation);
     this.econ.night.value = 1 - p.daylight;
+    // Far from the view nobody is drawn: beyond about 1.6 view-distances (and at least 14 tiles) people only keep their place.
+    this.econ.cull = p.ground && p.distance !== undefined ? { center: p.ground, r2: Math.max(p.distance * 1.6, 14) ** 2 } : null;
     this.econ.update(p.time, p.dt);
     this.grass.update(p.focus, p.closeness, p.vegetation);
     this.undergrowth.update(p.focus, p.closeness, p.vegetation);

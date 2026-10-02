@@ -259,6 +259,45 @@ sent you and pressing *Receive* adds it to your Letters, with a button to visit 
 There is no server: letters travel like saves do, and a received letter is cut to size and its
 picture checked before it is kept.
 
+## Scale, handhelds, accessibility and languages
+
+**Scale.** `npm run soak -- scale` grows a huge world with eight AI settlements and records settlers and
+the wall-clock cost of a tick. Measured (30 game days): the AIs reach about 930 settlers and 1,350
+people and then stop growing (they run out of land), at 3.5 ms per tick by day 30 (ticks come ten a second);
+that is about 3.7 µs per settler, so 12,000 settlers would cost roughly 45 ms a tick by extrapolation,
+which has not been measured because no game here reaches it. The drawing side was the bigger cost:
+`npm run scale-perf` times the settler view with 12,000 synthetic settlers on a tiny world. Before
+this batch it took about 25 ms per frame of JavaScript; now settlers that are hidden, indoors, beyond
+the 4,000-figure limit or far from the camera are not animated and not allocated for, and it takes
+about 9 ms close up and 12 ms from orbit. (The simulation still runs everyone; there is no separate
+road-graph-only mode, and nothing here ran on a GPU or a real handheld.)
+
+**Handheld preset** (Settings, Graphics, *Handheld*): 30 fps limit, 70 % render resolution, no
+shadows, bloom or occlusion, thin vegetation and particles, simple atmosphere, interface at 125 %.
+It draws about as many triangles as Low (321k against 317k in `npm run perf`'s close-up); what it
+saves are the post-processing and shadow passes and about half the pixels. Its 30 fps target is a
+setting, not a measurement: it was not run on a handheld.
+
+**Accessibility.**
+- *Colours* (Settings, Interface): the *colour-blind safe* palette colours goods and players from eight
+  colours chosen so that the two nearest are at least 28 ΔE (CIE76) apart for normal vision and for
+  protan, deutan and tritan simulations (tests check this). Goods also carry a shape (circle, square,
+  diamond) beside the colour, so seventeen goods never depend on colour alone.
+- *Text size* scales text on top of the interface scale.
+- *Controls* tab: every key can be rebound (Escape is reserved); the camera keys, tools, panels and
+  the new photo and letter keys included. Arrow keys always move the camera.
+- *Captions for sounds*: words at the foot of the screen for work sounds ("[hammering, left]"), rain,
+  waves, wind and birdsong or crickets, shown even when the sound is off. The game has no voices.
+
+**Languages.** Interface text is written in English and wrapped in `t("…")`; a language is a file in
+`src/locales` mapping English text to its translation (`{name}` marks values that must stay). Swedish is
+included for the 184 texts wrapped so far: Settings, the toolbar and build bar, photo mode, letters,
+the time-lapse bar and captions. That is a part of the interface: the info panels, economy panel,
+Almanac, diplomacy, campaign texts, building names and descriptions are still English. The Swedish
+was written by the assistant, not a native speaker, and should be reviewed. `npm run strings` lists
+the texts and each language's coverage (`-- --write` refreshes `src/locales/template.json`); a test
+fails if a translation is missing, stale or loses a `{value}`.
+
 ## Keys
 
 | Key | Action |

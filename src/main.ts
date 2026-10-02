@@ -1,6 +1,10 @@
 import "./ui/styles.css";
 import { crash } from "./core/crash";
 import { captureConsole, log } from "./core/log";
+import { setPalette } from "./core/access";
+import { setLanguage } from "./core/i18n";
+import "./locales";
+import { applyPlayerPalette } from "./render/players";
 import { SettingsStore, suggestPreset } from "./core/settings";
 import { BUILD } from "./build";
 import { Game } from "./game";
@@ -35,6 +39,11 @@ async function boot(): Promise<void> {
       mobile: /Mobi|Android/i.test(nav.userAgent),
     }),
   );
+  // Language and colours are chosen before anything is drawn (changing them reloads the page).
+  setLanguage(settings.get().ui.language);
+  setPalette(settings.get().ui.palette as "default" | "safe");
+  applyPlayerPalette();
+  document.documentElement.lang = settings.get().ui.language;
   const root = document.getElementById("app") ?? document.body;
   const game = new Game(root, settings, initialSeed());
   await game.start();

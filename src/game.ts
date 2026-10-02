@@ -36,6 +36,8 @@ import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
+import { Keymap } from "./core/keymap";
+import { ambientCaptions, Captions, workCaption } from "./ui/captions";
 import { FILTERS, LettersPanel, newPhotoState, PhotoPanel, TimelapseBar } from "./ui/presentation";
 import { DiplomacyPanel } from "./ui/diplomacy";
 import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
@@ -113,6 +115,8 @@ export class Game {
   private readonly systemMap: SystemMap;
   private readonly almanac: AlmanacPanel;
   /** Photo mode, letters and the time-lapse bar (see ui/presentation). */
+  private readonly keys = Keymap.load();
+  private readonly captions = new Captions();
   private readonly photo = newPhotoState();
   private readonly photoPanel: PhotoPanel;
   private readonly lettersPanel: LettersPanel;
@@ -226,7 +230,7 @@ export class Game {
       rivals: () => this.rivals,
       stakes: () => this.stakes,
       difficulty: () => this.difficulty,
-    });
+    }, this.keys);
     this.report = new ReportPanel();
     this.debug = new DebugPanel({
       fps: () => this.fps,
@@ -438,6 +442,7 @@ export class Game {
       this.diplomacy.root,
       this.photoPanel.root,
       this.lettersPanel.root,
+      this.captions.root,
       this.timelapseBar.root,
       this.objectives.root,
       this.story.root,
@@ -477,7 +482,7 @@ export class Game {
         const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.hoverTile : 0);
         return this.view ? this.view.frames.groundAt(dir, t) : planet.surfaceRadius(t);
       },
-      { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll },
+      { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll, key: (a) => this.keys.key(a) },
     );
     cam.attach(canvas);
     return cam;
@@ -1922,6 +1927,8 @@ export class Game {
 
   private applyUi(): void {
     document.documentElement.style.setProperty("--ui-scale", String(this.settings.get().ui.uiScale));
+    document.documentElement.style.setProperty("--text-scale", String(this.settings.get().ui.textScale));
+    this.captions.on = this.settings.get().ui.captions;
   }
 
   private bindInput(canvas: HTMLCanvasElement): void {
@@ -2029,16 +2036,11 @@ export class Game {
     window.addEventListener("resize", () => this.resize());
     window.addEventListener("keydown", (e) => {
       if ((e.target as HTMLElement).closest?.("input, textarea, select")) return;
-      if (e.key === "F3" || e.key === "`") {
+      const action = this.keys.actionOf(e.key);
+      if (e.key === "`" || action === "debug") {
         e.preventDefault();
         this.debug.toggle();
-      } else if (e.key === "F2") {
-        e.preventDefault();
-        this.photoPanel.toggle();
-      } else if (e.key === "F4") {
-        e.preventDefault();
-        this.lettersPanel.toggle();
-      } else if (e.key === "F8") {
+      } else if (action === "report") {
         e.preventDefault();
         this.report.show();
       } else if (this.painting && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
@@ -2046,16 +2048,22 @@ export class Game {
         this.paintUndo();
       } else if (e.key === "Escape") {
         this.escape();
-      } else if (e.key === " ") {
+      } else if (action === "pause") {
         e.preventDefault();
         this.speed = this.speed === 0 ? 1 : 0;
-      } else if (e.key.toLowerCase() === "m") {
+      } else if (action === "menu") {
         this.menu.toggle();
-      } else if (e.key.toLowerCase() === "o") {
+      } else if (action === "systemMap") {
         this.systemMap.toggle();
-      } else if (e.key.toLowerCase() === "g") {
+      } else if (action === "grid") {
         this.view.setGrid(!this.view.grid);
-      } else this.buildBar.key(e.key);
+      } else if (action === "photo") {
+        e.preventDefault();
+        this.photoPanel.toggle();
+      } else if (action === "letters") {
+        e.preventDefault();
+        this.lettersPanel.toggle();
+      } else this.buildBar.key(e.key, (k) => this.keys.actionOf(k));
     });
     canvas.addEventListener("webglcontextlost", (e) => {
       e.preventDefault();
@@ -2509,7 +2517,8 @@ export class Game {
   }
 
   private updateAudio(): void {
-    if (!this.audio.running) return;
+    const caps = this.captions.on;
+    if (!this.audio.running && !caps) return;
     const R = this.world.planet.params.radius;
     const land = this.world.land;
     const focusTile = this.world.planet.grid.nearestTile([this.cam.focus.x, this.cam.focus.y, this.cam.focus.z], this.hoverTile >= 0 ? this.hoverTile : 0);
@@ -2532,6 +2541,13 @@ export class Game {
       const pan = v.clone().project(this.camera).x;
       work.push({ kind, distance, pan, id: s.id });
     }
+    if (caps) {
+      const now = performance.now();
+      for (const w of work) this.captions.say(`work-${w.kind}`, workCaption(w.kind, w.pan), now, 5000);
+      const rain = (this.world.climate.temp[focusTile] as number) > 0.5 ? (this.world.climate.rain[focusTile] as number) : 0;
+      for (const [kind, text] of ambientCaptions({ daylight: this.daylight, water: this.waterNear, rain, wind: 0.35 + (this.world.climate.rain[focusTile] as number) * 0.4, closeness: this.cam.closeness() })) this.captions.say(kind, text, now, 12000);
+    }
+    if (!this.audio.running) return;
     this.audio.update(
       {
         daylight: this.daylight,

@@ -3,6 +3,8 @@ import * as THREE from "three/webgpu";
 export interface CameraInputOptions {
   invertZoom: () => boolean;
   edgeScroll: () => boolean;
+  /** The key (lower case) bound to a camera action: left, right, up, down, turnLeft, turnRight, resetView, tiltUp, tiltDown, zoomIn, zoomOut. */
+  key: (action: string) => string;
 }
 
 /**
@@ -192,22 +194,22 @@ export class PlanetCamera {
     const speed = 900 * dt;
     let kx = 0;
     let ky = 0;
-    if (k.has("a") || k.has("arrowleft")) kx -= 1;
-    if (k.has("d") || k.has("arrowright")) kx += 1;
-    if (k.has("w") || k.has("arrowup")) ky += 1;
-    if (k.has("s") || k.has("arrowdown")) ky -= 1;
+    if (k.has(this.opts.key("left")) || k.has("arrowleft")) kx -= 1;
+    if (k.has(this.opts.key("right")) || k.has("arrowright")) kx += 1;
+    if (k.has(this.opts.key("up")) || k.has("arrowup")) ky += 1;
+    if (k.has(this.opts.key("down")) || k.has("arrowdown")) ky -= 1;
     if (this.opts.edgeScroll()) {
       kx += this.edge.x;
       ky -= this.edge.y;
     }
     if (kx || ky) this.pan(kx * speed, ky * speed, 900);
-    if (k.has("q")) this.tHeading += 1.6 * dt;
-    if (k.has("e")) this.tHeading -= 1.6 * dt;
-    if (k.has("r")) this.resetView();
-    if (k.has("pageup")) this.tPitchOffset = Math.min(0.5, this.tPitchOffset + dt);
-    if (k.has("pagedown")) this.tPitchOffset = Math.max(-0.6, this.tPitchOffset - dt);
-    if (k.has("+") || k.has("=")) this.tDistance = Math.max(this.minDistance, this.tDistance * (1 - dt * 1.5));
-    if (k.has("-")) this.tDistance = Math.min(this.maxDistance, this.tDistance * (1 + dt * 1.5));
+    if (k.has(this.opts.key("turnLeft"))) this.tHeading += 1.6 * dt;
+    if (k.has(this.opts.key("turnRight"))) this.tHeading -= 1.6 * dt;
+    if (k.has(this.opts.key("resetView"))) this.resetView();
+    if (k.has(this.opts.key("tiltUp"))) this.tPitchOffset = Math.min(0.5, this.tPitchOffset + dt);
+    if (k.has(this.opts.key("tiltDown"))) this.tPitchOffset = Math.max(-0.6, this.tPitchOffset - dt);
+    if (k.has(this.opts.key("zoomIn")) || (this.opts.key("zoomIn") === "+" && k.has("="))) this.tDistance = Math.max(this.minDistance, this.tDistance * (1 - dt * 1.5));
+    if (k.has(this.opts.key("zoomOut"))) this.tDistance = Math.min(this.maxDistance, this.tDistance * (1 + dt * 1.5));
 
     // Smooth toward targets.
     const s = 1 - Math.exp(-dt * 9);
