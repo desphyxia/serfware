@@ -84,6 +84,26 @@ show at the side of the screen. Chapters can be played in co-op: pick one under 
 Scenario. Goals and scripted events run inside the simulation, so every player sees them at the
 same moment and saves replay them exactly.
 
+## Creating: world painter, scenarios, mods
+
+The game menu's Create tab holds the creative tools:
+
+- **World painter.** Raise and lower the ground, level it, flood it into sea, lay down regions
+  (Meadowlands, Canopy Deeps, Saltglass…), plant woods, clear land, scatter rocks, put ore
+  underground and move the Star Wells. A painted world is the seed plus the strokes, so it saves
+  small and plays the same everywhere. Ctrl+Z undoes. Play it, save it, export it, or build a
+  scenario on it.
+- **Scenario editor.** A title, a story, goals (all at once or one at a time), events that fire
+  once ("on day 2, a cold snap"; "when three houses stand, 10 planks") and how it can be lost, on
+  any seed or painted world, with rivals, difficulty and your mods. Save, play, export.
+- **Mods.** JSON packs that add goods and buildings (borrowing a base building's model), change
+  costs, work times and other numbers, rename and retune the warden ranks, or change the start.
+  "Mod template" downloads a worked example. Turned-on mods apply to new games and travel with
+  saves and multiplayer starts.
+
+Creations are kept in this browser and exported as `.json` files; the Steam build shares them on
+the Workshop (see docs/STEAM.md).
+
 ## Keys
 
 | Key | Action |
