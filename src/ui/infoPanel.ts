@@ -49,7 +49,7 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
   }
@@ -63,6 +63,8 @@ export class InfoPanel extends Panel {
   }
 
   private attackCount = 0;
+  /** Which wardens go first: the strongest (the default) or the weakest. */
+  private attackOrder: "strongest" | "weakest" = "strongest";
   private attackTarget = -1;
 
   private dayTicks(eco: Economy): number {
@@ -77,14 +79,14 @@ export class InfoPanel extends Panel {
     if (!target) return [];
     const blocked = eco.attackBlocked(me, target);
     if (blocked) return [h("p", { class: "hint" }, blocked)];
-    const pool = eco.attackersFor(me, target).length;
+    const pool = eco.attackersFor(me, target, this.attackOrder).length;
     if (!pool) return [h("p", { class: "hint" }, "No wardens can be spared. Each lantern keeps one at home.")];
     if (this.attackTarget !== targetId) {
       this.attackTarget = targetId;
       this.attackCount = pool;
     }
     this.attackCount = Math.max(1, Math.min(pool, this.attackCount));
-    const odds = eco.attackOdds(me, target, this.attackCount);
+    const odds = eco.attackOdds(me, target, this.attackCount, this.attackOrder);
     const input = h("input", { type: "range", id: "atk-n", min: 1, max: pool, step: 1 }) as HTMLInputElement;
     input.value = String(this.attackCount);
     input.addEventListener("input", () => {
@@ -95,9 +97,27 @@ export class InfoPanel extends Panel {
     return [
       h("h3", { class: "sub" }, "Attack"),
       h("div", { class: "row" }, h("label", { for: "atk-n" }, "Wardens"), input, h("output", {}, `${this.attackCount} of ${pool}`)),
+      h(
+        "div",
+        { class: "row" },
+        h("label", { for: "atk-order" }, "Send first"),
+        h(
+          "select",
+          {
+            id: "atk-order",
+            onchange: (e: Event) => {
+              this.attackOrder = (e.target as HTMLSelectElement).value === "weakest" ? "weakest" : "strongest";
+              this.refresh();
+            },
+          },
+          h("option", { value: "strongest", selected: this.attackOrder === "strongest" }, "The strongest"),
+          h("option", { value: "weakest", selected: this.attackOrder === "weakest" }, "The weakest"),
+        ),
+        h("span"),
+      ),
       h("p", { class: pct >= 60 ? "status" : "status warn" }, `About ${pct} % chance to take it.`),
       h("p", { class: "hint" }, "Rank, blades, the march, your settlement's resolve and the defenders' home ground all count. Bows loose a volley first."),
-      h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.attack(targetId, this.attackCount) }, `Send ${this.attackCount}`)),
+      h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.attack(targetId, this.attackCount, this.attackOrder) }, `Send ${this.attackCount}`)),
     ];
   }
 
@@ -180,7 +200,7 @@ export class InfoPanel extends Panel {
         if (!b.built) body.push(h("p", { class: "status" }, `Once built, a warden lights it and your border grows ${b.def.light} steps around it.`));
         else {
           body.push(h("p", { class: b.lit ? "status" : "status warn" }, b.lit ? `Lit. Light reaches ${b.def.light} steps.` : "Dark. Waiting for a warden to light it."));
-          body.push(h("p", { class: "hint" }, `${on} of ${b.def.slots} wardens on watch${coming ? `, ${coming} on the way` : ""}. Wants ${eco.garrisonWant(b)} (${b.frontier ? "frontier" : "inland"} policy).`));
+          body.push(h("p", { class: "hint" }, `${on} of ${b.def.slots} wardens on watch${coming ? `, ${coming} on the way` : ""}. Wants ${eco.garrisonWant(b)} (${b.threat >= 2 ? "frontier" : b.threat === 1 ? "near" : "inland"} policy).`));
           const roster = eco.defendersOf(b).reverse();
           if (roster.length)
             body.push(

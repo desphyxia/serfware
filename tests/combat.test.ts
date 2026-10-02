@@ -130,3 +130,113 @@ describe("attacks", () => {
     expect(w.economy.winReason).toBe("wells");
   });
 });
+
+describe("war rules from Serf City", () => {
+  it("attackers' morale follows their share of the world's gold", { timeout: 60000 }, () => {
+    const w = battleWorld({});
+    const eco = w.economy;
+    const gold = goodId("gold");
+    const keep = (p: number) => eco.buildings[eco.keeps[p]!]!;
+    keep(0).stock[gold] = 0;
+    keep(1).stock[gold] = 0;
+    // No gold anywhere: no handicap.
+    expect(eco.warMorale(0)).toBe(1);
+    // All the gold is the enemy's: three-quarters strength.
+    keep(1).stock[gold] = 10;
+    expect(eco.warMorale(0)).toBeCloseTo(0.75);
+    expect(eco.warMorale(1)).toBe(1);
+    // Half the world's gold or more: full strength.
+    keep(0).stock[gold] = 10;
+    expect(eco.warMorale(0)).toBe(1);
+    // And it shows in the odds of taking a Hearthship.
+    const enemy = keep(1);
+    keep(0).stock[gold] = 0;
+    for (const p of eco.people) if (p.owner === 0) p.rank = 2;
+    const poor = eco.attackOdds(0, enemy, 99);
+    keep(0).stock[gold] = 10;
+    keep(1).stock[gold] = 0;
+    const rich = eco.attackOdds(0, enemy, 99);
+    expect(rich).toBeGreaterThan(poor);
+  });
+
+  it("wardens can be sent weakest first", { timeout: 60000 }, () => {
+    const w = battleWorld({});
+    const eco = w.economy;
+    const enemy = eco.buildings[eco.keeps[1]!]!;
+    // Give the wardens different ranks.
+    let i = 0;
+    for (const p of eco.people) if (p.owner === 0) p.rank = i++ % 4;
+    run(w, 600);
+    const strong = eco.attackersFor(0, enemy, "strongest");
+    const weak = eco.attackersFor(0, enemy, "weakest");
+    expect(strong.length).toBeGreaterThanOrEqual(2);
+    expect(weak.length).toBe(strong.length);
+    const rank = (x: (typeof strong)[0]) => eco.people[x.s.person]!.rank;
+    expect(rank(strong[0]!)).toBeGreaterThanOrEqual(rank(strong[strong.length - 1]!));
+    expect(rank(weak[0]!)).toBeLessThanOrEqual(rank(weak[weak.length - 1]!));
+    expect(rank(strong[0]!)).toBeGreaterThan(rank(weak[0]!));
+    // The command takes the choice, and the weakest go first.
+    expect(w.command({ t: "attack", target: enemy.id, count: 1, order: "weakest" }).ok).toBe(true);
+    const sent = eco.settlers.find((s) => s.alive && s.role === "attacker")!;
+    expect(eco.people[sent.person]!.rank).toBe(rank(weak[0]!));
+  });
+
+  it("garrisons follow how near the enemy is: frontier, near and inland", { timeout: 60000 }, () => {
+    const w = battleWorld({});
+    const eco = w.economy;
+    const beacon = eco.buildings.find((b) => b.alive && b.owner === 0 && b.def.id === "beacon")!;
+    const set = (zone: "frontier" | "near" | "inland", value: number) => w.command({ t: "garrison", zone, value });
+    set("frontier", 0.9);
+    set("near", 0.5);
+    set("inland", 0.1);
+    const want = (threat: number) => {
+      beacon.threat = threat;
+      return eco.garrisonWant(beacon);
+    };
+    expect([want(0), want(1), want(2)]).toEqual([1, 3, 5]);
+    // Without a "near" setting (older saves) it is halfway between the other two.
+    delete (eco.prefs[0]!.garrison as { near?: number }).near;
+    expect(want(1)).toBe(3);
+    // A beacon pushed toward the enemy has the enemy's land close by.
+    const threats = eco.buildings.filter((b) => b.alive && b.owner === 0 && b.lit && b.def.slots).map((b) => b.threat);
+    expect(Math.max(...threats)).toBeGreaterThanOrEqual(1);
+    expect(eco.buildings.filter((b) => b.alive && b.owner === 0 && b.lit && b.def.slots && b.threat >= 2).every((b) => b.frontier)).toBe(true);
+  });
+
+  it("a lantern that falls decides the land around it, even where the old owner also had light", { timeout: 120000 }, () => {
+    const w = battleWorld({});
+    const eco = w.economy;
+    const keep1 = eco.buildings[eco.keeps[1]!]!;
+    // Give the enemy a lantern beside its Hearthship, so the two lights overlap, and let it light.
+    const spots = w.land.ring(keep1.tile, 3).filter((t) => w.land.territory[t] === 2 && w.land.isLand(t));
+    const at = placeOn(w, "lamphouse", spots, 1, true, 40);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const lantern = eco.buildings.find((b) => b.alive && b.tile === at)!;
+    run(w, 30000, () => lantern.lit);
+    expect(lantern.lit).toBe(true);
+    const flood = (eco as unknown as { flood(c: number, r: number, f: (t: number, d: number) => void): void }).flood.bind(eco);
+    const before = Uint8Array.from(w.land.territory);
+    (eco as unknown as { capture(b: unknown, owner: number): void }).capture(lantern, 0);
+    eco.updateTerritory();
+    // Distance from each tile to the nearest lit lantern of each side.
+    const nearest = (owner: number) => {
+      const d = new Map<number, number>();
+      for (const b of eco.buildings) if (b.alive && b.lit && b.def.light && b.owner === owner) flood(b.tile, b.def.light, (t, k) => d.set(t, Math.min(d.get(t) ?? 99, k)));
+      return d;
+    };
+    const mine = nearest(0);
+    const theirs = nearest(1);
+    let flipped = 0;
+    flood(lantern.tile, lantern.def.light!, (t) => {
+      const a = mine.get(t);
+      if (a === undefined) return;
+      const b = theirs.get(t) ?? 99;
+      if (a < b) {
+        // Closer to the new owner's lantern: it is theirs now (the old rule left it with the old owner).
+        expect(w.land.territory[t]).toBe(1);
+        if (before[t] === 2) flipped++;
+      }
+    });
+    expect(flipped).toBeGreaterThan(0);
+  });
+});

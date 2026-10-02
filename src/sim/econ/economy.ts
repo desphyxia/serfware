@@ -129,6 +129,8 @@ export interface Building {
   lit: boolean;
   /** Lantern buildings: close to another player's border. */
   frontier: boolean;
+  /** How near another player's land is: 0 far (inland), 1 near, 2 close (the frontier). */
+  threat: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
   stranded: number;
   /** Attackers waiting at the door, and the duel being fought there. */
@@ -155,7 +157,7 @@ export interface Prefs {
   dist: Record<string, Record<string, number>>;
   tools: Record<string, number>;
   /** Share of warden places to fill, near other players' borders and further inside. */
-  garrison: { frontier: number; inland: number };
+  garrison: { frontier: number; inland: number; near?: number };
   /** Transport priority: goods carriers pick up first, first in the list first (good ids). */
   transport: string[];
 }
@@ -229,8 +231,8 @@ export type Command = (
   | { t: "prio"; key: string; target: string; value: number }
   | { t: "toolprio"; tool: string; value: number }
   | { t: "transport"; good: string; to: number }
-  | { t: "garrison"; zone: "frontier" | "inland"; value: number }
-  | { t: "attack"; target: number; count: number }
+  | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
+  | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
   | { t: "hedge"; tile: number }
   | { t: "causeway"; tile: number }
   | DiplomacyCommand
@@ -321,6 +323,8 @@ export class Economy {
   /** Bumped when territory or sight changes. */
   visionVersion = 0;
   private territoryDirty = false;
+  /** Tiles whose owner is decided afresh (nearest lantern) at the next recount: where a lantern fell. */
+  private readonly recontest = new Set<number>();
   /** Fire, succession, erosion, groundwater, wildlife and pollinators. */
   readonly ecology: Ecology;
   /** Per tile: covered by a working well (rebuilt when buildings change). */
@@ -783,7 +787,7 @@ export class Economy {
         return { ok: true };
       }
       case "attack":
-        return this.cmdAttack(cmd.target, cmd.count, p);
+        return this.cmdAttack(cmd.target, cmd.count, p, cmd.order);
       case "hedge":
         return this.cmdHedge(cmd.tile, p);
       case "causeway":
@@ -791,7 +795,7 @@ export class Economy {
       case "send":
         return this.cmdSend(p, cmd.to, cmd.good, cmd.count);
       case "garrison":
-        if (cmd.zone !== "frontier" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
+        if (cmd.zone !== "frontier" && cmd.zone !== "near" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
     }
@@ -1082,6 +1086,7 @@ export class Economy {
       garrison: [],
       lit: false,
       frontier: false,
+      threat: 0,
       stranded: -1,
       siege: [],
       duel: null,
@@ -1809,7 +1814,9 @@ export class Economy {
   garrisonWant(b: Building): number {
     const slots = b.def.slots ?? 0;
     const g = (this.prefs[b.owner] as Prefs).garrison;
-    return Math.max(1, Math.min(slots, Math.ceil(slots * (b.frontier ? g.frontier : g.inland) - 1e-9)));
+    // Three levels, as in Serf City (which has four): the middle one defaults to halfway.
+    const share = b.threat >= 2 ? g.frontier : b.threat === 1 ? (g.near ?? (g.frontier + g.inland) / 2) : g.inland;
+    return Math.max(1, Math.min(slots, Math.ceil(slots * share - 1e-9)));
   }
 
   private stepWarden(s: Settler): void {
@@ -1897,6 +1904,24 @@ export class Economy {
     return 0.85 + 0.15 * Math.min(1, gold / 8) + 0.15 * ((this.glow[owner] ?? 50) / 100) - (this.hungry[owner] ? 0.1 : 0);
   }
 
+  /**
+   * Morale of a player's wardens away from home, as in Serf City: it follows their share of all the
+   * gold in the world (no gold: three-quarters strength; half the world's gold or more: full).
+   * Defenders on their own land don't need it.
+   */
+  warMorale(owner: number): number {
+    let mine = 0;
+    let all = 0;
+    for (let p = 0; p < this.keeps.length; p++) {
+      if (this.keeps[p] === undefined || this.defeated[p]) continue;
+      const g = (this.storageTotals(p)[goodId("gold")] as number) ?? 0;
+      all += g;
+      if (p === owner) mine = g;
+    }
+    if (all <= 0) return 1;
+    return 0.75 + 0.25 * Math.min(1, (mine / all) * 2);
+  }
+
   private fighter(s: Settler, fatigue = 0): Fighter {
     const p = this.people[s.person];
     return { rank: p?.rank ?? 0, arms: p?.arms ?? 0, fatigue };
@@ -1954,23 +1979,25 @@ export class Economy {
   }
 
   /** Wardens that could join an attack (each lantern keeps one at home), strongest first. */
-  attackersFor(player: number, target: Building): { s: Settler; from: Building; d: number }[] {
+  attackersFor(player: number, target: Building, order: "strongest" | "weakest" = "strongest"): { s: Settler; from: Building; d: number }[] {
     const out: { s: Settler; from: Building; d: number }[] = [];
     for (const { b, d } of this.attackSources(player, target)) {
       const on = this.defendersOf(b).reverse();
       for (const s of on.slice(0, Math.max(0, on.length - 1))) out.push({ s, from: b, d });
     }
-    return out.sort((x, y) => this.fighterScore(y.s) - this.fighterScore(x.s) || x.d - y.d || x.s.id - y.s.id);
+    const sign = order === "weakest" ? -1 : 1;
+    return out.sort((x, y) => sign * (this.fighterScore(y.s) - this.fighterScore(x.s)) || x.d - y.d || x.s.id - y.s.id);
   }
 
   /** Estimated chance that `count` of the player's wardens take `target`. */
-  attackOdds(player: number, target: Building, count: number): number {
-    const att = this.attackersFor(player, target).slice(0, count);
+  attackOdds(player: number, target: Building, count: number, order: "strongest" | "weakest" = "strongest"): number {
+    const att = this.attackersFor(player, target, order).slice(0, count);
     const ra = this.resolve(player);
     const rd = this.resolve(target.owner);
     const ground = this.keeps.includes(target.id) ? 1.2 : 1.1;
     const defs = [...(this.keeps.includes(target.id) ? this.militia(target) : []), ...this.defendersOf(target).map((s) => this.fighter(s))];
-    const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra, 1));
+    const morale = this.warMorale(player);
+    const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra * morale, 1));
     const dd = defs.map((f) => strength(f, rd, ground)).reverse();
     const bowsA = att.filter(({ s }) => hasBow(this.fighter(s))).length;
     const bowsD = defs.filter((f) => hasBow(f)).length;
@@ -1983,12 +2010,12 @@ export class Economy {
     return new Array<Fighter>(n).fill({ rank: 0, arms: 0, fatigue: 0 });
   }
 
-  private cmdAttack(targetId: number, count: number, p: number): CommandResult {
+  private cmdAttack(targetId: number, count: number, p: number, order?: "strongest" | "weakest"): CommandResult {
     const target = this.buildings[targetId];
     if (!target) return { ok: false, reason: "Nothing to attack there." };
     const blocked = this.attackBlocked(p, target);
     if (blocked) return { ok: false, reason: blocked };
-    const pool = this.attackersFor(p, target).slice(0, Math.max(0, Math.floor(count)));
+    const pool = this.attackersFor(p, target, order === "weakest" ? "weakest" : "strongest").slice(0, Math.max(0, Math.floor(count)));
     if (!pool.length) return { ok: false, reason: "No wardens can be spared. Each lantern keeps one at home." };
     const flagTile = (this.flags[target.flag] as Flag).tile;
     let sent = 0;
@@ -2104,7 +2131,7 @@ export class Economy {
     if (aliveA) a.state = "siege";
     if (!aliveA || !aliveD) return;
     const ground = this.keeps.includes(b.id) ? 1.2 : 1.1;
-    const fa = strength(this.fighter(a, fatigueFor(a.visits, this.people[a.person]?.arms ?? 0)), this.resolve(a.owner), 1);
+    const fa = strength(this.fighter(a, fatigueFor(a.visits, this.people[a.person]?.arms ?? 0)), this.resolve(a.owner) * this.warMorale(a.owner), 1);
     const fd = strength(this.fighter(d), this.resolve(d.owner), ground);
     const r = this.combatRng as Rng;
     const [winner, loser] = r.next() < duelChance(fa, fd) ? [a, d] : [d, a];
@@ -2184,6 +2211,9 @@ export class Economy {
         this.sendHome(s);
       }
     });
+    // A fallen lantern decides its surroundings: within its light the nearest lantern takes the
+    // land, even tiles the old owner also lights from further off.
+    if (b.def.light) this.flood(b.tile, b.def.light, (t) => this.recontest.add(t));
     this.territoryDirty = true;
     this.structureVersion++;
     this.graphVersion++;
@@ -2298,6 +2328,7 @@ export class Economy {
       this.recomputeTerritory();
       if (!this.territoryDirty) break;
     }
+    this.recontest.clear();
     this.updateVision();
   }
 
@@ -2343,7 +2374,7 @@ export class Economy {
     let changed = false;
     for (let t = 0; t < n; t++) {
       const old = land.territory[t] as number;
-      const next = held[t] ? old : (bestO[t] as number);
+      const next = held[t] && !this.recontest.has(t) ? old : (bestO[t] as number);
       if (next === old) continue;
       land.territory[t] = next;
       changed = true;
@@ -2368,15 +2399,17 @@ export class Economy {
         if (r.alive && land.territory[t] !== r.owner + 1) this.removeRoad(r);
       }
     }
-    // Frontier lanterns: another player's land within a few steps of their light.
+    // Threat to lanterns: how near another player's land is (within 3 steps of their light is the
+    // frontier, within 7 is near).
     for (const b of sources) {
       if (!b.def.slots) continue;
-      let frontier = false;
-      this.flood(b.tile, (b.def.light as number) + 3, (t) => {
+      let threat = 0;
+      this.flood(b.tile, (b.def.light as number) + 7, (t, d) => {
         const o = land.territory[t] as number;
-        if (o && o !== b.owner + 1) frontier = true;
+        if (o && o !== b.owner + 1) threat = Math.max(threat, d <= (b.def.light as number) + 3 ? 2 : 1);
       });
-      b.frontier = frontier;
+      b.threat = threat;
+      b.frontier = threat >= 2;
     }
   }
 

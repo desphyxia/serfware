@@ -9,3 +9,4 @@ desktop/dist/
 desktop/node_modules/
 soak-report.json
 soak-transport.json
+soak-war.json
