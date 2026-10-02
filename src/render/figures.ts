@@ -160,17 +160,15 @@ function figureGeometry(): THREE.BufferGeometry {
     g.setAttribute("aSel", new THREE.BufferAttribute(new Float32Array(n).fill(pc.sel ?? -1), 1));
     geos.push(g);
   }
-  // Merge by hand: all pieces share the same attribute set.
+  // Merge by hand: all pieces share the same attribute set. The figure's own attributes (part,
+  // pivot, tint, hat or tool) share one interleaved buffer: WebGPU allows only 8 vertex buffers
+  // per draw on many GPUs, and the instanced data below needs its own.
   const total = geos.reduce((s, g) => s + g.getAttribute("position").count, 0);
   const out = new THREE.BufferGeometry();
   for (const [name, size] of [
     ["position", 3],
     ["normal", 3],
     ["color", 3],
-    ["aPart", 1],
-    ["aPivot", 3],
-    ["aTint", 1],
-    ["aSel", 1],
   ] as const) {
     const arr = new Float32Array(total * size);
     let o = 0;
@@ -181,8 +179,25 @@ function figureGeometry(): THREE.BufferGeometry {
     }
     out.setAttribute(name, new THREE.BufferAttribute(arr, size));
   }
+  const extra = new Float32Array(total * EXTRA_STRIDE);
+  let v = 0;
+  for (const g of geos) {
+    const n = g.getAttribute("position").count;
+    const [part, pivot, tint, sel] = (["aPart", "aPivot", "aTint", "aSel"] as const).map((k) => g.getAttribute(k).array as Float32Array);
+    for (let i = 0; i < n; i++, v++) extra.set([part![i]!, pivot![i * 3]!, pivot![i * 3 + 1]!, pivot![i * 3 + 2]!, tint![i]!, sel![i]!], v * EXTRA_STRIDE);
+  }
+  const ib = new THREE.InterleavedBuffer(extra, EXTRA_STRIDE);
+  out.setAttribute("aPart", new THREE.InterleavedBufferAttribute(ib, 1, 0));
+  out.setAttribute("aPivot", new THREE.InterleavedBufferAttribute(ib, 3, 1));
+  out.setAttribute("aTint", new THREE.InterleavedBufferAttribute(ib, 1, 4));
+  out.setAttribute("aSel", new THREE.InterleavedBufferAttribute(ib, 1, 5));
   return out;
 }
+
+/** Per-vertex figure data: part, pivot (3), tint, hat or tool. */
+const EXTRA_STRIDE = 6;
+/** Per-figure data: position (3), rotation (4), colour (3), animation (4). */
+const INSTANCE_STRIDE = 14;
 
 type V3 = THREE.Node<"vec3">;
 type F = THREE.Node<"float">;
@@ -205,27 +220,21 @@ function rotQ(v: V3, q: THREE.Node<"vec4">): V3 {
  */
 export class FigureBatch {
   readonly mesh: THREE.Mesh<THREE.InstancedBufferGeometry, PainterlyMaterial>;
-  private readonly pos: Float32Array;
-  private readonly quat: Float32Array;
-  private readonly col: Float32Array;
-  private readonly anim: Float32Array;
-  private readonly attrs: THREE.InstancedBufferAttribute[];
+  /** Every figure's data in one interleaved instance buffer (see INSTANCE_STRIDE). */
+  private readonly data: Float32Array;
+  private readonly buffer: THREE.InstancedInterleavedBuffer;
   readonly uTime = uniform(0);
 
   constructor(readonly capacity: number) {
     const base = figureGeometry();
     const g = new THREE.InstancedBufferGeometry();
     for (const name of Object.keys(base.attributes)) g.setAttribute(name, base.getAttribute(name));
-    this.pos = new Float32Array(capacity * 3);
-    this.quat = new Float32Array(capacity * 4);
-    this.col = new Float32Array(capacity * 3);
-    this.anim = new Float32Array(capacity * 4);
-    const mk = (arr: Float32Array, n: number) => new THREE.InstancedBufferAttribute(arr, n).setUsage(THREE.DynamicDrawUsage);
-    this.attrs = [mk(this.pos, 3), mk(this.quat, 4), mk(this.col, 3), mk(this.anim, 4)];
-    g.setAttribute("iPos", this.attrs[0]!);
-    g.setAttribute("iQuat", this.attrs[1]!);
-    g.setAttribute("iColor", this.attrs[2]!);
-    g.setAttribute("iAnim", this.attrs[3]!);
+    this.data = new Float32Array(capacity * INSTANCE_STRIDE);
+    this.buffer = new THREE.InstancedInterleavedBuffer(this.data, INSTANCE_STRIDE).setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute("iPos", new THREE.InterleavedBufferAttribute(this.buffer, 3, 0));
+    g.setAttribute("iQuat", new THREE.InterleavedBufferAttribute(this.buffer, 4, 3));
+    g.setAttribute("iColor", new THREE.InterleavedBufferAttribute(this.buffer, 3, 7));
+    g.setAttribute("iAnim", new THREE.InterleavedBufferAttribute(this.buffer, 4, 10));
     g.instanceCount = 0;
 
     const mat = new PainterlyMaterial({ vertexColors: true, brush: 0.3 });
@@ -335,19 +344,14 @@ export class FigureBatch {
   }
 
   set(i: number, p: THREE.Vector3, q: THREE.Quaternion, c: THREE.Color, anim: Anim, phase: number, hat: Hat, tool: Tool): void {
-    this.pos.set([p.x, p.y, p.z], i * 3);
-    this.quat.set([q.x, q.y, q.z, q.w], i * 4);
-    this.col.set([c.r, c.g, c.b], i * 3);
-    this.anim.set([anim, phase, hat, tool], i * 4);
+    this.data.set([p.x, p.y, p.z, q.x, q.y, q.z, q.w, c.r, c.g, c.b, anim, phase, hat, tool], i * INSTANCE_STRIDE);
   }
 
   flush(n: number, time: number): void {
     this.uTime.value = time;
     this.mesh.geometry.instanceCount = Math.min(n, this.capacity);
-    for (const a of this.attrs) {
-      a.needsUpdate = true;
-      a.clearUpdateRanges();
-      a.addUpdateRange(0, n * a.itemSize);
-    }
+    this.buffer.needsUpdate = true;
+    this.buffer.clearUpdateRanges();
+    this.buffer.addUpdateRange(0, Math.min(n, this.capacity) * INSTANCE_STRIDE);
   }
 }
