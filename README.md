@@ -61,6 +61,13 @@ Transport follows Serf City's rules (studied from Freeserf's source):
 `npm run soak -- transport` measures it: goods waiting on flags, full flags, stale goods and
 growth over 12 game days on several seeds.
 
+## Map settings
+
+Settings, World, **Ore mix** (balanced, coal and iron, gold-rich, scarce gold, stone country) and
+**Hills from the start** (close to very far) shape the next world you generate, as in Settlers 2's
+map generator. They travel with saves and multiplayer starts. The hills setting only moves the
+start among sites with room to build, so on a hilly planet the effect can be small.
+
 ## Starting ore
 
 Every start has coal, iron and granite within 10 steps of its Hearthship and gold within 14. Where

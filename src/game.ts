@@ -40,6 +40,7 @@ import { DiplomacyPanel } from "./ui/diplomacy";
 import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
 import { scenarioWorld } from "./sim/scenario/campaign";
 import type { Creative, PlayMode } from "./net/session";
+import type { MapOptions } from "./sim/econ/landuse";
 import { creationText, download, library, PainterPanel, ScenarioEditor, type SavedWorld } from "./ui/creative";
 import { stroke, type WorldPaint } from "./sim/planet/paint";
 import type { GridSize } from "./sim/planet/grid";
@@ -134,6 +135,8 @@ export class Game {
   private downAt: { x: number; y: number; button: number } | null = null;
   private readonly loading: HTMLElement;
   private readonly raycaster = new THREE.Raycaster();
+  /** Map settings for new worlds (ore mix, hills). */
+  private mapOptions: MapOptions | undefined;
   /** AI rivals in new solo worlds. */
   private rivals = 1;
   private stakes: "wounded" | "mortal" = "wounded";
@@ -207,7 +210,8 @@ export class Game {
     this.inspector = h("div", { class: "inspector", hidden: true, "aria-live": "polite" });
     this.settingsPanel = new SettingsPanel(settings, {
       seed: () => this.world.seed,
-      newWorld: (s, rivals, stakes, difficulty, level) => void this.newWorld(s, rivals, stakes, difficulty, level),
+      newWorld: (s, rivals, stakes, difficulty, level, map) => void this.newWorld(s, rivals, stakes, difficulty, level, map),
+      map: () => this.mapOptions,
       level: () => this.aiLevel,
       rivals: () => this.rivals,
       stakes: () => this.stakes,
@@ -1560,8 +1564,9 @@ export class Game {
     requestAnimationFrame(frame);
   }
 
-  async newWorld(seedInput?: string, rivals = this.rivals, stakes = this.stakes, difficulty = this.difficulty, aiLevel = this.aiLevel): Promise<void> {
+  async newWorld(seedInput?: string, rivals = this.rivals, stakes = this.stakes, difficulty = this.difficulty, aiLevel = this.aiLevel, map: MapOptions | undefined = this.mapOptions): Promise<void> {
     this.aiLevel = aiLevel;
+    this.mapOptions = map;
     this.rivals = rivals;
     this.stakes = stakes;
     this.difficulty = difficulty;
@@ -1570,7 +1575,7 @@ export class Game {
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel, mods: library.enabledMods() })));
+    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel, mods: library.enabledMods(), ...(map && { map }) })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -1752,7 +1757,8 @@ export class Game {
     // Whatever the world is made from travels with the start: a custom scenario, or my mods.
     const def = scenario ? scenarioById(scenario) : undefined;
     const mods = library.enabledMods();
-    const creative: Creative | undefined = def?.kind === "custom" ? { custom: def } : !scenario && mods.length ? { mods } : undefined;
+    let creative: Creative | undefined = def?.kind === "custom" ? { custom: def } : !scenario && mods.length ? { mods } : undefined;
+    if (!scenario && this.mapOptions) creative = { ...creative, map: this.mapOptions };
     this.useSession(lobby.start(seed, mode, scenario, creative));
     if (scenario) this.tellIntro();
     this.menu.hide();

@@ -1,6 +1,7 @@
 import type { Planet } from "../planet/planet";
 import { Biome } from "../planet/terrain";
 import { SimNoise } from "../noise";
+import { log } from "../dmath";
 import { mix32, type Rng } from "../rng";
 import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
@@ -67,6 +68,46 @@ export enum Deposit {
   Iron = 2,
   Gold = 3,
   Granite = 4,
+}
+
+/** The mix of ore under the hills, as shares (any scale; zero leaves a kind out). */
+export interface OreMix {
+  coal: number;
+  iron: number;
+  gold: number;
+  granite: number;
+}
+
+/** What the generator makes without a setting (about what the seeds give). */
+export const DEFAULT_ORE: Readonly<OreMix> = { coal: 44, iron: 28, gold: 7, granite: 21 };
+
+/** Ready-made ore mixes for the new-game screen. */
+export const ORE_PRESETS: Record<string, { name: string; mix: OreMix }> = {
+  balanced: { name: "Balanced", mix: { ...DEFAULT_ORE } },
+  fuel: { name: "Coal and iron", mix: { coal: 48, iron: 42, gold: 5, granite: 5 } },
+  gold: { name: "Gold-rich", mix: { coal: 30, iron: 25, gold: 30, granite: 15 } },
+  poor: { name: "Scarce gold", mix: { coal: 48, iron: 32, gold: 2, granite: 18 } },
+  stone: { name: "Stone country", mix: { coal: 25, iron: 20, gold: 5, granite: 50 } },
+};
+
+/** How far the hills lie from a start, in steps. */
+export const HILLS: Record<string, { name: string; steps: number }> = {
+  close: { name: "Close", steps: 5 },
+  normal: { name: "Normal", steps: 9 },
+  far: { name: "Far", steps: 15 },
+  veryfar: { name: "Very far", steps: 22 },
+};
+
+/** Map settings a game can ask for (Settlers 2 has these in its random map generator). */
+export interface MapOptions {
+  ore?: Partial<OreMix>;
+  hills?: keyof typeof HILLS;
+}
+
+/** A clean ore mix from whatever was asked for: whole numbers 0..100, defaults for the rest. */
+export function oreMixOf(want: Partial<OreMix> | undefined): OreMix {
+  const q = (v: number | undefined, d: number) => (v === undefined || !Number.isFinite(v) ? d : Math.max(0, Math.min(100, Math.round(v))));
+  return { coal: q(want?.coal, DEFAULT_ORE.coal), iron: q(want?.iron, DEFAULT_ORE.iron), gold: q(want?.gold, DEFAULT_ORE.gold), granite: q(want?.granite, DEFAULT_ORE.granite) };
 }
 
 export const DEPOSIT_IDS = ["none", "coal", "iron", "gold", "granite"] as const;
@@ -330,8 +371,18 @@ export class LandUse {
     }
   }
 
+  /** The ore mix to generate (set before populate; the default mix changes nothing). */
+  oreMix: OreMix = { ...DEFAULT_ORE };
+
   /** Deposits under hills and mountains, fish in coastal waters. */
   private populateGeology(rng: Rng): void {
+    // A kind that is more (or less) common than by default is favoured (or disfavoured) in the
+    // noise contest; granite is what's left where no ore wins, so its share moves the bar.
+    const bias = (w: number, d: number) => (w <= 0 ? -1e9 : 0.3 * log(w / d));
+    const bc = bias(this.oreMix.coal, DEFAULT_ORE.coal);
+    const bi = bias(this.oreMix.iron, DEFAULT_ORE.iron);
+    const bg = bias(this.oreMix.gold, DEFAULT_ORE.gold);
+    const bar = this.oreMix.granite <= 0 ? -1e9 : 0.12 + 0.3 * log(this.oreMix.granite / DEFAULT_ORE.granite);
     const { grid, terrain } = this.planet;
     const peak = terrain.params.mountainHeight;
     const nCoal = new SimNoise(rng.nextU32());
@@ -351,9 +402,13 @@ export class LandUse {
       const coal = nCoal.fbm(x * 9, y * 9, z * 9, 3) + (m < 0.45 ? 0.15 : 0);
       const iron = nIron.fbm(x * 9 + 3, y * 9, z * 9, 3) + (m > 0.35 ? 0.1 : -0.2);
       const gold = nGold.fbm(x * 11, y * 11 - 5, z * 11, 3) + (m > 0.55 ? 0.05 : -0.5);
-      const best = Math.max(coal, iron, gold);
+      const cb = coal + bc;
+      const ib = iron + bi;
+      const gb = gold + bg;
+      const top = Math.max(cb, ib, gb);
+      const best = top === cb ? coal : top === ib ? iron : gold;
       let d = Deposit.Granite;
-      if (best > 0.12) d = best === coal ? Deposit.Coal : best === iron ? Deposit.Iron : Deposit.Gold;
+      if (top > bar) d = top === cb ? Deposit.Coal : top === ib ? Deposit.Iron : Deposit.Gold;
       else if (m < 0.3) continue;
       this.deposit[t] = d;
       this.depositAmount[t] = Math.min(255, Math.round(8 + m * 20 + Math.max(0, best) * 30));

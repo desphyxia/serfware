@@ -1,6 +1,7 @@
 import type { GraphicsSettings, PresetName, Settings, SettingsStore } from "../core/settings";
 import { DIFFICULTY, type Difficulty } from "../sim/econ/adversity";
 import { AI_LEVELS, type AiLevel } from "../sim/ai/personality";
+import { HILLS, ORE_PRESETS, type MapOptions, type OreMix } from "../sim/econ/landuse";
 import { h, Panel } from "./dom";
 
 type Opt<T> = readonly (readonly [T, string])[];
@@ -11,6 +12,8 @@ export class SettingsPanel extends Panel {
   private readonly presetButtons = new Map<string, HTMLButtonElement>();
   private readonly seedInput: HTMLInputElement;
   private readonly rivalsInput: HTMLSelectElement;
+  private readonly oreInput: HTMLSelectElement;
+  private readonly hillsInput: HTMLSelectElement;
   private readonly stakesInput: HTMLSelectElement;
   private readonly difficultyInput: HTMLSelectElement;
   private readonly levelInput: HTMLSelectElement;
@@ -20,7 +23,7 @@ export class SettingsPanel extends Panel {
 
   constructor(
     private readonly store: SettingsStore,
-    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number, stakes?: "wounded" | "mortal", difficulty?: Difficulty, level?: AiLevel) => void; rivals: () => number; stakes: () => "wounded" | "mortal"; difficulty: () => Difficulty; level: () => AiLevel },
+    private readonly world: { seed: () => string; newWorld: (seed?: string, rivals?: number, stakes?: "wounded" | "mortal", difficulty?: Difficulty, level?: AiLevel, map?: MapOptions) => void; map: () => MapOptions | undefined; rivals: () => number; stakes: () => "wounded" | "mortal"; difficulty: () => Difficulty; level: () => AiLevel },
   ) {
     super("settings", "Settings", { width: 380 });
     const tabs = h("div", { class: "tabs", role: "tablist" });
@@ -109,6 +112,16 @@ export class SettingsPanel extends Panel {
     const noteFor = () => (diffNote.textContent = DIFFICULTY[this.difficultyInput.value as Difficulty].note);
     this.difficultyInput.addEventListener("change", noteFor);
     w.append(this.row("Adversity", this.difficultyInput, null, "w-difficulty"), diffNote);
+    // Map settings (as in Settlers 2's map generator): the ore mix, and how far the hills lie from a start.
+    this.oreInput = h("select", { id: "w-ore" }, ...Object.entries(ORE_PRESETS).map(([id, p]) => h("option", { value: id }, p.name))) as HTMLSelectElement;
+    this.hillsInput = h("select", { id: "w-hills" }, h("option", { value: "" }, "As generated"), ...Object.entries(HILLS).map(([id, p]) => h("option", { value: id }, p.name))) as HTMLSelectElement;
+    w.append(this.row("Ore mix", this.oreInput, null, "w-ore"), this.row("Hills from the start", this.hillsInput, null, "w-hills"), h("p", { class: "hint" }, "Ore and hills apply to the next world you generate."));
+    const map = (): MapOptions | undefined => {
+      const ore = this.oreInput.value;
+      const hills = this.hillsInput.value as keyof typeof HILLS | "";
+      if (ore === "balanced" && !hills) return undefined;
+      return { ...(ore !== "balanced" && { ore: { ...ORE_PRESETS[ore]!.mix } }), ...(hills && { hills }) };
+    };
     const rivals = () => Number(this.rivalsInput.value);
     const stakes = () => this.stakesInput.value as "wounded" | "mortal";
     const difficulty = () => this.difficultyInput.value as Difficulty;
@@ -118,8 +131,8 @@ export class SettingsPanel extends Panel {
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals(), stakes(), difficulty(), level()) }, "Generate this seed"),
-        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals(), stakes(), difficulty(), level()) }, "Random seed"),
+        h("button", { class: "btn primary", onclick: () => this.world.newWorld(this.seedInput.value, rivals(), stakes(), difficulty(), level(), map()) }, "Generate this seed"),
+        h("button", { class: "btn", onclick: () => this.world.newWorld(undefined, rivals(), stakes(), difficulty(), level(), map()) }, "Random seed"),
       ),
       h("p", { class: "hint" }, "The same seed always produces the same world. Include it in bug reports."),
     );
@@ -138,6 +151,9 @@ export class SettingsPanel extends Panel {
     this.stakesInput.value = this.world.stakes();
     this.difficultyInput.value = this.world.difficulty();
     this.levelInput.value = this.world.level();
+    const m = this.world.map();
+    this.oreInput.value = Object.entries(ORE_PRESETS).find(([, p]) => m?.ore && (Object.keys(p.mix) as (keyof OreMix)[]).every((k) => p.mix[k] === m.ore?.[k]))?.[0] ?? "balanced";
+    this.hillsInput.value = m?.hills ?? "";
     this.noteDifficulty();
     this.sync(this.store.get());
   }
