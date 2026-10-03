@@ -10,11 +10,13 @@ interface Call {
   where: Region | "coast";
   /** How many the settlement of `built` buildings wants, given what it has. */
   want: (have: (id: string) => number, built: number) => number;
+  /** Housing is not a luxury: wanted before the toolsmith stands. */
+  early?: boolean;
 }
 
 const CALLS: Call[] = [
   // Canopy Deeps: houses in the giants.
-  { type: "treehouse", where: Region.CanopyDeeps, want: (_, b) => Math.floor(b / 10) },
+  { type: "treehouse", where: Region.CanopyDeeps, want: (_, b) => Math.floor(b / 6), early: true },
   // Rimefall Tundra: a heated waystation for the cold.
   { type: "waystation", where: Region.RimefallTundra, want: (_, b) => 1 + Math.floor(b / 25) },
   // Emberglass Steppe: a greenhouse on the vents once farms feed the town.
@@ -56,8 +58,8 @@ export class BiomePlanner {
     if (mine.filter((b) => !b.built).length > 1) return false;
     const built = mine.filter((b) => b.built).length;
     const have = (id: string) => mine.filter((b) => b.def.id === id).length;
-    // Only once the basics stand, a toolsmith among them.
-    if (have("toolsmith") < 1) return false;
+    // Only once the basics stand, a toolsmith among them (housing excepted).
+    const basics = have("toolsmith") >= 1;
     const stock = eco.storageTotals(pl);
     const keep = eco.buildings[eco.keeps[pl] ?? -1];
     const c = land.planet.grid.center;
@@ -65,7 +67,7 @@ export class BiomePlanner {
     const own: number[] = [];
     for (let t = 0; t < land.territory.length; t++) if (land.territory[t] === pl + 1 && land.isLand(t)) own.push(t);
     for (const call of CALLS) {
-      if ((this.rest.get(call.type) ?? 0) > this.thoughts || have(call.type) >= call.want(have, built)) continue;
+      if ((!basics && !call.early) || (this.rest.get(call.type) ?? 0) > this.thoughts || have(call.type) >= call.want(have, built)) continue;
       const def = BUILDINGS[buildingType(call.type)];
       if (!def || !Object.entries(def.cost).every(([g, n]) => (stock[goodId(g)] ?? 0) >= (n as number) + 1)) continue;
       if (def.tool && (stock[goodId(def.tool)] ?? 0) < 1) continue;
