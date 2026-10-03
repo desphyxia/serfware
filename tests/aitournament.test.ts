@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { baselineTuning } from "../src/sim/ai/personality";
 import { learnedBrain, tunedBrain } from "../src/sim/ai/tuned";
-import { playMatch, scripted, updateElo, type Entrant } from "../soak/league";
+import { makeEntrant, playMatch, scripted, updateElo, type Entrant, type EntrantSpec } from "../soak/league";
+import { runMatches } from "../soak/pool";
 
 describe("the league", () => {
   it("moves Elo toward the winner and keeps the total", () => {
@@ -35,5 +36,17 @@ describe("the league", () => {
     const a = playMatch("amber-fern-212", [hand, ...others], 3);
     const c = playMatch("amber-fern-212", [learned, ...others], 3);
     expect(c.scores).toEqual(a.scores);
+  });
+
+  it("plays matches in parallel processes with the same results as playing them in turn", { timeout: 600000 }, async () => {
+    const field: EntrantSpec[] = [
+      { kind: "scripted", personality: "builder", level: "normal" },
+      { kind: "scripted", personality: "trader", level: "normal" },
+      { kind: "scripted", personality: "warden", level: "normal" },
+    ];
+    const jobs = ["amber-fern-212", "glade-iris-904"].map((seed) => ({ seed, entrants: field, days: 2 }));
+    const parallel = await runMatches(jobs, 2);
+    const serial = jobs.map((j) => playMatch(j.seed, j.entrants.map(makeEntrant), j.days));
+    expect(parallel).toEqual(serial);
   });
 });

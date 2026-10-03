@@ -13,3 +13,7 @@ soak-war.json
 soak-scale.json
 soak-ai.json
 leak-soak.json
+soak-train.json
+soak-tune.json
+soak-tournament.json
+artifacts/

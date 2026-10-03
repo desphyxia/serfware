@@ -1,6 +1,7 @@
 import { AiBuilder } from "../src/sim/ai/builder";
 import type { BrainFactory } from "../src/sim/ai/brain";
-import type { AiLevel, Personality } from "../src/sim/ai/personality";
+import type { AiLevel, Personality, Tuning } from "../src/sim/ai/personality";
+import { learnedBrain, tunedBrain } from "../src/sim/ai/tuned";
 import { World } from "../src/sim/world";
 
 /** One competitor in a league: a brain with a name, and the temperament and level its seat is given. */
@@ -9,6 +10,18 @@ export interface Entrant {
   personality: Personality;
   level: AiLevel;
   brain: BrainFactory;
+}
+
+/** An entrant as plain data, so a match can be handed to another process. */
+export type EntrantSpec =
+  | { kind: "scripted"; personality: Personality; level: AiLevel }
+  | { kind: "learned"; personality: Personality; level: AiLevel }
+  | { kind: "tuned"; personality: Personality; level: AiLevel; tuning: Partial<Tuning>; name: string };
+
+export function makeEntrant(spec: EntrantSpec): Entrant {
+  if (spec.kind === "scripted") return scripted(spec.personality, spec.level);
+  if (spec.kind === "learned") return { name: `learned-${spec.personality}`, personality: spec.personality, level: spec.level, brain: learnedBrain };
+  return { name: spec.name, personality: spec.personality, level: spec.level, brain: tunedBrain(spec.tuning) };
 }
 
 export const scripted = (personality: Personality, level: AiLevel): Entrant => ({
