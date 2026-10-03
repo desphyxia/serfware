@@ -112,6 +112,48 @@ export class EconPlanner {
   }
 
   /**
+   * Stone is what a settlement runs out of first (the rocks are few). With the stores bare, granite is the way on:
+   * a geologist to find it, then a granite mine (which costs no stone) as soon as the signs show. Called before the
+   * builder's site throttle, because sites waiting for stone are what hold the throttle shut.
+   */
+  relieveStone(ctx: AiContext, thoughts: number): boolean {
+    this.thoughts = thoughts;
+    const eco = ctx.eco;
+    const land = ctx.world.land;
+    const pl = this.player;
+    const mine = eco.buildings.filter((b) => b.alive && b.owner === pl);
+    const built = mine.filter((b) => b.built);
+    const count = (id: string) => mine.filter((b) => b.def.id === id).length;
+    const stone = eco.storageTotals(pl)[goodId("stone")] ?? 0;
+    const stock = eco.storageTotals(pl);
+    const unbuilt = mine.length - built.length;
+    const sign = (s: number) => {
+      const out: number[] = [];
+      for (let t = 0; t < land.sign.length; t++) if (land.sign[t] === s && land.territory[t] === pl + 1 && land.use[t] === Use.Free && !land.signSmall[t]) out.push(t);
+      return out;
+    };
+    const manned = (type: string) => {
+      const tool = BUILDINGS[buildingType(type)]?.tool;
+      return !tool || (stock[goodId(tool)] ?? 0) >= 1;
+    };
+    const stoneShort = stone < 6 && built.length >= 8;
+    const fedAtAll = count("farm") + count("fisher") + count("butcher") + count("hunter") > 0;
+    if (!stoneShort || !fedAtAll) return false;
+    const granite = sign(5);
+    if (granite.length && count("granitemine") < 2 && this.can("granitemine") && manned("granitemine")) {
+      this.wait("granitemine", 6);
+      if (placeOn(ctx.world, "granitemine", granite, pl, true, 16) >= 0) return true;
+    }
+    if (!granite.length && unbuilt < 6 && this.can("geologist")) {
+      const flags = eco.flags.filter((f) => f.alive && f.owner === pl && f.building < 0 && eco.check({ t: "geologist", flagTile: f.tile, player: pl }) === null);
+      const done = ctx.act({ t: "geologist", flagTile: (flags[this.thoughts % Math.max(1, flags.length)] ?? { tile: -1 }).tile });
+      this.wait("geologist", done.ok ? 10 : 8);
+      return done.ok;
+    }
+    return false;
+  }
+
+  /**
    * Land use: one order at most. Returns true if it placed something or gave an order, so the builder
    * counts the thought as spent.
    */
@@ -184,8 +226,7 @@ export class EconPlanner {
 
     // Mines on what they found, fed by the farms; then smelting, gold, and the Warden's arms.
     const fed = count("farm") > 0 && (count("bakery") > 0 || count("fisher") > 0 || count("butcher") > 0) && built.length >= 12;
-    // Sites wait for stone, so none is begun while the stores are bare.
-    if (fed && stone >= 4 && unbuilt <= 1 && this.can("mine")) {
+    if (fed && unbuilt <= 1 && this.can("mine")) {
       const coal = sign(2);
       const iron = sign(3);
       const gold = sign(4);
@@ -201,7 +242,8 @@ export class EconPlanner {
         [count("stable") < 1 && this.personality === "warden" && count("pasture") > 0 && count("weaponsmith") > 0, "stable", []],
       ];
       for (const [cond, type, tiles] of tries) {
-        if (!cond || !this.can(type) || !manned(type)) continue;
+        // A building that costs stone waits for some; granite mines and the like do not.
+        if (!cond || !this.can(type) || !manned(type) || ((BUILDINGS[buildingType(type)]?.cost.stone ?? 0) > 0 && stone < 4)) continue;
         const placed = MINES.has(type) ? open(type, tiles) : placeConnected(ctx.world, type, { minDist: 2, maxDist: 9, player: pl, splitRoads: true });
         if (placed) return true;
         this.wait(type, 10);
