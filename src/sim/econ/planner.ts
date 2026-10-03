@@ -258,9 +258,9 @@ export function clearForest(w: World, player: number): "built" | "forester" | nu
     const sites = land.ring(blocker, 5).filter((x) => land.territory[x] === player + 1).sort((a, b) => d2(a, blocker) - d2(b, blocker) || a - b);
     if (placeOn(w, type, sites, player, true, 40) >= 0) return "built";
     // No reachable site: the foresters are probably planting faster than the woodcutters fell. Take one down.
-    const forester = eco.buildings
-      .filter((b) => b.alive && b.owner === player && b.def.id === "forester")
-      .sort((a, b) => d2(a.tile, blocker) - d2(b.tile, blocker) || a.id - b.id)[0];
+    const foresters = eco.buildings.filter((b) => b.alive && b.owner === player && b.def.id === "forester");
+    // The last forester stays: without one the woods are never replanted.
+    const forester = foresters.length > 1 ? foresters.sort((a, b) => d2(a.tile, blocker) - d2(b.tile, blocker) || a.id - b.id)[0] : undefined;
     if (forester && w.command({ t: "demolish", tile: forester.tile, player }).ok) return "forester";
   }
   return null;

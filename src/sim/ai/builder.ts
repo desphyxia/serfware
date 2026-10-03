@@ -53,6 +53,8 @@ export class AiBuilder implements Brain {
   private readonly biome: BiomePlanner;
   private readonly voyage: VoyagePlanner;
   private started = false;
+  /** Foresters taken down in a row without the way opening. */
+  private cuts = 0;
   private thoughts = 0;
   /** Wishes that found no site lately, and the thought they may be tried again. */
   private readonly resting = new Map<string, number>();
@@ -243,10 +245,12 @@ export class AiBuilder implements Brain {
     if (!attempt(wants, Math.max(1, Math.round(this.tuning.wants))) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
       const did = clearForest(w, pl);
       if (!did) this.resting.set("clear", this.thoughts + 12);
-      // With a forester taken down, no new one until the way is clear.
+      if (did === "built") this.cuts = 0;
+      // With a forester taken down, no new one for a good while. Two take-downs in a row that did not open the way
+      // mean the forest is not what boxes it in: leave the foresters be for a long time.
       if (did === "forester") {
-        this.resting.set("forester", this.thoughts + 60);
-        this.resting.set("clear", this.thoughts + 12);
+        this.resting.set("forester", this.thoughts + 300);
+        this.resting.set("clear", this.thoughts + (++this.cuts >= 2 ? 300 : 12));
       }
     }
   }
