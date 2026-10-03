@@ -32,6 +32,9 @@ export class PlanetCamera {
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly ground = new THREE.Vector3();
+  private readonly forward2 = new THREE.Vector3();
+  private readonly right2 = new THREE.Vector3();
+  private readonly up2 = new THREE.Vector3();
   private readonly keys = new Set<string>();
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private dragButton = -1;
@@ -130,7 +133,7 @@ export class PlanetCamera {
         return;
       }
       if (this.dragButton === 2 || this.dragButton === 1 || e.shiftKey) {
-        this.tHeading -= dx * 0.005;
+        this.tHeading += dx * 0.005;
         this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - dy * 0.004, -0.6, 0.5);
       } else {
         this.pan(-dx, dy, r.height);
@@ -237,6 +240,22 @@ export class PlanetCamera {
     cam.near = Math.max(0.05, this.distance * 0.02);
     cam.far = Math.max(this.radius * 60, 9000);
     cam.updateProjectionMatrix();
+  }
+
+  /**
+   * Ray through a point of the screen (x, y in -1..1), built from the camera's own pose rather
+   * than the renderer's matrices, so picking never depends on the graphics backend's depth
+   * convention or on matrices the renderer has not refreshed yet. False if the pose is unusable.
+   */
+  rayAt(x: number, y: number, out: THREE.Ray): boolean {
+    const aspect = this.camera.aspect;
+    this.forward2.copy(this.ground).sub(this.camera.position).normalize();
+    this.right2.crossVectors(this.forward2, this.camera.up).normalize();
+    this.up2.crossVectors(this.right2, this.forward2);
+    const k = Math.tan((this.camera.fov * Math.PI) / 360);
+    out.origin.copy(this.camera.position);
+    out.direction.copy(this.forward2).addScaledVector(this.right2, x * k * aspect).addScaledVector(this.up2, y * k).normalize();
+    return Number.isFinite(out.direction.x + out.direction.y + out.direction.z + out.origin.x + out.origin.y + out.origin.z);
   }
 
   groundPoint(): THREE.Vector3 {
