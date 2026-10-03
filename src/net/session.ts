@@ -6,7 +6,7 @@ import type { CommandResult } from "../sim/econ/economy";
 import type { MapOptions } from "../sim/econ/landuse";
 import type { WorldCommand as Command } from "../sim/world";
 import { TICK_MS } from "../sim/clock";
-import { World, type WorldOptions } from "../sim/world";
+import { World, type MatchRules, type WorldOptions } from "../sim/world";
 import type { AiLevel } from "../sim/ai/personality";
 import type { Difficulty } from "../sim/econ/adversity";
 
@@ -57,6 +57,8 @@ export interface Creative {
   paint?: WorldPaint;
   /** Map settings (ore mix, how far the hills lie from a start). */
   map?: MapOptions;
+  /** The host's rules for a match: peace length, stakes, how it is won. */
+  rules?: MatchRules;
 }
 
 /** The creative content of a world, for a save or a multiplayer start (undefined if none). */
@@ -66,6 +68,7 @@ export function creativeOf(world: World): Creative | undefined {
   if (world.mods.length) c.mods = world.mods;
   if (world.paint) c.paint = world.paint;
   if (world.map) c.map = world.map;
+  if (world.rules) c.rules = world.rules;
   return Object.keys(c).length ? c : undefined;
 }
 
@@ -73,7 +76,7 @@ export function creativeOf(world: World): Creative | undefined {
 export function creativeOptions(creative: Creative | undefined): WorldOptions {
   if (!creative) return {};
   if (creative.custom) registerScenario(creative.custom);
-  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }), ...(creative.map && { map: creative.map }) };
+  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }), ...(creative.map && { map: creative.map }), ...(creative.rules?.peaceDays !== undefined && { peaceDays: creative.rules.peaceDays }), ...(creative.rules?.stakes && { stakes: creative.rules.stakes }), ...(creative.rules?.victory && { victory: creative.rules.victory }) };
 }
 
 export interface SessionInfo {

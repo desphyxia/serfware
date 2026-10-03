@@ -10,6 +10,7 @@ export class Overlays {
   private border: THREE.Mesh | null = null;
   private territoryVersion = -1;
   private readonly markers: THREE.InstancedMesh;
+  private readonly reach: THREE.InstancedMesh;
   private readonly preview: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly ghostMat = new THREE.MeshStandardMaterial({ color: "#9cc58f", transparent: true, opacity: 0.55, emissive: "#2a4a20", depthWrite: false });
   private ghost: THREE.Mesh | null = null;
@@ -25,6 +26,11 @@ export class Overlays {
     this.markers.count = 0;
     this.markers.frustumCulled = false;
     this.markers.renderOrder = 6;
+    // Enemy lanterns a selected lantern could attack: larger red rings.
+    this.reach = new THREE.InstancedMesh(new THREE.RingGeometry(0.45, 0.7, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ff6a50", transparent: true, opacity: 0.9, depthWrite: false, depthTest: false }), 64);
+    this.reach.count = 0;
+    this.reach.frustumCulled = false;
+    this.reach.renderOrder = 12;
     const pg = new THREE.BufferGeometry();
     pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
     this.preview = new THREE.Line(pg, new THREE.LineBasicMaterial({ color: "#9cc58f", transparent: true, depthTest: false, linewidth: 2 }));
@@ -33,7 +39,7 @@ export class Overlays {
     this.preview.frustumCulled = false;
     this.ghostFlag = new THREE.Mesh(flagGeometry(), this.ghostMat);
     this.ghostFlag.visible = false;
-    this.group.add(this.markers, this.preview, this.ghostFlag);
+    this.group.add(this.markers, this.reach, this.preview, this.ghostFlag);
   }
 
   private visionKey = "";
@@ -128,6 +134,22 @@ export class Overlays {
     (this.markers.material as THREE.MeshBasicMaterial).color.set(color);
   }
 
+  /** Ring the enemy buildings a selected lantern could attack (empty list hides them). */
+  setReach(tiles: readonly number[]): void {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3(1, 1, 1);
+    let n = 0;
+    for (const t of tiles.slice(0, 64)) {
+      const p = this.frames.pos(t, 0.2);
+      this.frames.orient(p, null, q);
+      m.compose(p, q, s);
+      this.reach.setMatrixAt(n++, m);
+    }
+    this.reach.count = n;
+    this.reach.instanceMatrix.needsUpdate = true;
+  }
+
   setPreview(tiles: readonly number[] | null, valid: boolean): void {
     if (!tiles || tiles.length < 2) {
       this.preview.visible = false;
@@ -178,6 +200,7 @@ export class Overlays {
   dispose(): void {
     this.border?.geometry.dispose();
     this.markers.dispose();
+    this.reach.dispose();
     this.preview.geometry.dispose();
   }
 }

@@ -49,6 +49,16 @@ const SUPPLY_INTERVAL = 5;
 /** A ferry needs a boat, and a quay becomes a harbour for these goods. */
 const FERRY_COST = { plank: 3 };
 const HARBOUR_UPGRADE = { plank: 4, stone: 3 };
+/** Engineers: a palisade on a lantern (a better defence), a field camp (one longer attack), a bridge tile over shallows. */
+const PALISADE_COST = { plank: 4, log: 2 };
+const CAMP_COST = { plank: 2, log: 2 };
+const BRIDGE_COST = { plank: 2 };
+/** Defenders at a palisaded lantern fight this much stronger. */
+export const PALISADE_GROUND = 1.3;
+/** A field camp lets one attack come from this many steps further. */
+export const CAMP_REACH = 6;
+/** Flags within this many steps of a lit lantern are watched: outriders keep clear. */
+export const RAID_COVER = 3;
 /** How far a boatyard crew sails from the yard, in steps, by the Near, Far and Very far settings. */
 export const EXPLORE_REACH = [10, 18, 30] as const;
 /** How far around a fishing spot, a boat's track and a lighthouse-less look-out the crew sees, in steps. */
@@ -176,6 +186,9 @@ export interface Building {
   threat: number;
   /** Tick it was cut off on someone else's land, or -1. Stranded buildings stand idle. */
   stranded: number;
+  /** Lantern buildings: a palisade stands, and field camps pitched (each extends one attack's reach). */
+  palisade: boolean;
+  camp: number;
   /** Attackers waiting at the door, and the duel being fought there. */
   siege: number[];
   duel: { attacker: number; defender: number; until: number } | null;
@@ -285,6 +298,10 @@ export type Command = (
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
   | { t: "hedge"; tile: number }
   | { t: "causeway"; tile: number }
+  | { t: "palisade"; building: number }
+  | { t: "camp"; building: number }
+  | { t: "bridge"; tile: number }
+  | { t: "raid"; flag: number }
   | DiplomacyCommand
   | { t: "send"; to: number; good: string; count: number }
 ) & { player?: number };
@@ -336,6 +353,10 @@ export class Economy {
   readonly rotateUntil: number[] = [];
   /** Player who has won, or -1. */
   winner = -1;
+  /** Sounds of fighting for the game to play (not part of the state; the game empties it). */
+  readonly combatEvents: { kind: "clash" | "volley"; tile: number }[] = [];
+  /** How the game can be won (set by the host for a match). */
+  victory: "both" | "conquest" | "wells" = "both";
   winReason = "";
   /** Per player: tick since they have held enough Star Wells, or -1. */
   readonly wellsSince: number[] = [];
@@ -959,6 +980,14 @@ export class Economy {
         return this.cmdHedge(cmd.tile, p);
       case "causeway":
         return this.cmdCauseway(cmd.tile, p);
+      case "palisade":
+        return this.cmdPalisade(p, cmd.building);
+      case "camp":
+        return this.cmdCamp(p, cmd.building);
+      case "bridge":
+        return this.cmdBridge(p, cmd.tile);
+      case "raid":
+        return this.cmdRaid(p, cmd.flag);
       case "send":
         return this.cmdSend(p, cmd.to, cmd.good, cmd.count);
       case "garrison":
@@ -1306,6 +1335,83 @@ export class Economy {
     return { ok: true };
   }
 
+  /** Engineers: a palisade round a lantern. */
+  private cmdPalisade(p: number, id: number): CommandResult {
+    const b = this.buildings[id];
+    if (!b || !b.alive || b.owner !== p || !b.built || !b.def.slots) return { ok: false, reason: "A palisade goes round one of your lanterns." };
+    if (this.keeps.includes(b.id)) return { ok: false, reason: "The Hearthship has its own defences." };
+    if (b.palisade) return { ok: false, reason: "It has a palisade already." };
+    if (!this.takeGoods(p, PALISADE_COST)) return { ok: false, reason: "A palisade needs 4 planks and 2 logs in your stores." };
+    b.palisade = true;
+    this.structureVersion++;
+    this.notify(p, `The ${b.def.name.toLowerCase()} now stands behind a palisade.`);
+    return { ok: true };
+  }
+
+  /** Engineers: a field camp that lets one attack from this lantern reach further. */
+  private cmdCamp(p: number, id: number): CommandResult {
+    const b = this.buildings[id];
+    if (!b || !b.alive || b.owner !== p || !b.built || !b.def.slots || !b.lit) return { ok: false, reason: "A field camp is pitched at one of your lit lanterns." };
+    if (b.camp > 0) return { ok: false, reason: "A camp is pitched here already." };
+    if (!this.takeGoods(p, CAMP_COST)) return { ok: false, reason: "A field camp needs 2 planks and 2 logs in your stores." };
+    b.camp = 1;
+    this.notify(p, `A field camp is pitched at the ${b.def.name.toLowerCase()}: its next attack reaches ${CAMP_REACH} steps further.`);
+    return { ok: true };
+  }
+
+  /** Engineers: a bridge over a shallow stretch of water inside your borders, joined to land. */
+  private cmdBridge(p: number, tile: number): CommandResult {
+    const land = this.land;
+    const why = land.bridgeBlocked(tile, p);
+    if (why) return { ok: false, reason: why };
+    if (!this.takeGoods(p, BRIDGE_COST)) return { ok: false, reason: "A bridge needs 2 planks in your stores." };
+    land.bridge[tile] = 1;
+    land.causeway[tile] = 1;
+    land.causewayVersion++;
+    this.graphVersion++;
+    return { ok: true };
+  }
+
+  /** Outriders: a mounted warden rides to an unwatched enemy flag and cuts it down. */
+  private cmdRaid(p: number, flagId: number): CommandResult {
+    const flag = this.flags[flagId];
+    if (!flag || !flag.alive) return { ok: false, reason: "No such flag." };
+    if (this.winner >= 0) return { ok: false, reason: "The game is over." };
+    if (this.tick < this.peaceUntil) return { ok: false, reason: "The peace still holds." };
+    if (this.defeated[p]) return { ok: false, reason: "Your settlement has fallen." };
+    if (flag.owner === p || this.allied(p, flag.owner)) return { ok: false, reason: "That isn't an enemy flag." };
+    if (this.diplomacy.truce(p, flag.owner)) return { ok: false, reason: `You have a truce with ${this.playerName(flag.owner)}. Break it first (Diplomacy, J), at a cost.` };
+    if (flag.building >= 0) return { ok: false, reason: "Outriders cut roads at bare flags, not at doors." };
+    if (this.watched(flag)) return { ok: false, reason: "That flag is watched from a lantern: outriders keep clear." };
+    const sources = this.sourcesFor(p, flag.tile);
+    if (!sources.length) return { ok: false, reason: "None of your lanterns is close enough." };
+    for (const { b } of sources) {
+      const rider = this.defendersOf(b).reverse().find((s) => (this.people[s.person]?.arms ?? 0) & ARM_MOUNT && b.garrison.length > 1);
+      if (!rider) continue;
+      const path = this.land.findPath(b.tile, flag.tile, (t) => this.land.walkable(t) || t === b.tile || t === flag.tile, 6000);
+      if (!path) continue;
+      b.garrison = b.garrison.filter((id) => id !== rider.id);
+      rider.role = "attacker";
+      rider.building = -1;
+      rider.home = b.id;
+      rider.target = flag.id;
+      rider.state = "raid";
+      this.setPath(rider, path);
+      const person = this.people[rider.person];
+      if (person) note(person, "Rode out as an outrider.");
+      this.notify(flag.owner, "Riders have been seen on your roads!");
+      return { ok: true };
+    }
+    return { ok: false, reason: "No mounted warden can be spared. Outriders need a mount, and each lantern keeps one warden at home." };
+  }
+
+  /** Is a flag within the watch of one of its owner's lit lanterns? */
+  watched(flag: Flag): boolean {
+    const near = new Set(this.land.ring(flag.tile, RAID_COVER));
+    near.add(flag.tile);
+    return this.buildings.some((b) => b.alive && b.lit && b.owner === flag.owner && (!!b.def.slots || this.keeps.includes(b.id)) && near.has(b.tile));
+  }
+
   /** Plant a hedgerow on an open tile of your land; it takes a log from storage. */
   private cmdHedge(tile: number, p: number): CommandResult {
     const land = this.land;
@@ -1408,6 +1514,8 @@ export class Economy {
       goodMode: new Array<number>(GOODS.length).fill(GOOD_AUTO),
       threat: 0,
       stranded: -1,
+      palisade: false,
+      camp: 0,
       siege: [],
       duel: null,
       levy: 0,
@@ -2403,6 +2511,20 @@ export class Economy {
     return found;
   }
 
+  /** How much the ground favours the defenders of a building: a lantern, the Hearthship, a palisade. */
+  groundFor(b: Building): number {
+    return (this.keeps.includes(b.id) ? 1.2 : 1.1) * (b.palisade ? PALISADE_GROUND : 1);
+  }
+
+  /** Enemy lanterns and Hearthships a lantern of the player's could attack now (for the reach overlay). */
+  attackTargetsFrom(from: Building): Building[] {
+    if (!from.alive || !from.lit || !from.def.slots || from.stranded >= 0) return [];
+    const max = (from.def.light as number) + COMBAT.reach + (from.camp > 0 ? CAMP_REACH : 0);
+    const reach = new Map<number, number>();
+    this.flood(from.tile, max, (t, d) => reach.set(t, d));
+    return this.buildings.filter((t) => t.alive && t.owner !== from.owner && reach.has(t.tile) && !this.attackBlocked(from.owner, t) && this.attackSources(from.owner, t).some((x) => x.b === from));
+  }
+
   /** Can `player` attack `target`? Returns the reason if not. */
   attackBlocked(player: number, target: Building): string | null {
     if (this.winner >= 0) return "The game is over.";
@@ -2418,16 +2540,22 @@ export class Economy {
 
   /** The player's lit lanterns within reach of a target, nearest first. */
   private attackSources(player: number, target: Building): { b: Building; d: number }[] {
+    return this.sourcesFor(player, target.tile);
+  }
+
+  /** The player's lit lanterns within reach of a tile (a field camp adds to a lantern's reach), nearest first. */
+  private sourcesFor(player: number, tile: number): { b: Building; d: number }[] {
     const out: { b: Building; d: number }[] = [];
     const reach = new Map<number, number>();
+    const range = (b: Building) => (b.def.light as number) + COMBAT.reach + (b.camp > 0 ? CAMP_REACH : 0);
     let max = 0;
-    for (const b of this.buildings) if (b.alive && b.lit && b.owner === player && b.def.slots && b.stranded < 0) max = Math.max(max, (b.def.light as number) + COMBAT.reach);
+    for (const b of this.buildings) if (b.alive && b.lit && b.owner === player && b.def.slots && b.stranded < 0) max = Math.max(max, range(b));
     if (!max) return out;
-    this.flood(target.tile, max, (t, d) => reach.set(t, d));
+    this.flood(tile, max, (t, d) => reach.set(t, d));
     for (const b of this.buildings) {
       if (!b.alive || !b.lit || b.owner !== player || !b.def.slots || b.stranded >= 0) continue;
       const d = reach.get(b.tile);
-      if (d !== undefined && d <= (b.def.light as number) + COMBAT.reach) out.push({ b, d });
+      if (d !== undefined && d <= range(b)) out.push({ b, d });
     }
     return out.sort((x, y) => x.d - y.d || x.b.id - y.b.id);
   }
@@ -2448,7 +2576,7 @@ export class Economy {
     const att = this.attackersFor(player, target, order).slice(0, count);
     const ra = this.resolve(player);
     const rd = this.resolve(target.owner);
-    const ground = this.keeps.includes(target.id) ? 1.2 : 1.1;
+    const ground = this.groundFor(target);
     const defs = [...(this.keeps.includes(target.id) ? this.militia(target) : []), ...this.defendersOf(target).map((s) => this.fighter(s))];
     const morale = this.warMorale(player);
     const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra * morale, 1));
@@ -2488,11 +2616,30 @@ export class Economy {
       sent++;
     }
     if (!sent) return { ok: false, reason: "No way through to it." };
+    // A field camp is used up by the attack it made possible.
+    for (const { from, d } of pool) if (from.camp > 0 && d > (from.def.light as number) + COMBAT.reach) from.camp = 0;
     this.notify(target.owner, `Wardens are marching on your ${target.def.name.toLowerCase()}!`);
     return { ok: true };
   }
 
   private stepAttacker(s: Settler): void {
+    if (s.state === "raid") {
+      if (!this.walk(s)) return;
+      const flag = this.flags[s.target];
+      if (flag && flag.alive && flag.building < 0 && flag.owner !== s.owner && !this.watched(flag)) {
+        const victim = flag.owner;
+        this.removeFlag(flag);
+        this.notify(victim, "Outriders have cut down one of your flags and the roads that met there!");
+        const person = this.people[s.person];
+        if (person) {
+          person.xp += 1;
+          note(person, "Cut down an enemy flag.");
+        }
+      }
+      s.target = -1;
+      this.sendHome(s);
+      return;
+    }
     const b = this.buildings[s.building];
     if (!b || !b.alive || b.owner === s.owner || this.winner >= 0) {
       this.sendHome(s);
@@ -2506,9 +2653,15 @@ export class Economy {
       const r = this.combatRng as Rng;
       const me = this.fighter(s);
       const defs = this.defendersOf(b);
-      if (hasBow(me) && defs.length > 1 && r.chance(VOLLEY_HIT)) this.hurt(r.pick(defs), "was struck by an arrow");
+      if (hasBow(me) && defs.length > 1 && r.chance(VOLLEY_HIT)) {
+        this.hurt(r.pick(defs), "was struck by an arrow");
+        this.heard("volley", b.tile);
+      }
       const archers = defs.filter((d) => hasBow(this.fighter(d)));
-      if (archers.length && r.chance(VOLLEY_HIT)) this.hurt(s, "was struck by an arrow at the door");
+      if (archers.length && r.chance(VOLLEY_HIT)) {
+        this.hurt(s, "was struck by an arrow at the door");
+        this.heard("volley", b.tile);
+      }
     }
   }
 
@@ -2540,7 +2693,12 @@ export class Economy {
       d.pi = 1;
       a.state = "duel";
       b.duel = { attacker: a.id, defender: d.id, until: this.tick + COMBAT.duelTicks };
+      this.heard("clash", b.tile);
     }
+  }
+
+  private heard(kind: "clash" | "volley", tile: number): void {
+    if (this.combatEvents.length < 64) this.combatEvents.push({ kind, tile });
   }
 
   /** Militia go back to their lives once no attack is under way. */
@@ -2584,11 +2742,12 @@ export class Economy {
     }
     if (aliveA) a.state = "siege";
     if (!aliveA || !aliveD) return;
-    const ground = this.keeps.includes(b.id) ? 1.2 : 1.1;
+    const ground = this.groundFor(b);
     const fa = strength(this.fighter(a, fatigueFor(a.visits, this.people[a.person]?.arms ?? 0)), this.resolve(a.owner) * this.warMorale(a.owner), 1);
     const fd = strength(this.fighter(d), this.resolve(d.owner), ground);
     const r = this.combatRng as Rng;
     const [winner, loser] = r.next() < duelChance(fa, fd) ? [a, d] : [d, a];
+    this.heard("clash", b.tile);
     const wp = this.people[winner.person];
     if (wp) {
       wp.xp += 2;
@@ -2641,6 +2800,8 @@ export class Economy {
     flag.goods = [];
     flag.owner = owner;
     b.owner = owner;
+    b.palisade = false;
+    b.camp = 0;
     b.stock.fill(0);
     b.pending.fill(0);
     b.stranded = -1;
@@ -2710,7 +2871,7 @@ export class Economy {
     const alive = this.keeps.map((_, p) => p).filter((p) => !this.defeated[p]);
     // The last settlement (or the last team) standing.
     if (this.keeps.length > 1 && alive.length >= 1 && alive.every((p) => this.allied(p, alive[0] as number)) && this.keeps.some((_, p) => !this.allied(p, alive[0] as number))) {
-      this.win(alive[0] as number, "conquest");
+      if (this.victory !== "wells") this.win(alive[0] as number, "conquest");
       return;
     }
     if (this.goal === "bloom") return;
@@ -2722,7 +2883,7 @@ export class Economy {
       if (o) held[o - 1] = (held[o - 1] as number) + 1;
     }
     for (const p of alive) {
-      if ((held[p] as number) >= COMBAT.wellsToWin) {
+      if (this.victory !== "conquest" && (held[p] as number) >= COMBAT.wellsToWin) {
         if ((this.wellsSince[p] ?? -1) < 0) {
           this.wellsSince[p] = this.tick;
           this.notify(p, `You hold ${held[p]} Star Wells. Keep them lit for a day to win.`);
@@ -4626,7 +4787,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
-    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach).int(b.def.ferry ?? 0);
+    for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach).int(b.def.ferry ?? 0).int(b.palisade ? 1 : 0).int(b.camp);
     for (const b of this.buildings) if (b.alive && b.def.storage) for (const m of b.goodMode) h.int(m);
     for (const u of this.rotateUntil) h.int(u ?? -1);
     // What each player has charted (boats make it history, not just the lanterns' reach).

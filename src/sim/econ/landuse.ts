@@ -195,6 +195,8 @@ export class LandUse {
   floodVersion = 0;
   /** Raised causeways over the flats: roads that stay dry at high tide. */
   readonly causeway: Uint8Array;
+  /** Bridges over shallow water (an engineers' work): walkers and roads cross them. */
+  readonly bridge: Uint8Array;
   /** 1 on water tiles a ferry crosses (boats, not roads: nothing is drawn or painted on them). */
   readonly ferry: Uint8Array;
   causewayVersion = 0;
@@ -246,6 +248,7 @@ export class LandUse {
     this.tidal = new Uint8Array(n);
     this.flooded = new Uint8Array(n);
     this.causeway = new Uint8Array(n);
+    this.bridge = new Uint8Array(n);
     this.ferry = new Uint8Array(n);
     this.shell = new Uint8Array(n);
     this.sand = new Float32Array(n);
@@ -487,13 +490,27 @@ export class LandUse {
   walkable(t: number): boolean {
     if (this.flooded[t] && !this.causeway[t]) return false;
     const f = this.feature[t];
-    return (this.isLand(t) || this.isIce(t)) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire && f !== Feature.Ruin;
+    return (this.isLand(t) || this.isIce(t) || this.bridge[t] === 1) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire && f !== Feature.Ruin;
+  }
+
+  /** Water shallower than this (elevation, in world units) can be bridged. */
+  static readonly BRIDGE_DEPTH = -0.9;
+
+  /** Why a bridge can't go on this tile for `owner`, or null if it can (goods apart). */
+  bridgeBlocked(t: number, owner: number): string | null {
+    if (this.isLand(t) || this.isIce(t) || this.bridge[t]) return "Bridges go over open shallow water.";
+    if (this.territory[t] !== owner + 1) return "Bridges go on water inside your own border.";
+    if ((this.planet.terrain.elevation[t] as number) < LandUse.BRIDGE_DEPTH) return "The water is too deep to bridge.";
+    const grid = this.planet.grid;
+    if (grid.degree(t) === 5) return "Star Wells are sacred ground.";
+    if (!grid.neighborsOf(t).some((n) => this.bridge[n] === 1 || (this.isLand(n) && this.territory[n] === owner + 1))) return "A bridge starts from your land or another bridge.";
+    return null;
   }
 
   /** A flag or road of `owner` may go here. */
   roadable(t: number, owner = 0, foothold = false): boolean {
     // Ice roads: frozen lakes can be crossed (until they thaw).
-    if (this.isIce(t)) return this.mayRoad(t, owner, foothold) && this.use[t] === Use.Free;
+    if (this.isIce(t) || this.bridge[t] === 1) return this.mayRoad(t, owner, foothold) && this.use[t] === Use.Free;
     return (
       this.isLand(t) &&
       this.mayRoad(t, owner, foothold) &&

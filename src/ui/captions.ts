@@ -1,4 +1,7 @@
 import { t, tr } from "../core/i18n";
+// Texts only referenced through a variable:
+tr("blades clashing");
+tr("arrows flying");
 import { h } from "./dom";
 
 /**
@@ -33,6 +36,13 @@ const WORK: Record<string, string> = {
 export function workCaption(kind: string, pan: number): string {
   const side = pan < -0.35 ? t("left") : pan > 0.35 ? t("right") : "";
   const what = t(WORK[kind] ?? kind);
+  return side ? `[${what}, ${side}]` : `[${what}]`;
+}
+
+/** The words for fighting heard at a pan position. */
+export function combatCaption(kind: "clash" | "volley", pan: number): string {
+  const side = pan < -0.35 ? t("left") : pan > 0.35 ? t("right") : "";
+  const what = t(kind === "clash" ? "blades clashing" : "arrows flying");
   return side ? `[${what}, ${side}]` : `[${what}]`;
 }
 

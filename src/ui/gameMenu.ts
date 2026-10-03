@@ -8,6 +8,7 @@ import { copyText, h, Panel } from "./dom";
 import { campaignPage } from "./campaign";
 import { createPage, library, type CreateHost } from "./creative";
 import { ALL_SCENARIOS } from "../sim/scenario/campaign";
+import type { MatchRules } from "../sim/world";
 
 export interface SaveMeta {
   id: string;
@@ -26,7 +27,7 @@ export interface MenuHost {
   exportCurrent(): string;
   importText(text: string): void;
   seed(): string;
-  startSession(lobby: HostLobby, mode: PlayMode, scenario?: string): void;
+  startSession(lobby: HostLobby, mode: PlayMode, scenario?: string, rules?: MatchRules): void;
   /** Start a scenario (tutorial, chapter, handmade) alone. */
   playScenario(id: string): void;
   /** Presentation: watch this game again fast, photo mode, skyship letters. */
@@ -54,6 +55,8 @@ export class GameMenu extends Panel {
   private steamName = "";
   /** The scenario chosen for a hosted co-op game (played in a shared settlement). */
   private mpScenario: () => string | undefined = () => undefined;
+  /** The match rules chosen in the host form (undefined while all are the usual ones). */
+  private mpRules: () => MatchRules | undefined = () => undefined;
 
   constructor(private readonly host: MenuHost) {
     super("menu", "Game", { width: 400 });
@@ -204,6 +207,17 @@ export class GameMenu extends Panel {
     const watch = h("input", { type: "checkbox", id: "mp-watch" }) as HTMLInputElement;
     const scen = h("select", { id: "mp-scenario" }, h("option", { value: "" }, "Free play"), ...[...ALL_SCENARIOS, ...library.scenarios()].map((x) => h("option", { value: x.id }, x.chapter ? `The Long Voyage ${x.chapter}: ${x.title}` : x.title))) as HTMLSelectElement;
     this.mpScenario = () => scen.value || undefined;
+    // Rules for a match: how long the peace lasts, what a lost duel costs, how the game is won.
+    const peace = h("select", { id: "mp-peace" }, ...[["", "Usual (1 day)"], ["0", "None"], ["2", "2 days"], ["5", "5 days"], ["10", "10 days"]].map(([v, l]) => h("option", { value: v }, l))) as HTMLSelectElement;
+    const stakes = h("select", { id: "mp-stakes" }, h("option", { value: "" }, "Usual (wounded)"), h("option", { value: "wounded" }, "Wounded"), h("option", { value: "mortal" }, "Mortal")) as HTMLSelectElement;
+    const victory = h("select", { id: "mp-victory" }, h("option", { value: "" }, "Either way"), h("option", { value: "conquest" }, "Last settlement standing"), h("option", { value: "wells" }, "Hold the Star Wells")) as HTMLSelectElement;
+    this.mpRules = () => {
+      const r: MatchRules = {};
+      if (peace.value !== "") r.peaceDays = Number(peace.value);
+      if (stakes.value) r.stakes = stakes.value as "wounded" | "mortal";
+      if (victory.value) r.victory = victory.value as "conquest" | "wells";
+      return Object.keys(r).length ? r : undefined;
+    };
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });
     const steam = this.steamName
       ? [
@@ -222,6 +236,9 @@ export class GameMenu extends Panel {
       h("div", { class: "row" }, h("label", { for: "mp-room" }, "Room"), room, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-mode" }, "Mode"), mode, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-scenario" }, "Scenario"), scen, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-peace" }, "Peace"), peace, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-stakes" }, "Duels"), stakes, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-victory" }, "Victory"), victory, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-watch" }, "Join to watch"), watch, h("span")),
       h("p", { class: "hint" }, "A player who drops out is kept by a steward (the AI) until they join again with the same name. Anyone joining a game in progress watches."),
       h(
@@ -255,7 +272,7 @@ export class GameMenu extends Panel {
         "div",
         { class: "btn-row" },
         h("button", { class: "btn", onclick: () => lobby.invite() }, "Invite friends"),
-        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario()) }, "Start game"),
+        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario(), this.mpRules()) }, "Start game"),
         h(
           "button",
           {
@@ -372,7 +389,7 @@ export class GameMenu extends Panel {
       h(
         "div",
         { class: "btn-row" },
-        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario()) }, "Start game"),
+        h("button", { class: "btn primary", onclick: () => this.host.startSession(lobby, mode, this.mpScenario(), this.mpRules()) }, "Start game"),
         h(
           "button",
           {

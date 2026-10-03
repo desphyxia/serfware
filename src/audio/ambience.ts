@@ -250,6 +250,63 @@ export class Ambience {
     o.stop(at + 0.4);
   }
 
+  /** Fighting heard from a distance: a clash of blades at a door, or a flight of arrows. */
+  combat(kind: "clash" | "volley", distance: number, pan: number): void {
+    if (!this.ctx || this.failed) return;
+    const level = Math.max(0, 1 - distance / 40);
+    if (level <= 0.02) return;
+    const ctx = this.ctx;
+    const at = ctx.currentTime + 0.005;
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    p.connect(this.effectsBus);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    if (kind === "clash") {
+      // Steel on steel: a bright noise strike over two ringing, inharmonic partials.
+      f.type = "highpass";
+      f.frequency.value = 3000;
+      g.gain.setValueAtTime(0.3 * level, at);
+      g.gain.exponentialRampToValueAtTime(0.0005, at + 0.09);
+      n.connect(f).connect(g).connect(p);
+      n.start(at, Math.random() * 1.5, 0.12);
+      for (const [freq, len] of [[1450 + Math.random() * 200, 0.45], [2310 + Math.random() * 300, 0.3]] as const) {
+        const o = ctx.createOscillator();
+        const og = ctx.createGain();
+        o.type = "triangle";
+        o.frequency.value = freq;
+        og.gain.setValueAtTime(0.14 * level, at);
+        og.gain.exponentialRampToValueAtTime(0.0005, at + len);
+        o.connect(og).connect(p);
+        o.start(at);
+        o.stop(at + len + 0.05);
+      }
+    } else {
+      // A volley: a rising rush of air and a dull thud as it lands.
+      f.type = "bandpass";
+      f.Q.value = 1.5;
+      f.frequency.setValueAtTime(700, at);
+      f.frequency.exponentialRampToValueAtTime(3200, at + 0.35);
+      g.gain.setValueAtTime(0.0005, at);
+      g.gain.exponentialRampToValueAtTime(0.22 * level, at + 0.3);
+      g.gain.exponentialRampToValueAtTime(0.0005, at + 0.42);
+      n.connect(f).connect(g).connect(p);
+      n.start(at, Math.random() * 1.5, 0.45);
+      const o = ctx.createOscillator();
+      const og = ctx.createGain();
+      o.frequency.setValueAtTime(120, at + 0.34);
+      o.frequency.exponentialRampToValueAtTime(55, at + 0.5);
+      og.gain.setValueAtTime(0.0005, at);
+      og.gain.setValueAtTime(0.25 * level, at + 0.34);
+      og.gain.exponentialRampToValueAtTime(0.0005, at + 0.52);
+      o.connect(og).connect(p);
+      o.start(at);
+      o.stop(at + 0.6);
+    }
+  }
+
   private workSounds(work: readonly WorkSound[], t: number): void {
     const ctx = this.ctx as AudioContext;
     const active = new Set<number>();

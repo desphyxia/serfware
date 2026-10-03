@@ -24,7 +24,7 @@ import { tideAt } from "./sim/biomes/tides";
 import { speciesAt } from "./render/natureView";
 import { hashString } from "./sim/rng";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
-import { planetSeed, World, type WorldCommand } from "./sim/world";
+import { planetSeed, World, type MatchRules, type WorldCommand } from "./sim/world";
 import { MEMORIAL, type Command } from "./sim/econ/economy";
 import type { HostLobby, JoinLobby } from "./net/lobby";
 import { makeSave, replaySave, ReplaySession, SoloSession, type SaveFile, type Session } from "./net/session";
@@ -37,7 +37,7 @@ import { EconomyPanel } from "./ui/economyPanel";
 import { SystemMap } from "./ui/systemMap";
 import { AlmanacPanel } from "./ui/almanac";
 import { Keymap } from "./core/keymap";
-import { ambientCaptions, Captions, workCaption } from "./ui/captions";
+import { ambientCaptions, Captions, combatCaption, workCaption } from "./ui/captions";
 import { FILTERS, LettersPanel, newPhotoState, PhotoPanel, TimelapseBar } from "./ui/presentation";
 import { DiplomacyPanel } from "./ui/diplomacy";
 import { nextAfter, ObjectivesPanel, progress, StoryPanel } from "./ui/campaign";
@@ -289,6 +289,10 @@ export class Game {
         this.command({ t: "upgrade", building });
         this.info.refresh();
       },
+      command: (cmd) => {
+        this.command(cmd);
+        this.info.refresh();
+      },
       explore: (building, reach) => {
         this.command({ t: "explore", building, reach });
         this.info.refresh();
@@ -376,7 +380,7 @@ export class Game {
       exportCurrent: () => JSON.stringify(makeSave(this.session, this.world.seed, BUILD.id)),
       importText: (text) => void this.importSave(text),
       seed: () => this.world.seed,
-      startSession: (lobby, mode, scenario) => this.startHosted(lobby, mode, scenario),
+      startSession: (lobby, mode, scenario, rules) => this.startHosted(lobby, mode, scenario, rules),
       playScenario: (id) => this.playScenario(id),
       create: {
         paint: (w) => this.paintWorld(w),
@@ -1809,13 +1813,14 @@ export class Game {
     this.startHosted(lobby, mode);
   }
 
-  private startHosted(lobby: HostLobby, mode: PlayMode, scenario?: string): void {
+  private startHosted(lobby: HostLobby, mode: PlayMode, scenario?: string, rules?: MatchRules): void {
     const seed = scenario ? (scenarioWorld(scenario)?.seed ?? this.world.seed) : this.world.seed;
     // Whatever the world is made from travels with the start: a custom scenario, or my mods.
     const def = scenario ? scenarioById(scenario) : undefined;
     const mods = library.enabledMods();
     let creative: Creative | undefined = def?.kind === "custom" ? { custom: def } : !scenario && mods.length ? { mods } : undefined;
     if (!scenario && this.mapOptions) creative = { ...creative, map: this.mapOptions };
+    if (rules) creative = { ...creative, rules };
     this.useSession(lobby.start(seed, mode, scenario, creative));
     if (scenario) this.tellIntro();
     this.menu.hide();
@@ -2312,6 +2317,7 @@ export class Game {
       this.uiTimer = 400;
       this.stock.update(eco, this.session.player, this.weatherChip());
       this.info.refresh();
+      this.updateReach();
       this.economyPanel.refresh();
       this.systemMap.refresh();
       this.almanac.refresh();
@@ -2345,6 +2351,14 @@ export class Game {
     this.hud.setBugLine([`seed ${this.world.seed}`, `build ${BUILD.id}`, where, `${formatDay(day)} local (tick ${this.world.tick})`]);
     this.hud.setFps(this.settings.get().ui.showFps, this.fps);
     this.debug.update();
+  }
+
+  /** With one of your lit lanterns selected, ring the enemy lanterns it could attack right now. */
+  private updateReach(): void {
+    const sel = this.info.selection;
+    const b = sel && sel.kind === "building" ? this.world.economy.buildings[sel.id] : undefined;
+    const tiles = b && b.alive && b.owner === this.session.player && b.built && b.lit ? this.world.economy.attackTargetsFrom(b).map((x) => x.tile) : [];
+    this.view.overlays.setReach(tiles);
   }
 
   /** Colour grade and painterly light for the time of day, plus close-up depth of field. */
@@ -2518,6 +2532,20 @@ export class Game {
 
   private updateAudio(): void {
     const caps = this.captions.on;
+    // Fighting heard (or captioned) when it is near the view.
+    const events = this.world.economy.combatEvents.splice(0);
+    if (events.length && (this.audio.running || caps)) {
+      const ground = this.cam.groundPoint();
+      const v = new THREE.Vector3();
+      const now = performance.now();
+      for (const e of events.slice(0, 6)) {
+        this.view.frames.pos(e.tile, 0, v);
+        const distance = v.distanceTo(ground) + this.cam.distance * 0.35;
+        const pan = v.clone().project(this.camera).x;
+        if (this.audio.running) this.audio.combat(e.kind, distance, pan);
+        if (caps && distance < 40) this.captions.say(`combat-${e.kind}`, combatCaption(e.kind, pan), now, 3000);
+      }
+    }
     if (!this.audio.running && !caps) return;
     const R = this.world.planet.params.radius;
     const land = this.world.land;
