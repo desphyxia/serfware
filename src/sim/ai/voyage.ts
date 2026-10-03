@@ -8,7 +8,7 @@ const SETTLERS = 12;
 const CARGO = { plank: 12, stone: 6, log: 6 };
 
 /**
- * The scripted AI's voyages, for a seat the rules let fly (people's seats, which a steward holds): a launch
+ * The scripted AI's voyages, for any seat (people's, a steward's, or an AI rival's): a launch
  * rail, probes to survey the other worlds, a Hearthship to the best surveyed one, the landing site, and a
  * skyship route of bread to the colony while home can spare it. It never founds a colony from a small
  * settlement, because the colony is not managed once it lands.
@@ -32,7 +32,7 @@ export class VoyagePlanner {
 
   /** Whether this seat can give voyage orders at all. */
   static allowed(ctx: AiContext): boolean {
-    return !!ctx.world.voyages && ctx.player < ctx.world.humans;
+    return !!ctx.world.voyages && ctx.player < ctx.world.players;
   }
 
   step(ctx: AiContext, thoughts: number): boolean {
