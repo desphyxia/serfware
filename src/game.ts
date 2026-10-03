@@ -158,6 +158,8 @@ export class Game {
   private aiLevel: AiLevel = "normal";
   /** Fog of war drawn (the debug dialog can lift it). */
   private fogOn = true;
+  /** Debug: draw every tile's outline (the debug dialog toggles it; it follows the view across planets). */
+  private tileEdges = false;
   /** Person the camera follows, or -1. */
   private following = -1;
   private readonly pointer = new THREE.Vector2(9, 9);
@@ -246,6 +248,7 @@ export class Game {
         "×64": () => (this.speed = 64),
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
+        "Tile edges": () => this.setTileEdges(!this.tileEdges),
         "Weather here": () => this.summonWeather(),
         "Skip 6 days": () => this.skipDays(6),
         "Fog of war": () => {
@@ -2351,6 +2354,12 @@ export class Game {
     this.hud.setBugLine([`seed ${this.world.seed}`, `build ${BUILD.id}`, where, `${formatDay(day)} local (tick ${this.world.tick})`]);
     this.hud.setFps(this.settings.get().ui.showFps, this.fps);
     this.debug.update();
+    if (this.view.overlays.tileEdgesOn !== this.tileEdges) this.view.overlays.setTileEdges(this.tileEdges);
+  }
+
+  /** Debug: draw every tile's outline on the ground. */
+  setTileEdges(on: boolean): void {
+    this.tileEdges = on;
   }
 
   /** With one of your lit lanterns selected, ring the enemy lanterns it could attack right now. */

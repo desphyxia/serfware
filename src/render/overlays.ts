@@ -16,6 +16,8 @@ export class Overlays {
   private ghost: THREE.Mesh | null = null;
   private ghostKey = "";
   private readonly ghostFlag: THREE.Mesh;
+  /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
+  private tileEdges: THREE.LineSegments | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -117,6 +119,47 @@ export class Overlays {
     this.group.add(this.border);
   }
 
+  /** Debug: draw (or hide) the outline of every tile, so what a tile is, and what stands on which, can be seen. */
+  setTileEdges(on: boolean): void {
+    if (on && !this.tileEdges) this.tileEdges = this.buildTileEdges();
+    if (this.tileEdges) this.tileEdges.visible = on;
+  }
+
+  get tileEdgesOn(): boolean {
+    return !!this.tileEdges?.visible;
+  }
+
+  private buildTileEdges(): THREE.LineSegments {
+    const { grid } = this.land.planet;
+    const R = this.land.planet.params.radius;
+    const elevation = this.land.planet.terrain.elevation;
+    const pos: number[] = [];
+    // A corner stands at the mean height of the three tiles that meet there, a little above the ground.
+    const corner = (c: number) => {
+      let h = 0;
+      for (let j = 0; j < 3; j++) h += Math.max(0, elevation[grid.cornerTiles[c * 3 + j] as number] as number);
+      const r = R + h / 3 + 0.1;
+      pos.push((grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
+    };
+    for (let t = 0; t < grid.count; t++) {
+      const ns = grid.neighborsOf(t);
+      const cs = grid.cornersOf(t);
+      for (let k = 0; k < ns.length; k++) {
+        // The edge shared with neighbour k runs between corners k-1 and k; each shared edge is drawn once.
+        if ((ns[k] as number) < t) continue;
+        corner(cs[(k - 1 + cs.length) % cs.length] as number);
+        corner(cs[k] as number);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#fff1b8", transparent: true, opacity: 0.9, depthWrite: false }));
+    lines.renderOrder = 4;
+    lines.frustumCulled = false;
+    this.group.add(lines);
+    return lines;
+  }
+
   /** Show placement markers on the given tiles (or hide with an empty list). */
   setMarkers(tiles: readonly number[], color: string): void {
     const m = new THREE.Matrix4();
@@ -202,5 +245,6 @@ export class Overlays {
     this.markers.dispose();
     this.reach.dispose();
     this.preview.geometry.dispose();
+    this.tileEdges?.geometry.dispose();
   }
 }
