@@ -4,8 +4,6 @@ import { placeOn } from "../econ/planner";
 import type { AiContext } from "./brain";
 import type { Personality } from "./personality";
 
-/** How eagerly each temperament looks beyond its own shore (the number of buildings it wants first). */
-const READY: Record<Personality, number> = { trader: 18, builder: 26, warden: 36 };
 /** A free shore is worth settling if at least this much unclaimed land lies around it. */
 const MIN_SCORE = 10;
 /** Quays a settlement keeps ferrying from, at most, before it stops founding more. */
@@ -20,6 +18,8 @@ export class SeaPlanner {
   constructor(
     private readonly player: number,
     private readonly personality: Personality,
+    /** How many buildings it wants before it looks beyond its own shore. */
+    private readonly wantBuilt: number,
   ) {}
 
   private def(id: string): BuildingDef {
@@ -28,7 +28,7 @@ export class SeaPlanner {
 
   /** Whether the AI is ready to look to the sea: grown enough, or with no border left to push out. */
   ready(ctx: AiContext, built: number, landLocked: boolean): boolean {
-    return landLocked || built >= READY[this.personality];
+    return landLocked || built >= this.wantBuilt;
   }
 
   /** One step toward the sea. Returns true if an order was given. */

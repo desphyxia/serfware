@@ -117,6 +117,11 @@ from a grown settlement, picks its landing site and ships bread to the colony (`
 its colonies too, with a brain of its own on each colony world, and raises terraforming works there (`terra.ts`). Rival seats
 cannot yet voyage: the colony worlds hold only people's seats.
 
+What each temperament will not do is a hard limit enforced by the world (`TEMPERS` in `ai/personality.ts`): a Builder never
+raids, pitches camps or breaks a treaty, a Warden never voyages. `ai/coverage.ts` lists, for every command and building type,
+which planner gives it or why none does, and `tests/aicoverage.test.ts` keeps that list honest. Land-specific buildings
+(waystations, saltworks, glowcap farms, lighthouses and the rest) come from `ai/biome.ts`.
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
