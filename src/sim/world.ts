@@ -267,15 +267,30 @@ export class World implements WorldHost {
     if (p < 0 || p >= this.humans || eco.keeps[p] === undefined) return { ok: false, reason: "No such player." };
     if (on === this.stewards.has(p)) return { ok: true };
     if (on) {
-      this.stewards.set(p, defaultBrain({ player: p, rng: new Rng(`${this.seed}:steward-${p}:${this.tick}`), personality: "builder", level: "normal" }));
+      this.adopt(p);
       eco.aiPlayers.add(p);
     } else {
-      this.stewards.delete(p);
+      this.release(p);
       eco.aiPlayers.delete(p);
+    }
+    // A steward keeps the colonies too: each colony world gets a brain of its own for the seat.
+    for (const c of this.colonies) {
+      if (!c) continue;
+      if (on) c.adopt(p);
+      else c.release(p);
     }
     for (let o = 0; o < this.players; o++)
       eco.notify(o, on ? `${o === p ? "You are away: a steward" : `${eco.playerName(p)} has left; a steward`} keeps the settlement running until they return.` : o === p ? "Welcome back: the steward hands your settlement over." : `${eco.playerName(p)} is back.`);
     return { ok: true };
+  }
+
+  /** Put a steward brain on a seat of this world. */
+  private adopt(p: number): void {
+    this.stewards.set(p, defaultBrain({ player: p, rng: new Rng(`${this.seed}:steward-${p}:${this.tick}`), personality: "builder", level: "normal" }));
+  }
+
+  private release(p: number): void {
+    this.stewards.delete(p);
   }
 
   /** A colony on `planet` has bloomed: in a Bloom race, whoever did most to green it wins. */
@@ -312,12 +327,13 @@ export class World implements WorldHost {
     w.economy.teams.push(...this.economy.teams);
     w.economy.names.push(...this.economy.names);
     w.onBloom = () => this.bloomed(planet);
+    for (const p of this.stewards.keys()) w.adopt(p);
     return w.economy;
   }
 
   /** Ask a brain to act, when its turn comes. */
   private think(ai: Brain): void {
-    if ((this.tick + ai.player * 37) % ai.period !== 0 || this.economy.defeated[ai.player] || this.economy.winner >= 0) return;
+    if ((this.tick + ai.player * 37) % ai.period !== 0 || this.economy.defeated[ai.player] || this.economy.winner >= 0 || this.economy.keeps[ai.player] === undefined) return;
     this.acting = ai.player;
     try {
       ai.think(new AiContext(this, ai.player));
