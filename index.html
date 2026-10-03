@@ -4,9 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Seedfall</title>
+    <style>
+      #boot { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; gap: 14px; text-align: center; background: radial-gradient(circle at 50% 45%, #28345499, #0a0c12ee), #0a0c12; color: #e8e4d8; font-family: ui-monospace, Menlo, Consolas, monospace; transition: opacity 0.4s; }
+      #boot[hidden] { display: none; }
+      #boot.done { opacity: 0; pointer-events: none; }
+      #boot h1 { margin: 0; font: 600 2.4rem Georgia, serif; letter-spacing: 0.04em; }
+      #boot .msg { font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase; color: #f2b45a; min-height: 1.2em; }
+      #boot .bar { width: min(320px, 70vw); height: 6px; margin: 0 auto; border-radius: 3px; background: #ffffff22; overflow: hidden; }
+      #boot .fill { height: 100%; width: 0; background: #f2b45a; transition: width 0.25s ease-out; }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="boot" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <h1>Seedfall</h1>
+      <div class="bar"><div class="fill"></div></div>
+      <div class="msg">Starting…</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

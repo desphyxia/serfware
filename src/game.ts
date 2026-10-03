@@ -59,6 +59,7 @@ import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
 import { ReportPanel } from "./ui/reportPanel";
 import { SettingsPanel } from "./ui/settingsPanel";
+import { bootScreen } from "./ui/bootScreen";
 
 const RAD = 180 / Math.PI;
 
@@ -172,6 +173,7 @@ export class Game {
     this.session.setSpeed(v);
     if (this.session.info.mode === "solo") this.session.speed = v;
   }
+  private shown = false;
   private lastFrame = 0;
   private lastRender = 0;
   private readonly frameTimes: number[] = [];
@@ -1612,8 +1614,19 @@ export class Game {
   }
 
   async start(): Promise<void> {
+    bootScreen.set(0.25, "Starting the graphics");
     await this.gfx.init();
     log.info(`Renderer: ${this.gfx.backend}`);
+    bootScreen.set(0.3, "Preparing shaders");
+    const t0 = performance.now();
+    try {
+      await this.gfx.precompile((f) => bootScreen.set(0.3 + f * 0.65, "Preparing shaders"));
+    } catch (err) {
+      // Not fatal: the shaders then build on the first frame instead.
+      log.warn(`Shader precompile failed: ${(err as Error).message}`);
+    }
+    log.info(`Shaders ready in ${(performance.now() - t0).toFixed(0)} ms`);
+    bootScreen.set(0.97, "Starting");
     this.resize();
     window.setTimeout(() => this.sampleMemory(), 1000);
     const frame = (now: number) => {
@@ -1621,6 +1634,10 @@ export class Game {
       if (this.hold) return;
       try {
         this.frame(now);
+        if (!this.shown) {
+          this.shown = true;
+          bootScreen.hide();
+        }
       } catch (err) {
         crash.capture({ kind: "error", message: (err as Error).message, stack: (err as Error).stack });
       }
