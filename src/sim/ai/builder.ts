@@ -162,6 +162,8 @@ export class AiBuilder implements Brain {
     if (this.thoughts % temper === 0 && this.attack(w)) return;
     // Palisades, field camps, outriders and breaking truces.
     if (this.thoughts % 5 === 3 && this.war.step(ctx, this.thoughts)) return;
+    // Stone gone: geologists and granite mines, which cannot wait behind sites that are waiting for stone.
+    if (this.thoughts % 3 === 1 && this.econ.relieveStone(ctx, this.thoughts)) return;
     // Voyages (for a seat the rules let fly) are orders, not sites, so they do not wait for the builders.
     if (this.thoughts % 5 === 4 && VoyagePlanner.allowed(ctx) && mine.filter((b) => b.built).length >= 25 && this.voyage.step(ctx, this.thoughts)) return;
     if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) return;
@@ -174,7 +176,7 @@ export class AiBuilder implements Brain {
     const want = (cond: boolean, w: { key: string; fn: () => boolean }) => {
       if (cond) wants.push(w);
     };
-    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: max, near: feature, player: pl, center: this.center(w), splitRoads: true }) });
+    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: feature === Feature.Rock ? Math.max(max, 14) : max, near: feature, need: feature === Feature.Rock ? 2 : 0, player: pl, center: this.center(w), splitRoads: true }) });
     const grow = () => ({ key: "expand", fn: () => this.expand(w, plank, stone) });
     // Try the wishes in order; one that finds no site steps aside for a while, so a cramped spot
     // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.

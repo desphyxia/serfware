@@ -9,7 +9,7 @@ import { Feature, Use } from "./landuse";
 export function placeConnected(
   w: World,
   type: string,
-  opts: { minDist?: number; maxDist?: number; near?: Feature; player?: number; center?: number; splitRoads?: boolean } = {},
+  opts: { minDist?: number; maxDist?: number; near?: Feature; /** With `near`: at least this many of that feature within reach (a quarry with no rock in reach never works). */ need?: number; player?: number; center?: number; splitRoads?: boolean } = {},
 ): boolean {
   const eco = w.economy;
   const land = w.land;
@@ -19,7 +19,12 @@ export function placeConnected(
   const center = opts.center ?? keep.tile;
   const minDist = opts.minDist ?? 2;
   const inner = new Set(land.ring(center, minDist - 1));
-  const candidates = land.ring(center, opts.maxDist ?? 8).filter((t) => !inner.has(t));
+  const reach = (t: number) => {
+    let n = 0;
+    for (const x of land.ring(t, 6)) if (land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
+    return n;
+  };
+  const candidates = land.ring(center, opts.maxDist ?? 8).filter((t) => !inner.has(t) && (opts.near === undefined || !opts.need || reach(t) >= opts.need));
   const score = (t: number) => {
     if (opts.near === undefined) return 0;
     let n = 0;
