@@ -1,0 +1,100 @@
+{
+ "gens": 5,
+ "children": 3,
+ "matches": 3,
+ "days": 12,
+ "log": [
+  {
+   "gen": 0,
+   "fitness": 34,
+   "tuning": {
+    "attackOdds": 0.7,
+    "temper": 3,
+    "frontier": 1,
+    "inland": 0.25,
+    "sites": 3,
+    "wants": 5,
+    "seaReady": 36
+   }
+  },
+  {
+   "gen": 1,
+   "fitness": 34.375,
+   "tuning": {
+    "attackOdds": 0.7000633939309046,
+    "temper": 2,
+    "frontier": 0.9471693718759343,
+    "inland": 0.27818303141510115,
+    "sites": 3.7104763395618647,
+    "wants": 6.294511203048751,
+    "seaReady": 37.708826968446374
+   }
+  },
+  {
+   "gen": 2,
+   "fitness": 36.333333333333336,
+   "tuning": {
+    "attackOdds": 0.5913933815651108,
+    "temper": 2.8862064646044745,
+    "frontier": 0.9499735541089903,
+    "inland": 0.25164644270762804,
+    "sites": 3.8251556508941578,
+    "wants": 6.739468936605845,
+    "seaReady": 29.33440168015659
+   }
+  },
+  {
+   "gen": 3,
+   "fitness": 68.54166666666667,
+   "tuning": {
+    "attackOdds": 0.5453130978345755,
+    "temper": 2,
+    "frontier": 1,
+    "inland": 0.19759971892450123,
+    "sites": 4.106481261650333,
+    "wants": 6.687143395423656,
+    "seaReady": 30.404358313665725
+   }
+  },
+  {
+   "gen": 4,
+   "fitness": 68.54166666666667,
+   "tuning": {
+    "attackOdds": 0.5453130978345755,
+    "temper": 2,
+    "frontier": 1,
+    "inland": 0.19759971892450123,
+    "sites": 4.106481261650333,
+    "wants": 6.687143395423656,
+    "seaReady": 30.404358313665725
+   }
+  },
+  {
+   "gen": 5,
+   "fitness": 68.54166666666667,
+   "tuning": {
+    "attackOdds": 0.5453130978345755,
+    "temper": 2,
+    "frontier": 1,
+    "inland": 0.19759971892450123,
+    "sites": 4.106481261650333,
+    "wants": 6.687143395423656,
+    "seaReady": 30.404358313665725
+   }
+  }
+ ],
+ "found": {
+  "attackOdds": 0.55,
+  "temper": 2,
+  "frontier": 1,
+  "inland": 0.2,
+  "sites": 4.11,
+  "wants": 6.69,
+  "seaReady": 30.4
+ },
+ "check": {
+  "matches": 9,
+  "learned": -19.069444444444443,
+  "handSet": 12.63888888888889
+ }
+}

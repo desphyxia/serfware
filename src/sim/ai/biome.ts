@@ -56,6 +56,8 @@ export class BiomePlanner {
     if (mine.filter((b) => !b.built).length > 1) return false;
     const built = mine.filter((b) => b.built).length;
     const have = (id: string) => mine.filter((b) => b.def.id === id).length;
+    // Only once the basics stand, a toolsmith among them.
+    if (have("toolsmith") < 1) return false;
     const stock = eco.storageTotals(pl);
     const keep = eco.buildings[eco.keeps[pl] ?? -1];
     const c = land.planet.grid.center;

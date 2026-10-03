@@ -1,1 +1,11 @@
-{}
+{
+ "warden": {
+  "attackOdds": 0.55,
+  "temper": 2,
+  "frontier": 1,
+  "inland": 0.2,
+  "sites": 4.11,
+  "wants": 6.69,
+  "seaReady": 30.4
+ }
+}
