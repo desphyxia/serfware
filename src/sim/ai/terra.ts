@@ -25,6 +25,8 @@ export class TerraPlanner {
     const w = ctx.world;
     const eco = ctx.eco;
     const pl = this.player;
+    // Works are for colonies that have taken root; a home world already blooms and refuses them.
+    if (!eco.colony || !eco.rooted[pl]) return false;
     const atm = w.atmosphere;
     const check = atm.check();
     const mine = eco.buildings.filter((b) => b.alive && b.owner === pl);

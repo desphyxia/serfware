@@ -236,7 +236,9 @@ export class World implements WorldHost {
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
   command(cmd: WorldCommand): CommandResult {
-    const r = this.apply(cmd);
+    // A brain gives only the orders its temperament allows, however it came to ask for them.
+    const brain = this.acting >= 0 ? (this.ai.find((a) => a.player === this.acting) ?? this.stewards.get(this.acting)) : undefined;
+    const r = brain?.allows && !brain.allows(cmd) ? { ok: false, reason: "Not this temperament's way." } : this.apply(cmd);
     if (this.acting >= 0 && this.recordAi && this.aiLog.length < 100000) this.aiLog.push({ tick: this.tick, player: this.acting, cmd, ok: r.ok });
     return r;
   }

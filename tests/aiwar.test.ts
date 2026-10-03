@@ -3,10 +3,10 @@ import { goodId } from "../src/sim/econ/defs";
 import { ARM_MOUNT } from "../src/sim/econ/people";
 import { World } from "../src/sim/world";
 
-function tally(w: World): Record<string, number> {
+function tally(w: World, player?: number): Record<string, number> {
   const out: Record<string, number> = {};
   for (const a of w.aiLog) {
-    if (!a.ok) continue;
+    if (!a.ok || (player !== undefined && a.player !== player)) continue;
     const k = a.cmd.t === "build" ? `build:${(a.cmd as { type: string }).type}` : a.cmd.t;
     out[k] = (out[k] ?? 0) + 1;
   }
@@ -36,6 +36,10 @@ describe("the AI at war and in public works", () => {
         w.step();
       }
       for (const [k, n] of Object.entries(tally(w))) all[k] = (all[k] ?? 0) + n;
+      // The Trader (seat 3) fights only when cornered: it never pitches camps or breaks a truce.
+      const trader = tally(w, 3);
+      expect(trader.camp ?? 0, "a trader pitched a camp").toBe(0);
+      expect(trader.break ?? 0, "a trader broke a treaty").toBe(0);
     }
     for (const k of ["palisade", "camp", "raid", "break", "bridge"]) expect(all[k] ?? 0, `${k} in ${JSON.stringify(all)}`).toBeGreaterThan(0);
   });

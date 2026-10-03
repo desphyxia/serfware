@@ -5,8 +5,10 @@ import { goodId } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
 import type { TreatyKind } from "../econ/diplomacy";
-import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
+import { AI_LEVELS, baselineTuning, temperAllows, type AiLevel, type Personality, type Tuning } from "./personality";
 import type { AiContext, Brain } from "./brain";
+import type { WorldCommand } from "../world";
+import { BiomePlanner } from "./biome";
 import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
 import { TerraPlanner } from "./terra";
@@ -32,12 +34,14 @@ export class AiBuilder implements Brain {
     private readonly rng: Rng,
     readonly personality: Personality = "builder",
     readonly level: AiLevel = "normal",
+    private readonly tuning: Tuning = baselineTuning(personality, level),
   ) {
-    this.sea = new SeaPlanner(player, personality);
+    this.sea = new SeaPlanner(player, personality, tuning.seaReady);
     this.econ = new EconPlanner(player, personality);
     this.war = new WarPlanner(player, personality, level);
     this.works = new WorksPlanner(player, personality);
     this.terra = new TerraPlanner(player);
+    this.biome = new BiomePlanner(player);
     this.voyage = new VoyagePlanner(player);
   }
 
@@ -46,6 +50,7 @@ export class AiBuilder implements Brain {
   private readonly war: WarPlanner;
   private readonly works: WorksPlanner;
   private readonly terra: TerraPlanner;
+  private readonly biome: BiomePlanner;
   private readonly voyage: VoyagePlanner;
   private started = false;
   private thoughts = 0;
@@ -68,7 +73,7 @@ export class AiBuilder implements Brain {
       if (pool < 2) continue;
       for (let n = 2; n <= pool; n++) {
         const odds = eco.attackOdds(pl, t, n);
-        if (odds < AI_LEVELS[this.level].odds) continue;
+        if (odds < this.tuning.attackOdds) continue;
         const held = eco.defendersOf(t).length;
         if (!best || held < best.held || (held === best.held && odds > best.odds)) best = { t, count: Math.min(pool, n + 1), held, odds };
         break;
@@ -122,6 +127,10 @@ export class AiBuilder implements Brain {
     for (const k of [...this.strays.keys()]) if (!seen.has(k)) this.strays.delete(k);
   }
 
+  allows(cmd: WorldCommand): boolean {
+    return temperAllows(this.personality, cmd as { t: string; type?: string });
+  }
+
   think(ctx: AiContext): void {
     const w = ctx.world;
     const eco = w.economy;
@@ -130,7 +139,7 @@ export class AiBuilder implements Brain {
       // Lighter garrisons than a cautious player: this rival would rather grow.
       this.started = true;
       // Wardens hold the border in full and the interior thin, as Settlers 2's AI does; the others keep lighter garrisons.
-      const [frontier, inland] = this.personality === "warden" ? [1, 0.25] : this.personality === "trader" ? [0.3, 0.15] : [0.4, 0.2];
+      const { frontier, inland } = this.tuning;
       w.command({ t: "garrison", zone: "frontier", value: frontier, player: pl });
       w.command({ t: "garrison", zone: "near", value: (frontier + inland) / 2, player: pl });
       w.command({ t: "garrison", zone: "inland", value: inland, player: pl });
@@ -149,13 +158,13 @@ export class AiBuilder implements Brain {
     if (this.thoughts % 10 === 5) this.tidy(w);
     if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
     // Wardens look for a fight often, Traders seldom, Builders hardly ever.
-    const temper = this.personality === "warden" ? 3 : this.personality === "trader" ? 8 : 12;
+    const temper = Math.max(1, Math.round(this.tuning.temper));
     if (this.thoughts % temper === 0 && this.attack(w)) return;
     // Palisades, field camps, outriders and breaking truces.
     if (this.thoughts % 5 === 3 && this.war.step(ctx, this.thoughts)) return;
     // Voyages (for a seat the rules let fly) are orders, not sites, so they do not wait for the builders.
     if (this.thoughts % 5 === 4 && VoyagePlanner.allowed(ctx) && mine.filter((b) => b.built).length >= 25 && this.voyage.step(ctx, this.thoughts)) return;
-    if (sites >= lv.sites || (sites >= 1 && plank < 2)) return;
+    if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) return;
     // Keep enough hands free: when nobody is idle, build homes before anything else.
     const idle = eco.population(pl).idle;
     const count = (id: string) => mine.filter((b) => b.def.id === id).length;
@@ -214,6 +223,8 @@ export class AiBuilder implements Brain {
     // Public works: bridges, pleasures, digs, gifts to allies.
     want(built >= 14 && this.thoughts % 3 === 1, { key: "works", fn: () => this.works.step(ctx, this.thoughts) });
     // Terraforming where the world is not yet alive.
+    // What the land it holds calls for: tree houses, waystations, saltworks, tide mills, ropeways and the rest.
+    want(built >= 12 && this.thoughts % 4 === 0, { key: "biome", fn: () => this.biome.step(ctx, this.thoughts) });
     want(built >= 12 && this.thoughts % 4 === 2, { key: "terra", fn: () => this.terra.step(ctx, this.thoughts) });
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));
     want(count("butcher") < 1 && count("pasture") > 0, near("butcher"));
@@ -227,7 +238,7 @@ export class AiBuilder implements Brain {
     want(idle >= 6 && count("quarry") < 2 + Math.floor(idle / 12), near("quarry", Feature.Rock));
     want(lanterns < 3 + Math.floor(mine.length / 3), grow());
     // Nothing could be placed with hands idle: perhaps forest or rock has boxed the settlement in.
-    if (!attempt(wants, lv.wants) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
+    if (!attempt(wants, Math.max(1, Math.round(this.tuning.wants))) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
       const did = clearForest(w, pl);
       if (!did) this.resting.set("clear", this.thoughts + 12);
       // With a forester taken down, no new one until the way is clear.

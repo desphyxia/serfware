@@ -16,6 +16,8 @@ export interface Brain {
   /** Ticks between decisions. */
   readonly period: number;
   think(ctx: AiContext): void;
+  /** Whether this brain may give an order at all (a temperament's limits); absent means anything. */
+  allows?(cmd: WorldCommand): boolean;
 }
 
 /** Builds the brain for a seat. `rng` is the seat's own stream (use it, never Math.random). */
