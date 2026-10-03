@@ -112,6 +112,11 @@ attack will start (Wardens), sends mounted outriders to cut bare enemy flags, an
 are overwhelming. It bridges pockets of its own land cut off by shallow water, builds a maypole, fountains, statues
 and digsites at ruins, and sends planks or stone to a poorer ally.
 
+A seat the rules let fly (a person's seat held by a steward) builds a launch rail, probes the other worlds, sends a Hearthship
+from a grown settlement, picks its landing site and ships bread to the colony (`src/sim/ai/voyage.ts`); a steward now keeps
+its colonies too, with a brain of its own on each colony world, and raises terraforming works there (`terra.ts`). Rival seats
+cannot yet voyage: the colony worlds hold only people's seats.
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
