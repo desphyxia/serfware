@@ -4,8 +4,11 @@ import { MIN_FOUNDERS } from "../system/voyages";
 import type { AiContext } from "./brain";
 
 const SETTLERS = 12;
-/** Goods a Hearthship takes besides its founders (mass 3 each), and what the stores must hold first. */
-const CARGO = { plank: 12, stone: 6, log: 6 };
+/**
+ * Goods a Hearthship takes besides its founders (mass 3 each): materials, the tools the first trades need (a colony
+ * with no hammer builds nothing), and some bread. The stores must hold them first.
+ */
+const CARGO = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
 
 /**
  * The scripted AI's voyages, for any seat (people's, a steward's, or an AI rival's): a launch
@@ -76,7 +79,7 @@ export class VoyagePlanner {
     // A colony, from a grown settlement with hands to spare, on the surveyed world nearest home's gravity.
     const pop = eco.population(pl);
     const people = pop.idle + pop.working;
-    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6)) {
+    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6) && Object.entries(CARGO).every(([g, n]) => have(g, n))) {
       const g = sys.planets[home]!.gravity;
       const target = sys.planets
         .filter((p) => p.surface && p.index !== home && voyages.isSurveyed(pl, p.index) && w.economyAt(p.index)?.keeps[pl] === undefined && !inFlight("hearthship", p.index))
