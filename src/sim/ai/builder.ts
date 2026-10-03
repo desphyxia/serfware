@@ -6,6 +6,7 @@ import type { Rng } from "../rng";
 import type { World } from "../world";
 import type { TreatyKind } from "../econ/diplomacy";
 import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
+import type { AiContext, Brain } from "./brain";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
 
@@ -15,9 +16,10 @@ const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
  * pushes its border outward with lanterns. It only issues ordinary commands, and runs inside the
  * simulation step, so every peer computes the same moves.
  */
-export class AiBuilder {
+export class AiBuilder implements Brain {
   /** Ticks between decisions. */
   static readonly PERIOD = 120;
+  readonly period = AiBuilder.PERIOD;
 
   constructor(
     readonly player: number,
@@ -101,7 +103,8 @@ export class AiBuilder {
     for (const k of [...this.strays.keys()]) if (!seen.has(k)) this.strays.delete(k);
   }
 
-  think(w: World): void {
+  think(ctx: AiContext): void {
+    const w = ctx.world;
     const eco = w.economy;
     const pl = this.player;
     if (!this.started) {

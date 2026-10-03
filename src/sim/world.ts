@@ -4,6 +4,7 @@ import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { Feature, HILLS, LandUse, oreMixOf, type MapOptions } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
 import { AiBuilder } from "./ai/builder";
+import { AiContext, type AiAction, type Brain, type BrainFactory } from "./ai/brain";
 import { answerOffer, rivalFor, type AiLevel, type Personality } from "./ai/personality";
 import { ScenarioRun } from "./scenario/scenario";
 import { scenarioById } from "./scenario/campaign";
@@ -73,6 +74,8 @@ export interface WorldOptions {
   mods?: ModPack[];
   /** Map settings: the ore mix and how far the hills lie from each start. */
   map?: MapOptions;
+  /** Makes the brain of each AI seat (default: the scripted AI). */
+  brain?: BrainFactory;
   /** Victory rule (see MatchRules); peace and stakes have their own options above. */
   victory?: "both" | "conquest" | "wells";
 }
@@ -105,9 +108,14 @@ export class World implements WorldHost {
   /** Players 0..humans-1 are people; the rest are AI rivals. */
   readonly humans: number;
   readonly rivals: number;
-  readonly ai: AiBuilder[] = [];
+  readonly ai: Brain[] = [];
   /** Stewards keeping absent players' settlements, by player. */
-  readonly stewards = new Map<number, AiBuilder>();
+  readonly stewards = new Map<number, Brain>();
+  /** With `recordAi` on, every order an AI seat gave (and whether it worked), for tournaments and tests. */
+  recordAi = false;
+  readonly aiLog: AiAction[] = [];
+  /** The seat whose brain is thinking right now, or -1. */
+  private acting = -1;
   /** The scenario being played, if any: its goals, triggers and story. */
   readonly scenario: ScenarioRun | null = null;
   /** A colony world: called when it blooms (the home world credits the race). */
@@ -159,7 +167,8 @@ export class World implements WorldHost {
     this.economy.diplomacy.sync();
     for (let p = this.humans; p < this.players; p++) {
       const r = rivalFor(seed, p);
-      const ai = new AiBuilder(p, this.rng.fork(`ai-${p}`), opts.personalities?.[p - this.humans] ?? r.personality, opts.aiLevel ?? "normal");
+      const seat = { player: p, rng: this.rng.fork(`ai-${p}`), personality: opts.personalities?.[p - this.humans] ?? r.personality, level: opts.aiLevel ?? "normal" };
+      const ai = (opts.brain ?? defaultBrain)(seat);
       this.ai.push(ai);
       this.economy.aiPlayers.add(p);
       this.economy.names[p] = r.name;
@@ -227,6 +236,12 @@ export class World implements WorldHost {
 
   /** Apply a player command. In multiplayer these are scheduled on a tick by the lockstep layer. */
   command(cmd: WorldCommand): CommandResult {
+    const r = this.apply(cmd);
+    if (this.acting >= 0 && this.recordAi && this.aiLog.length < 100000) this.aiLog.push({ tick: this.tick, player: this.acting, cmd, ok: r.ok });
+    return r;
+  }
+
+  private apply(cmd: WorldCommand): CommandResult {
     if (cmd.t === "steward") return this.steward(cmd.of, cmd.on);
     if (VOYAGE_COMMANDS.has(cmd.t)) return this.voyages ? this.voyages.apply(cmd as VoyageCommand) : { ok: false, reason: "No voyages from here." };
     const c = cmd as Command & { planet?: number };
@@ -252,7 +267,7 @@ export class World implements WorldHost {
     if (p < 0 || p >= this.humans || eco.keeps[p] === undefined) return { ok: false, reason: "No such player." };
     if (on === this.stewards.has(p)) return { ok: true };
     if (on) {
-      this.stewards.set(p, new AiBuilder(p, new Rng(`${this.seed}:steward-${p}:${this.tick}`), "builder", "normal"));
+      this.stewards.set(p, defaultBrain({ player: p, rng: new Rng(`${this.seed}:steward-${p}:${this.tick}`), personality: "builder", level: "normal" }));
       eco.aiPlayers.add(p);
     } else {
       this.stewards.delete(p);
@@ -300,13 +315,24 @@ export class World implements WorldHost {
     return w.economy;
   }
 
+  /** Ask a brain to act, when its turn comes. */
+  private think(ai: Brain): void {
+    if ((this.tick + ai.player * 37) % ai.period !== 0 || this.economy.defeated[ai.player] || this.economy.winner >= 0) return;
+    this.acting = ai.player;
+    try {
+      ai.think(new AiContext(this, ai.player));
+    } finally {
+      this.acting = -1;
+    }
+  }
+
   step(): void {
     this.tick++;
     if (this.tick % CLIMATE_STEP === 0) this.climate.step(this.tick);
     this.economy.step(this.tick);
-    for (const ai of this.ai) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
+    for (const ai of this.ai) this.think(ai);
     this.scenario?.step(this.tick);
-    for (const ai of this.stewards.values()) if ((this.tick + ai.player * 37) % AiBuilder.PERIOD === 0 && !this.economy.defeated[ai.player] && this.economy.winner < 0) ai.think(this);
+    for (const ai of this.stewards.values()) this.think(ai);
     // A rooted colony's planet changes by decades a day (see Atmosphere).
     if (this.economy.colony && this.tick % this.economy.dayTicks === 7 && this.economy.rooted.some(Boolean)) {
       this.atmosphere.day(Math.floor(this.tick / this.economy.dayTicks));
@@ -354,4 +380,9 @@ export class World implements WorldHost {
     }
     return h.value();
   }
+}
+
+/** The scripted AI. */
+function defaultBrain(seat: Parameters<BrainFactory>[0]): Brain {
+  return new AiBuilder(seat.player, seat.rng, seat.personality, seat.level);
 }

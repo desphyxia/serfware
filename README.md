@@ -92,6 +92,11 @@ beside an earlier one of the same kind. Signposts fade after a while.
 
 ## The AI rivals
 
+An AI seat is a *brain* (`src/sim/ai/brain.ts`): every `period` ticks it is given an `AiContext`
+(the world, its player, `act(command)`) and gives orders with the same commands a human uses. The scripted
+AI (`AiBuilder`) is the default; `WorldOptions.brain` swaps in another. With `world.recordAi` on, every order
+a seat gives is kept in `world.aiLog` (for tournaments, learning and tests).
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
