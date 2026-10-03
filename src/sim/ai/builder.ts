@@ -7,6 +7,7 @@ import type { World } from "../world";
 import type { TreatyKind } from "../econ/diplomacy";
 import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
 import type { AiContext, Brain } from "./brain";
+import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
@@ -29,9 +30,11 @@ export class AiBuilder implements Brain {
     readonly level: AiLevel = "normal",
   ) {
     this.sea = new SeaPlanner(player, personality);
+    this.econ = new EconPlanner(player, personality);
   }
 
   private readonly sea: SeaPlanner;
+  private readonly econ: EconPlanner;
   private started = false;
   private thoughts = 0;
   /** Wishes that found no site lately, and the thought they may be tried again. */
@@ -132,6 +135,7 @@ export class AiBuilder implements Brain {
     if (this.thoughts % 6 === 3) this.talk(w);
     if (this.thoughts % 4 === 1) this.tools(w);
     if (this.thoughts % 10 === 5) this.tidy(w);
+    if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
     // Wardens look for a fight often, Traders seldom, Builders hardly ever.
     const temper = this.personality === "warden" ? 3 : this.personality === "trader" ? 8 : 12;
     if (this.thoughts % temper === 0 && this.attack(w)) return;
@@ -189,6 +193,8 @@ export class AiBuilder implements Brain {
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
     // A toolsmith once the first tools are out, so woodcutters and the rest can keep taking up work.
     want(count("toolsmith") < 1 && count("sawmill") > 0 && count("quarry") > 0 && mine.length >= 8, near("toolsmith"));
+    // Land use: geologists and mines, hedgerows, causeways, smelting and arms.
+    want(built >= 10 && this.thoughts % 2 === 1, { key: "econ", fn: () => this.econ.step(ctx, this.thoughts) });
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));
     want(count("butcher") < 1 && count("pasture") > 0, near("butcher"));
     // Temperament: Builders make their town pleasant; Wardens arm.

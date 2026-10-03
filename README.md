@@ -101,6 +101,12 @@ At sea (`src/sim/ai/sea.ts`) a rival whose land is full builds a boatyard, chart
 at home, and founds footholds on free shores (lighting them with a lantern, upgrading a quay to a harbour
 when the island thrives). It only does so once planks are plentiful, so it never starves its land economy.
 
+On land (`src/sim/ai/economy.ts`) it sends geologists once a toolsmith has made a hammer, opens mines on the signs they
+leave and smelts the ore, plants hedgerows round farms, raises causeways under roads on tidal flats, builds a forward
+storehouse that collects planks and stone (the oldest one inland empties toward it), puts food first in transport when a
+mine stands hungry, holds planks back from the toolsmith while sites wait, and rotates its wardens when a border lantern is
+threatened. Wardens add a bowyer and a stable.
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds

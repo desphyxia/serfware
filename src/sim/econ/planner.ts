@@ -42,6 +42,18 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
   const grid = land.planet.grid;
   const c = grid.center;
   let tries = 0;
+  // The land the Hearthship stands on (found when first needed): a flag there that no road joins to it is a dead end.
+  let landmass: Set<number> | undefined;
+  const home = () => {
+    if (landmass) return landmass;
+    const start = eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0;
+    landmass = new Set([start]);
+    const stack = [start];
+    while (stack.length) {
+      for (const n of grid.neighborsOf(stack.pop() as number)) if (!landmass.has(n) && land.isLand(n)) { landmass.add(n); stack.push(n); }
+    }
+    return landmass;
+  };
   for (const t of tiles) {
     const flagTile = land.bestFlagTile(t, player);
     if (flagTile < 0 || !land.canBuildDef(t, flagTile, def, player)) continue;
@@ -49,8 +61,11 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
     if (existing && existing.building >= 0) continue;
     if (++tries > maxTries) break;
     // Connect to one of the nearest flags (by straight-line distance) that a road can reach.
-    const near = eco.flags
-      .filter((f) => f.alive && f.owner === player && f.tile !== flagTile)
+    // Only flags that join the Hearthship's network: a road to a cut-off island leaves the site unreachable.
+    const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
+    const mine = eco.flags.filter((f) => f.alive && f.owner === player && f.tile !== flagTile);
+    const joined = keepFlag < 0 ? mine : mine.filter((f) => eco.route(keepFlag, f.id).dist < Infinity || !home().has(f.tile));
+    const near = (joined.length ? joined : mine)
       .map((f) => {
         const dx = (c[f.tile * 3] as number) - (c[flagTile * 3] as number);
         const dy = (c[f.tile * 3 + 1] as number) - (c[flagTile * 3 + 1] as number);
