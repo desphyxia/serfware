@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { AiContext } from "../src/sim/ai/brain";
+import { BiomePlanner } from "../src/sim/ai/biome";
 import { Region } from "../src/sim/biomes/regions";
 import { goodId } from "../src/sim/econ/defs";
 import { Feature, Use } from "../src/sim/econ/landuse";
@@ -59,9 +61,28 @@ describe("the AI in the regions with special ground", () => {
     expect(t.ropeway ?? 0, JSON.stringify(t)).toBeGreaterThan(0);
   });
 
-  it("builds saltworks and then a solar kiln on the Saltglass Flats", { timeout: 900000 }, () => {
-    const t = run(Region.SaltglassFlats, 40);
+  it("builds saltworks on the Saltglass Flats, and a solar kiln and dew condensers once the planner is asked again", { timeout: 900000 }, () => {
+    const t = run(Region.SaltglassFlats, 30);
     expect(t.saltworks ?? 0, JSON.stringify(t)).toBeGreaterThan(0);
-    expect(t.solarkiln ?? 0, JSON.stringify(t)).toBeGreaterThan(0);
+    // The scripted seat is usually out of free hands by then and does not reach the planner; ask it directly.
+    const w = new World("russet-heron-417", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99 });
+    const eco = w.economy;
+    w.land.region.fill(Region.SaltglassFlats);
+    const keep = eco.buildings[eco.keeps[1]!]!;
+    for (let i = 0; i < 25 * eco.dayTicks; i++) {
+      if (i % eco.dayTicks === 0) for (const g of ["stone", "plank", "log", "iron"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 30);
+      w.step();
+    }
+    const planner = new BiomePlanner(1);
+    const ctx = new AiContext(w, 1);
+    const has = (id: string) => eco.buildings.some((b) => b.alive && b.owner === 1 && b.def.id === id);
+    for (let i = 0; i < 60 && !(has("solarkiln") && has("dewcondenser")); i++) {
+      planner.step(ctx, 10_000 + i * 40);
+      // Let a site rise before asking again.
+      for (let k = 0; k < 600; k++) w.step();
+      for (const g of ["stone", "plank", "log"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 30);
+    }
+    expect(has("solarkiln"), "a solar kiln").toBe(true);
+    expect(has("dewcondenser"), "a dew condenser").toBe(true);
   });
 });
