@@ -168,7 +168,7 @@ export class EconPlanner {
       const done = ctx.act({ t: "geologist", flagTile: (flags[this.thoughts % Math.max(1, flags.length)] ?? { tile: -1 }).tile });
       // Signs that show nothing usable are not worth endless surveys: fewer after the first dozen.
       if (done.ok) this.surveys++;
-      this.wait("geologist", done.ok ? (this.surveys > 12 ? 90 : 30) : 12);
+      this.wait("geologist", done.ok ? (this.surveys > 30 ? 90 : 30) : 12);
       if (done.ok) return true;
     }
 
@@ -185,7 +185,7 @@ export class EconPlanner {
     // Mines on what they found, fed by the farms; then smelting, gold, and the Warden's arms.
     const fed = count("farm") > 0 && (count("bakery") > 0 || count("fisher") > 0 || count("butcher") > 0) && built.length >= 12;
     // Sites wait for stone, so none is begun while the stores are bare.
-    if (fed && stone >= 4 && unbuilt === 0 && this.can("mine")) {
+    if (fed && stone >= 4 && unbuilt <= 1 && this.can("mine")) {
       const coal = sign(2);
       const iron = sign(3);
       const gold = sign(4);
