@@ -97,6 +97,10 @@ An AI seat is a *brain* (`src/sim/ai/brain.ts`): every `period` ticks it is give
 AI (`AiBuilder`) is the default; `WorldOptions.brain` swaps in another. With `world.recordAi` on, every order
 a seat gives is kept in `world.aiLog` (for tournaments, learning and tests).
 
+At sea (`src/sim/ai/sea.ts`) a rival whose land is full builds a boatyard, charts the water, builds a quay
+at home, and founds footholds on free shores (lighting them with a lantern, upgrading a quay to a harbour
+when the island thrives). It only does so once planks are plentiful, so it never starves its land economy.
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
