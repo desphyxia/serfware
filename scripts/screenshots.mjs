@@ -33,6 +33,7 @@ const all = [
   { name: "winter", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4000; i++) g.world.step(); g.skipDays(17); g.setFog(false); g.focusSnow(34); g.setHour(12); g.setView(34, 0.6, 0.05); } },
   { name: "autumn", wait: 3500, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 4000; i++) g.world.step(); g.skipDays(11); g.setHour(15.5); g.setView(30, 1.2, 0.05); } },
   { name: "menu", wait: 1500, keys: ["m"], after: () => { const t = document.querySelectorAll("#menu .tab"); t[1]?.click(); } },
+  { name: "tile-edges", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setFog(false); g.clearWeather(); g.setHour(12); g.focusPlayer(0, 12); g.setView(12, 0.5, 0.3); g.setTileEdges(true); } },
   { name: "buildmode", wait: 3000, setup: () => { const g = window.__seedfall.game; window.__seedfall.demo(); for (let i = 0; i < 1500; i++) g.world.step(); g.setHour(11); g.setView(26, 0.3); g.view.setGrid(true); g.tools.set("woodcutter"); } },
 ];
 // The art shot list (docs/ART_DIRECTION.md § How we check it): rendered after every art batch.
