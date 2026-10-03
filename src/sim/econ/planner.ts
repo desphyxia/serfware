@@ -31,6 +31,22 @@ export function placeConnected(
   return placeOn(w, type, ranked.map(([, t]) => t), player, opts.splitRoads ?? false) >= 0;
 }
 
+/** The tiles joined to `start` by land and bridges. */
+export function landmassOf(w: World, start: number): Set<number> {
+  const land = w.land;
+  const grid = land.planet.grid;
+  const seen = new Set<number>([start]);
+  const stack = [start];
+  while (stack.length) {
+    for (const n of grid.neighborsOf(stack.pop() as number)) {
+      if (seen.has(n) || !(land.isLand(n) || land.bridge[n] === 1)) continue;
+      seen.add(n);
+      stack.push(n);
+    }
+  }
+  return seen;
+}
+
 /**
  * Try candidate tiles in order: build `type` on the first that fits and connect its flag to the
  * nearest reachable flag of the player. Returns the tile used, or -1.
@@ -44,16 +60,7 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
   let tries = 0;
   // The land the Hearthship stands on (found when first needed): a flag there that no road joins to it is a dead end.
   let landmass: Set<number> | undefined;
-  const home = () => {
-    if (landmass) return landmass;
-    const start = eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0;
-    landmass = new Set([start]);
-    const stack = [start];
-    while (stack.length) {
-      for (const n of grid.neighborsOf(stack.pop() as number)) if (!landmass.has(n) && land.isLand(n)) { landmass.add(n); stack.push(n); }
-    }
-    return landmass;
-  };
+  const home = () => (landmass ??= landmassOf(w, eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0));
   for (const t of tiles) {
     const flagTile = land.bestFlagTile(t, player);
     if (flagTile < 0 || !land.canBuildDef(t, flagTile, def, player)) continue;

@@ -107,6 +107,11 @@ storehouse that collects planks and stone (the oldest one inland empties toward 
 mine stands hungry, holds planks back from the toolsmith while sites wait, and rotates its wardens when a border lantern is
 threatened. Wardens add a bowyer and a stable.
 
+For war and public works (`src/sim/ai/war.ts`, `works.ts`) it palisades front-line lanterns, pitches a field camp where an
+attack will start (Wardens), sends mounted outriders to cut bare enemy flags, and lets a Warden break a truce when the odds
+are overwhelming. It bridges pockets of its own land cut off by shallow water, builds a maypole, fountains, statues
+and digsites at ruins, and sends planks or stone to a poorer ally.
+
 Lessons from Settlers 2's AI: a rival attacks an undefended target first, then the weakest
 garrison, then the surest odds; Warden rivals hold the border in full and the interior thin;
 every rival sets the toolsmith's priorities from the tools its buildings are waiting for, builds
