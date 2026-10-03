@@ -47,7 +47,8 @@ export class WorksPlanner {
     if (plank >= 6 && this.can("bridge") && this.bridge(ctx)) return true;
 
     // Pleasures and digs, one site at a time, once the town has grown.
-    if (unbuilt > 0 || built < 18) return false;
+    // Only once the basics stand, a toolsmith among them.
+    if (unbuilt > 0 || built < 18 || count("toolsmith") < 1) return false;
     const manned = (type: string) => {
       const tool = BUILDINGS[buildingType(type)]?.tool;
       return !tool || (stock[goodId(tool)] ?? 0) >= 1;

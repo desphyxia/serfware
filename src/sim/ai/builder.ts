@@ -181,8 +181,6 @@ export class AiBuilder implements Brain {
     want(count("forester") < 1, near("forester", Feature.Tree));
     want(lanterns < 1 + Math.floor(mine.length / 5), grow());
     want(count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
-    // A toolsmith once the first tools are out, so woodcutters and the rest can keep taking up work.
-    want(count("toolsmith") < 1 && count("sawmill") > 0 && count("quarry") > 0 && mine.length >= 8, near("toolsmith"));
     // Beyond the shore: a boatyard to chart the sea, quays, and footholds on free land across the water.
     const built = mine.filter((b) => b.built).length;
     const landLocked = (this.resting.get("expand") ?? 0) > this.thoughts && built >= 12;
@@ -201,6 +199,8 @@ export class AiBuilder implements Brain {
     want(count("apiary") < 1 && count("orchard") > 0, near("apiary"));
     // A well (or more, as the settlement grows) against fire.
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
+    // A toolsmith once the first tools are out, so woodcutters and the rest can keep taking up work.
+    want(count("toolsmith") < 1 && count("sawmill") > 0 && count("quarry") > 0 && mine.length >= 8, near("toolsmith"));
     // Land use: geologists and mines, hedgerows, causeways, smelting and arms.
     want(built >= 10 && this.thoughts % 2 === 1, { key: "econ", fn: () => this.econ.step(ctx, this.thoughts) });
     // Public works: bridges, pleasures, digs, gifts to allies.
