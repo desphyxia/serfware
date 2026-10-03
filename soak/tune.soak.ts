@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { describe, it } from "vitest";
 import { baselineTuning, type Tuning } from "../src/sim/ai/personality";
 import { LEARNED_TUNING } from "../src/sim/ai/tuned";
@@ -98,6 +98,7 @@ describe("tune", () => {
       if (best > 0) parent = children[best - 1] as Tuning;
       sigma *= 0.88;
       log.push({ gen: g, parentFitness: fits[0], bestFitness: fits[best], moved: best > 0, tuning: parent });
+      appendFileSync("soak-tune.log", `gen ${g}: parent ${(fits[0] as number).toFixed(1)}, best ${(fits[best] as number).toFixed(1)}${best > 0 ? " (moved)" : ""}\n`);
       console.log(`gen ${g}: parent ${(fits[0] as number).toFixed(1)}, best ${(fits[best] as number).toFixed(1)}${best > 0 ? " (moved)" : ""}`);
     }
     const found = Object.fromEntries(KEYS.map((k) => [k, Math.round(parent[k] * 100) / 100])) as unknown as Tuning;
@@ -110,6 +111,7 @@ describe("tune", () => {
     const learnedFit = mean(mine as number[]);
     const handFit = mean(theirs as number[]);
     const wins = gain > 0 && gain > se;
+    appendFileSync("soak-tune.log", `unseen check (${CHECK} paired matches): searched ${learnedFit.toFixed(1)} vs hand-set ${handFit.toFixed(1)}; gain ${gain.toFixed(1)} +/- ${se.toFixed(1)}; ${wins ? "kept" : "NOT kept"}\n`);
     console.log(`unseen check (${CHECK} paired matches): searched ${learnedFit.toFixed(1)} vs hand-set ${handFit.toFixed(1)}; gain ${gain.toFixed(1)} +/- ${se.toFixed(1)} (1 s.e.); ${wins ? "kept" : "NOT kept"}`);
     if (wins) writeFileSync("src/sim/data/learned-ai.json", JSON.stringify({ warden: found }, null, 1) + "\n");
     writeFileSync("soak-tune.json", JSON.stringify({ gens: GENS, children: CHILDREN, matches: MATCHES, days: DAYS, log, found, check: { matches: CHECK, searched: learnedFit, handSet: handFit, gain, stderr: se, kept: wins } }, null, 1));
