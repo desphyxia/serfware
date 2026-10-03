@@ -33,6 +33,14 @@ type F = THREE.Node<"float">;
 type V3 = THREE.Node<"vec3">;
 
 /** Uniforms shared by every water surface, updated by the world view each frame. */
+// One framebuffer-copy node of each kind for the whole page, sampled where needed. A node made for each
+// use keeps framebuffer textures of its own that three.js never frees; samples of a shared node all
+// use its one cached texture.
+let depthNode: ReturnType<typeof viewportDepthTexture> | null = null;
+let colorNode: ReturnType<typeof viewportSharedTexture> | null = null;
+const depthBase = () => (depthNode ??= viewportDepthTexture());
+const colorBase = () => (colorNode ??= viewportSharedTexture());
+
 export interface WaterUniforms {
   sunDir: THREE.UniformNode<"vec3", THREE.Vector3>;
   sky: THREE.UniformNode<"color", THREE.Color>;
@@ -128,16 +136,16 @@ export function waterNodes(u: WaterUniforms, o: WaterOptions = {}): { color: V3;
 
   // Water thickness along the view ray, from the depth of what is behind the surface.
   const range = cameraFar.sub(cameraNear);
-  const behind = linearDepth(viewportDepthTexture(screenUV));
+  const behind = linearDepth(depthBase().sample(screenUV));
   const thick = max(behind.sub(linearDepth()).mul(range), 0);
   // Refraction: look up the bed a little off to the side, following the ripples; fall back to
   // straight through if the offset lands on something in front of the water.
   const offset = grad.xy.mul(0.012).mul(smoothstep(0, 1.2, thick));
   const ruv = viewportSafeUV(screenUV.add(offset));
-  const behindR = linearDepth(viewportDepthTexture(ruv));
+  const behindR = linearDepth(depthBase().sample(ruv));
   const useR = behindR.greaterThan(linearDepth());
   const uvB = select(useR, ruv, screenUV);
-  const bed = viewportSharedTexture(uvB).rgb;
+  const bed = colorBase().sample(uvB).rgb;
   const thickB = select(useR, max(behindR.sub(linearDepth()).mul(range), 0), thick);
 
   // Absorption: red goes first, then green; deep water turns to the water's own colour.

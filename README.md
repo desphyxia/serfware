@@ -298,6 +298,30 @@ was written by the assistant, not a native speaker, and should be reviewed. `npm
 the texts and each language's coverage (`-- --write` refreshes `src/locales/template.json`); a test
 fails if a translation is missing, stale or loses a `{value}`.
 
+## Release-candidate checks
+
+- **Network faults** (`tests/netfault.test.ts`): three peers on a network that delays, reorders and repeats
+  messages stay in sync; with 12 % of messages lost the game used to stop for good at the first lost
+  turn packet (6 ticks in). A peer stuck on a turn for half a second now asks the others for it and they
+  send what they hold. Lost *resume* messages after a pause are not covered.
+- **Leaks** (`npm run swap-leak`, in `npm run check`; `npm run leak-soak` for a long run, also a manual
+  job in the Soak workflow): starting a world used to leave 12 textures on the GPU, one set per world:
+  the three tile-data textures were never disposed, and every water node kept two full-screen
+  textures of its own. Now 3 are left per world (full-screen depth copies tied to three.js's own render
+  objects; I could not free them from outside it). Old worlds, views and sessions are garbage-collected
+  (checked with weak references). A 3-minute run with five world swaps: heap +3.8 MB a minute (r² 0.5),
+  textures +4.3 a minute, geometries and objects flat.
+- **Budgets** (`tests/budget.test.ts`, `npm run budget`, both in CI): a tiny world with three AIs costs
+  0.34 ms a tick (limit 1.5 ms); a huge world builds in 2.3 s (limit 10 s); the busy close-up draws at
+  most 450 meshes and 900k (medium) or 650k (handheld) triangles (it draws 200 to 330 meshes and
+  350k to 720k triangles, varying run to run, so this catches only a large regression); the single-file build stays under
+  2,200 KB (1,650 KB now).
+- **Balance** (`npm run soak -- war`, `-- ai`): measured, not changed. In four-warden wars on six tiny
+  seeds, 1 to 5 lanterns changed hands in 40 days, one to three settlements fell, and only two of six
+  wars ended with a winner (day 5 and day 15); the other four stalled with two or three settlements
+  standing. The AI soak shows the growth numbers quoted in the issues. Whether stalled wars are a
+  problem is a design call, so it is filed rather than tuned.
+
 ## Keys
 
 | Key | Action |

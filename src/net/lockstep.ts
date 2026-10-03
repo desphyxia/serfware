@@ -7,6 +7,8 @@ import type { NetMessage, Transport } from "./transport";
 
 /** Ticks per lockstep turn (200 ms). */
 export const TURN_TICKS = 2;
+/** A peer stuck this long on a turn asks the others to send what it is missing. */
+export const NEED_AFTER_MS = 500;
 /** Commands are scheduled this many turns ahead, hiding network latency. */
 export const INPUT_DELAY = 3;
 
@@ -48,6 +50,9 @@ export class LockstepSession extends Session {
   /** First turn of this session; earlier turns need no packets. */
   private readonly startTurn: number;
   private waitingSince = 0;
+  /** Game milliseconds spent waiting on the current turn, and since we last asked for what is missing. */
+  private waitedMs = 0;
+  private askedAt = 0;
   private desynced = false;
   private hostSpeed = 1;
   private resumeAt: { tick: number; value: number } | null = null;
@@ -151,6 +156,12 @@ export class LockstepSession extends Session {
     if (msg.type === "resume") {
       this.resumeAt = { tick: msg.tick as number, value: msg.value as number };
       if (this.isHost && from !== "local") this.transport.broadcast(msg, from);
+      return;
+    }
+    if (msg.type === "need") {
+      // Someone is stuck on a turn: send them the packets we hold for it (a packet can be lost on the way).
+      const m = this.packets.get(msg.turn as number);
+      if (m && from !== "local") for (const pkt of m.values()) this.transport.send(from, pkt);
       return;
     }
     if (msg.type !== "turn") return;
@@ -258,9 +269,17 @@ export class LockstepSession extends Session {
         if (!this.ready(k)) {
           if (!this.waitingSince) this.waitingSince = now;
           this.acc = Math.min(this.acc, TICK_MS * TURN_TICKS * 4);
+          // Stuck for a while: a packet may have been lost. Ask the others for this turn, and again every so often.
+          this.waitedMs += ms;
+          if (this.waitedMs - this.askedAt >= NEED_AFTER_MS) {
+            this.askedAt = this.waitedMs;
+            this.transport.broadcast({ type: "need", turn: k });
+          }
           return steps;
         }
         this.waitingSince = 0;
+        this.waitedMs = 0;
+        this.askedAt = 0;
         this.applyTurn(k);
       }
       this.stepWorld();

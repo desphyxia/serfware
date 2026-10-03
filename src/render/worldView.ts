@@ -437,6 +437,7 @@ export class WorldView {
     this.ambient.dispose();
     this.econ.dispose();
     this.overlays.dispose();
+    this.tileData.dispose();
     this.group.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose();

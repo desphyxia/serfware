@@ -36,6 +36,13 @@ export class TileData {
     this.c = mk(this.dc);
   }
 
+  /** Free the three textures on the GPU. */
+  dispose(): void {
+    this.a.dispose();
+    this.b.dispose();
+    this.c.dispose();
+  }
+
   set(t: number, channel: "wear" | "fog" | "snow" | "autumn" | "mud" | "soil" | "shore" | "scorch" | "sand" | "glow" | "life" | "native", v: number): void {
     const i = t * 4;
     switch (channel) {
