@@ -28,6 +28,7 @@ export class EconPlanner {
   /** The thought at which each kind of order may be given again. */
   private readonly rest = new Map<string, number>();
   private thoughts = 0;
+  private surveys = 0;
 
   private can(key: string): boolean {
     return (this.rest.get(key) ?? 0) <= this.thoughts;
@@ -165,7 +166,9 @@ export class EconPlanner {
     if (count("toolsmith") > 0 && built.length >= 10 && !usable && this.can("geologist")) {
       const flags = eco.flags.filter((f) => f.alive && f.owner === pl && f.building < 0 && eco.check({ t: "geologist", flagTile: f.tile, player: pl }) === null);
       const done = ctx.act({ t: "geologist", flagTile: (flags[this.thoughts % Math.max(1, flags.length)] ?? { tile: -1 }).tile });
-      this.wait("geologist", done.ok ? 30 : 12);
+      // Signs that show nothing usable are not worth endless surveys: fewer after the first dozen.
+      if (done.ok) this.surveys++;
+      this.wait("geologist", done.ok ? (this.surveys > 12 ? 90 : 30) : 12);
       if (done.ok) return true;
     }
 

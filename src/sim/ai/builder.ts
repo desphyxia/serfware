@@ -9,6 +9,8 @@ import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
 import type { AiContext, Brain } from "./brain";
 import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
+import { TerraPlanner } from "./terra";
+import { VoyagePlanner } from "./voyage";
 import { WarPlanner } from "./war";
 import { WorksPlanner } from "./works";
 
@@ -35,12 +37,16 @@ export class AiBuilder implements Brain {
     this.econ = new EconPlanner(player, personality);
     this.war = new WarPlanner(player, personality, level);
     this.works = new WorksPlanner(player, personality);
+    this.terra = new TerraPlanner(player);
+    this.voyage = new VoyagePlanner(player);
   }
 
   private readonly sea: SeaPlanner;
   private readonly econ: EconPlanner;
   private readonly war: WarPlanner;
   private readonly works: WorksPlanner;
+  private readonly terra: TerraPlanner;
+  private readonly voyage: VoyagePlanner;
   private started = false;
   private thoughts = 0;
   /** Wishes that found no site lately, and the thought they may be tried again. */
@@ -147,6 +153,8 @@ export class AiBuilder implements Brain {
     if (this.thoughts % temper === 0 && this.attack(w)) return;
     // Palisades, field camps, outriders and breaking truces.
     if (this.thoughts % 5 === 3 && this.war.step(ctx, this.thoughts)) return;
+    // Voyages (for a seat the rules let fly) are orders, not sites, so they do not wait for the builders.
+    if (this.thoughts % 5 === 4 && VoyagePlanner.allowed(ctx) && mine.filter((b) => b.built).length >= 25 && this.voyage.step(ctx, this.thoughts)) return;
     if (sites >= lv.sites || (sites >= 1 && plank < 2)) return;
     // Keep enough hands free: when nobody is idle, build homes before anything else.
     const idle = eco.population(pl).idle;
@@ -205,6 +213,8 @@ export class AiBuilder implements Brain {
     want(built >= 10 && this.thoughts % 2 === 1, { key: "econ", fn: () => this.econ.step(ctx, this.thoughts) });
     // Public works: bridges, pleasures, digs, gifts to allies.
     want(built >= 14 && this.thoughts % 3 === 1, { key: "works", fn: () => this.works.step(ctx, this.thoughts) });
+    // Terraforming where the world is not yet alive.
+    want(built >= 12 && this.thoughts % 4 === 2, { key: "terra", fn: () => this.terra.step(ctx, this.thoughts) });
     want(count("pasture") < 1 && count("farm") > 1, near("pasture"));
     want(count("butcher") < 1 && count("pasture") > 0, near("butcher"));
     // Temperament: Builders make their town pleasant; Wardens arm.
