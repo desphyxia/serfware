@@ -1,6 +1,6 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
-import { EXPLORE_REACH, FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Economy } from "../sim/econ/economy";
+import { CAMP_REACH, EXPLORE_REACH, PALISADE_GROUND, FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Command, type Economy } from "../sim/econ/economy";
 import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
@@ -49,9 +49,14 @@ export class InfoPanel extends Panel {
 
   constructor(
     private readonly eco: () => Economy,
-    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void; explore: (building: number, reach: number) => void; ferry: (from: number, to: number, remove: boolean) => void; upgrade: (building: number) => void },
+    private readonly actions: { demolishTile: (tile: number) => void; geologist: (flagTile: number) => void; follow: (person: number) => void; following: () => number; player: () => number; attack: (target: number, count: number, order: "strongest" | "weakest") => void; storeMode: (building: number, mode: number) => void; storeGood: (building: number, good: string, mode: number) => void; explore: (building: number, reach: number) => void; ferry: (from: number, to: number, remove: boolean) => void; upgrade: (building: number) => void; command: (cmd: Command) => void },
   ) {
     super("info", "Details", { width: 300, className: "info" });
+  }
+
+  /** What is selected now. */
+  get selection(): Selection {
+    return this.sel;
   }
 
   select(sel: Selection): void {
@@ -184,6 +189,7 @@ export class InfoPanel extends Panel {
           const defs = eco.defendersOf(b);
           if (defs.length) body.push(h("p", { class: "hint" }, `${defs.length} warden${defs.length === 1 ? "" : "s"} on watch inside.`));
           else if (isKeep) body.push(h("p", { class: "hint" }, "No wardens: its people will take up arms."));
+          if (b.palisade) body.push(h("p", { class: "hint" }, "Behind a palisade: its defenders fight stronger."));
           body.push(...this.attackUi(b.id));
         }
         this.body.replaceChildren(...body);
@@ -214,6 +220,22 @@ export class InfoPanel extends Panel {
               ),
             );
           if (b.siege.length) body.push(h("p", { class: "status warn" }, `Under attack: ${b.siege.length} at the door.`));
+          if (!eco.keeps.includes(b.id)) {
+            // Engineers: a palisade for the defence, a field camp for one longer attack.
+            body.push(h("h3", { class: "sub" }, "Engineers"));
+            body.push(
+              h(
+                "div",
+                { class: "btn-row" },
+                b.palisade
+                  ? h("span", { class: "hint" }, `Behind a palisade: defenders fight ${Math.round((PALISADE_GROUND - 1) * 100)}% stronger.`)
+                  : h("button", { class: "btn small", title: "Defenders of this lantern fight 30% stronger.", onclick: () => this.actions.command({ t: "palisade", building: b.id }) }, "Build a palisade (4 planks, 2 logs)"),
+                b.camp > 0
+                  ? h("span", { class: "hint" }, `A field camp is pitched: the next attack from here reaches ${CAMP_REACH} steps further.`)
+                  : h("button", { class: "btn small", title: `One attack from this lantern may come from ${CAMP_REACH} steps further.`, onclick: () => this.actions.command({ t: "camp", building: b.id }) }, "Pitch a field camp (2 planks, 2 logs)"),
+              ),
+            );
+          }
         }
       }
       if (b.def.storage) {
@@ -325,8 +347,12 @@ export class InfoPanel extends Panel {
       }
       if (counts.size) body.push(h("div", { class: "chips" }, ...[...counts].map(([t, n]) => goodChip(t, n))));
       if (f.goods.length >= 6) body.push(h("p", { class: "hint warn" }, "This flag is crowded. Add a parallel road or split long roads with flags."));
-      body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", onclick: () => this.actions.geologist(f.tile) }, "Send geologist")));
-      if (!eco.keeps.includes(f.building)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(f.tile) }, "Remove flag")));
+      if (f.owner !== this.actions.player()) {
+        const watched = eco.watched(f);
+        body.push(h("p", { class: "status warn" }, `Belongs to ${eco.playerName(f.owner)}.`));
+        if (f.building < 0) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", disabled: watched, title: watched ? "Watched from a lantern: outriders keep clear." : "A mounted warden rides out and cuts it down, and the roads that meet there.", onclick: () => this.actions.command({ t: "raid", flag: f.id }) }, "Send an outrider")));
+      } else body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small", onclick: () => this.actions.geologist(f.tile) }, "Send geologist")));
+      if (f.owner === this.actions.player() && !eco.keeps.includes(f.building)) body.push(h("div", { class: "btn-row" }, h("button", { class: "btn small danger", onclick: () => this.actions.demolishTile(f.tile) }, "Remove flag")));
     } else {
       const r = eco.roads[this.sel.id];
       if (!r || !r.alive) return this.select(null);

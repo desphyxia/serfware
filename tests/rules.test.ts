@@ -1,15 +1,37 @@
 import { describe, expect, it } from "vitest";
+import { creativeOf, worldOptionsFor, type SessionPlayer } from "../src/net/session";
 import { World } from "../src/sim/world";
-import { invariants } from "../soak/invariants";
 
-/** A short taste of the soak run (npm run soak): an all-AI game, checked every few hours. */
-describe("rules that always hold", () => {
-  it("an all-AI game of two against two keeps every rule (no goods left on flags after a road changes under a carrier)", () => {
-    const w = new World("amber-fern-212", { size: "small", rivals: 3, teams: [0, 0, 1, 1], personalities: ["trader", "warden", "warden"], peaceDays: 2 });
-    w.command({ t: "steward", of: 0, on: true });
-    for (let i = 0; i < 14000; i++) {
-      w.step();
-      if (i % 200 === 0) expect(invariants(w), `tick ${w.tick}`).toEqual([]);
-    }
-  }, 60000);
+const players: SessionPlayer[] = [
+  { id: 0, name: "Ada" },
+  { id: 1, name: "Bram" },
+];
+
+describe("match rules", () => {
+  it("the host's peace, stakes and victory rules reach the world and come back out for saves", () => {
+    const creative = { rules: { peaceDays: 5, stakes: "mortal" as const, victory: "conquest" as const } };
+    const w = new World("rules-1", { size: "tiny", ...worldOptionsFor("neighbours", players, undefined, creative) });
+    const eco = w.economy;
+    expect(eco.stakes).toBe("mortal");
+    expect(eco.victory).toBe("conquest");
+    expect(eco.peaceUntil - w.tick).toBe(Math.round(5 * eco.dayTicks));
+    expect(creativeOf(w)?.rules).toEqual(creative.rules);
+    // Without rules the usual ones apply and nothing is recorded.
+    const plain = new World("rules-1", { size: "tiny", ...worldOptionsFor("neighbours", players) });
+    expect(plain.economy.victory).toBe("both");
+    expect(creativeOf(plain)?.rules).toBeUndefined();
+  });
+
+  it("holding the Star Wells does not win a conquest-only match, and conquest does not win a wells-only one", () => {
+    const hold = (victory: "both" | "conquest" | "wells") => {
+      const w = new World("wells-win", { size: "tiny", victory });
+      const grid = w.planet.grid;
+      for (let t = 0; t < grid.count; t++) if (grid.degree(t) === 5) w.land.territory[t] = 1;
+      for (let i = 0; i < 40000 && w.economy.winner < 0; i++) w.step();
+      return w.economy.winner;
+    };
+    expect(hold("both")).toBe(0);
+    expect(hold("wells")).toBe(0);
+    expect(hold("conquest")).toBe(-1);
+  }, 120000);
 });

@@ -53,8 +53,17 @@ export const CAUSEWAY: BuildingDef = {
   cost: { stone: 1 },
 };
 
+/** Engineers' bridge: a walkable deck over shallow water inside the border. */
+export const BRIDGE: BuildingDef = {
+  id: "bridge",
+  name: "Bridge",
+  description: "Lay a bridge deck over shallow water inside your border (2 planks), starting from your land or another bridge. Settlers, roads and armies cross it. Armies of rivals can use it too.",
+  category: "materials",
+  cost: { plank: 2 },
+};
+
 /** Tools listed with a category's buildings that are not buildings themselves. */
-export const EXTRA_TOOLS: Partial<Record<Category, BuildingDef[]>> = { food: [HEDGE], materials: [CAUSEWAY] };
+export const EXTRA_TOOLS: Partial<Record<Category, BuildingDef[]>> = { food: [HEDGE], materials: [CAUSEWAY, BRIDGE] };
 
 export function costText(def: BuildingDef): string {
   return Object.entries(def.cost)

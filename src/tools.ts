@@ -91,10 +91,12 @@ export class Tools {
         }
       } else if (this.tool === "hedge") {
         for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && hedgeable(land, i)) tiles.push(i);
+      } else if (this.tool === "bridge") {
+        for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && land.bridgeBlocked(i, pl) === null) tiles.push(i);
       } else if (this.tool === "causeway") {
         for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && land.tidal[i] && !land.causeway[i] && land.use[i] !== Use.Building) tiles.push(i);
       }
-      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : this.tool === "causeway" ? "#c8c0b0" : "#b8f08c");
+      ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : this.tool === "causeway" ? "#c8c0b0" : this.tool === "bridge" ? "#d8b878" : "#b8f08c");
     }
     if (t < 0) return;
 
@@ -143,6 +145,9 @@ export class Tools {
         return;
       case "causeway":
         if (this.host.command({ t: "causeway", tile: t })) this.refresh();
+        return;
+      case "bridge":
+        if (this.host.command({ t: "bridge", tile: t })) this.refresh();
         return;
       case "road": {
         if (this.roadStart < 0) {

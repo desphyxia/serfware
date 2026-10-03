@@ -238,6 +238,27 @@ The game menu's Create tab holds the creative tools:
 Creations are kept in this browser and exported as `.json` files; the Steam build shares them on
 the Workshop (see docs/STEAM.md).
 
+## Engineers, outriders and match rules
+
+- **Palisade** (select one of your lit lanterns, Engineers; 4 planks, 2 logs): its defenders fight 30 %
+  stronger, in the duels and in the odds preview. It is lost with the lantern.
+- **Field camp** (2 planks, 2 logs): one attack from that lantern may come from 6 steps further than the
+  usual reach; the camp is used up by the attack that needed it.
+- **Bridge** (Materials, Bridge tool; 2 planks): a deck over shallow water inside your border, joined to
+  your land or another bridge. Settlers, roads and marching armies cross it, rivals' armies too.
+- **Outriders** (select an enemy flag, *Send an outrider*): a mounted warden (a warden with a mount) rides
+  from a lantern in reach to a bare enemy flag that no lit lantern watches (more than 3 steps from every
+  one), cuts it down and the roads that met there, and goes home. Flags at doors are not touched.
+- **Prisoners**: a beaten attacker may be taken prisoner and exchanged through Diplomacy; that landed in
+  batch 22.
+- **Reach overlay**: with a lit lantern selected, red rings mark the enemy lanterns and Hearthships it
+  could attack now. **Combat sounds** (clashing blades at a door, arrows in flight) play when the fighting
+  is near the view, and are captioned if captions are on.
+- **Match rules**: when hosting a game, choose the peace (none to 10 days), the stakes of a duel (wounded
+  or mortal) and how it is won (last settlement standing, hold the Star Wells, or either). They travel
+  with the start message, and are kept in saves and for rejoining players.
+- Not done: the AI does not use palisades, camps or outriders yet; a bridge cannot be taken down.
+
 ## Photo mode, time-lapse, postcards and letters
 
 **Photo mode (F2).** Frames the view and hides the interface. Blur (depth of field around the

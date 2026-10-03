@@ -20,6 +20,16 @@ import { Atmosphere, type AirStart } from "./climate/atmosphere";
 import type { Difficulty } from "./econ/adversity";
 import { VOYAGE_COMMANDS, Voyages, type VoyageCommand, type WorldHost } from "./system/voyages";
 
+/** Rules of a match the host sets for a competitive game (all optional: the usual ones apply). */
+export interface MatchRules {
+  /** Days before anyone may attack. */
+  peaceDays?: number;
+  /** What losing a duel costs. */
+  stakes?: "wounded" | "mortal";
+  /** How the game is won: by the last settlement standing, by holding the Star Wells, or either. */
+  victory?: "both" | "conquest" | "wells";
+}
+
 export interface WorldOptions {
   /** Force a planet size (tests and benchmarks); otherwise the seed decides. */
   size?: GridSize;
@@ -63,6 +73,8 @@ export interface WorldOptions {
   mods?: ModPack[];
   /** Map settings: the ore mix and how far the hills lie from each start. */
   map?: MapOptions;
+  /** Victory rule (see MatchRules); peace and stakes have their own options above. */
+  victory?: "both" | "conquest" | "wells";
 }
 
 /**
@@ -113,6 +125,8 @@ export class World implements WorldHost {
   /** The map settings in effect (undefined: all defaults). */
   readonly map: MapOptions | undefined;
   readonly mods: ModPack[];
+  /** The match rules chosen by the host, if any (kept so saves and rejoins can recreate them). */
+  rules: MatchRules | undefined;
   private readonly rng: Rng;
 
   constructor(seed: string, opts: WorldOptions = {}) {
@@ -175,6 +189,8 @@ export class World implements WorldHost {
     this.atmosphere.apply();
     this.economy.onTerraform = (b) => b.def.terra && this.atmosphere.work(b.def.terra, b.tile);
     this.economy.stakes = opts.stakes ?? "wounded";
+    this.economy.victory = opts.victory ?? "both";
+    this.rules = opts.stakes || opts.victory || opts.peaceDays !== undefined ? { ...(opts.peaceDays !== undefined && { peaceDays: opts.peaceDays }), ...(opts.stakes && { stakes: opts.stakes }), ...(opts.victory && { victory: opts.victory }) } : undefined;
     this.economy.adversity.difficulty = opts.difficulty ?? "honest";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
     const def = opts.scenario ? scenarioById(opts.scenario) : undefined;
