@@ -38,10 +38,34 @@ describe("the AI in space", () => {
     expect(t.hearthship ?? 0, `${JSON.stringify(t)} voyages ${JSON.stringify(w.voyages!.list.map((v) => [v.kind, v.state]))}`).toBeGreaterThan(0);
   });
 
-  it("a rival seat is not offered voyages (the rules give them to people's seats)", () => {
-    const w = new World("amber-fern-212", { size: "small", rivals: 1 });
+  it("a rival seat flies, lands, and its colony is managed by a brain of its own", { timeout: 900000 }, () => {
+    VoyagePlanner.found = { population: 20, idle: 0 };
+    const w = new World("amber-fern-212", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99 });
     expect(w.humans).toBe(1);
-    expect(w.command({ t: "probe", from: w.system.home, to: (w.system.home + 1) % w.system.planets.length, player: 1 }).ok).toBe(false);
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[1]!]!;
+    const tools = ["hammer", "axe", "pick", "saw", "shovel", "scythe"];
+    for (let i = 0; i < 25 * eco.dayTicks; i++) {
+      if (i % eco.dayTicks === 0) for (const g of ["iron", "plank", "stone", "log", "bread", ...tools]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 40);
+      w.step();
+    }
+    expect(w.voyages!.list.some((v) => v.owner === 1 && v.kind === "hearthship"), "the rival sent a Hearthship").toBe(true);
+    const colony = w.colonies.find((c) => c && c.economy.keeps[1] !== undefined);
+    expect(colony, "the rival holds a colony").toBeDefined();
+    const built = colony!.economy.buildings.filter((b) => b.alive && b.built && b.owner === 1).length;
+    expect(built, "the colony's brain builds").toBeGreaterThan(3);
+  });
+
+  it("a Warden never voyages, even when it could", { timeout: 300000 }, () => {
+    VoyagePlanner.found = { population: 20, idle: 0 };
+    const w = new World("amber-fern-212", { size: "small", rivals: 1, personalities: ["warden"], peaceDays: 99 });
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[1]!]!;
+    for (let i = 0; i < 10 * eco.dayTicks; i++) {
+      if (i % eco.dayTicks === 0) for (const g of ["iron", "plank", "stone", "log"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 40);
+      w.step();
+    }
+    expect(w.voyages!.list.filter((v) => v.owner === 1)).toEqual([]);
   });
 });
 

@@ -91,7 +91,8 @@ export interface WorldHost {
   readonly seed: string;
   readonly tick: number;
   readonly system: StarSystem;
-  readonly humans: number;
+  /** Everyone who can act: people and AI rivals alike. */
+  readonly players: number;
   economyAt(planet: number): Economy | null;
   /** The colony world on a planet, created on the first landing there. */
   colonize(planet: number): Economy;
@@ -116,7 +117,7 @@ export class Voyages {
   readonly notices: { owner: number; text: string }[] = [];
 
   constructor(private readonly host: WorldHost) {
-    for (let p = 0; p < host.humans; p++) this.surveyed[p] = 1 << host.system.home;
+    for (let p = 0; p < host.players; p++) this.surveyed[p] = 1 << host.system.home;
   }
 
   private get dayTicks(): number {
@@ -164,7 +165,7 @@ export class Voyages {
 
   apply(cmd: VoyageCommand): CommandResult {
     const p = cmd.player ?? 0;
-    if (p < 0 || p >= this.host.humans) return { ok: false, reason: "Unknown player." };
+    if (p < 0 || p >= this.host.players) return { ok: false, reason: "Unknown player." };
     const planets = this.host.system.planets;
     switch (cmd.t) {
       case "probe":

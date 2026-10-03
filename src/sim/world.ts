@@ -107,6 +107,8 @@ export class World implements WorldHost {
   readonly players: number;
   /** Players 0..humans-1 are people; the rest are AI rivals. */
   readonly humans: number;
+  /** Makes the brain for an AI seat (rivals here, and the same seats on colony worlds). */
+  private readonly brainFactory: BrainFactory;
   readonly rivals: number;
   readonly ai: Brain[] = [];
   /** Stewards keeping absent players' settlements, by player. */
@@ -154,6 +156,7 @@ export class World implements WorldHost {
     this.economy.hills = this.map?.hills;
     this.climate = new Climate(this.land, this.rng.fork("climate"));
     this.economy.climate = this.climate;
+    this.brainFactory = opts.brain ?? defaultBrain;
     this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
     const bare = opts.survey || opts.colony;
     this.rivals = bare ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
@@ -168,7 +171,7 @@ export class World implements WorldHost {
     for (let p = this.humans; p < this.players; p++) {
       const r = rivalFor(seed, p);
       const seat = { player: p, rng: this.rng.fork(`ai-${p}`), personality: opts.personalities?.[p - this.humans] ?? r.personality, level: opts.aiLevel ?? "normal" };
-      const ai = (opts.brain ?? defaultBrain)(seat);
+      const ai = this.brainFactory(seat);
       this.ai.push(ai);
       this.economy.aiPlayers.add(p);
       this.economy.names[p] = r.name;
@@ -287,8 +290,10 @@ export class World implements WorldHost {
   }
 
   /** Put a steward brain on a seat of this world. */
-  private adopt(p: number): void {
-    this.stewards.set(p, defaultBrain({ player: p, rng: new Rng(`${this.seed}:steward-${p}:${this.tick}`), personality: "builder", level: "normal" }));
+  private adopt(p: number, like?: Brain): void {
+    const seat = { player: p, rng: new Rng(`${this.seed}:${like ? "colony" : "steward"}-${p}:${this.tick}`), personality: like?.personality ?? "builder", level: like?.level ?? "normal" } as const;
+    if (like) this.ai.push(this.brainFactory(seat));
+    else this.stewards.set(p, defaultBrain(seat));
   }
 
   private release(p: number): void {
@@ -324,11 +329,16 @@ export class World implements WorldHost {
     if (existing) return existing.economy;
     const p = this.system.planets[planet];
     if (!p) throw new Error(`No planet ${planet}`);
-    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.humans, startTick: this.tick, mods: this.mods });
+    // Every seat has a place on a colony world, rivals included; an AI seat gets a brain of its own there.
+    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.players, startTick: this.tick, mods: this.mods, brain: this.brainFactory });
     this.colonies[planet] = w;
     w.economy.teams.push(...this.economy.teams);
     w.economy.names.push(...this.economy.names);
     w.onBloom = () => this.bloomed(planet);
+    for (const ai of this.ai) {
+      w.adopt(ai.player, ai);
+      w.economy.aiPlayers.add(ai.player);
+    }
     for (const p of this.stewards.keys()) w.adopt(p);
     return w.economy;
   }

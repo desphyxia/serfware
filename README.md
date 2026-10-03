@@ -112,10 +112,10 @@ attack will start (Wardens), sends mounted outriders to cut bare enemy flags, an
 are overwhelming. It bridges pockets of its own land cut off by shallow water, builds a maypole, fountains, statues
 and digsites at ruins, and sends planks or stone to a poorer ally.
 
-A seat the rules let fly (a person's seat held by a steward) builds a launch rail, probes the other worlds, sends a Hearthship
-from a grown settlement, picks its landing site and ships bread to the colony (`src/sim/ai/voyage.ts`); a steward now keeps
-its colonies too, with a brain of its own on each colony world, and raises terraforming works there (`terra.ts`). Rival seats
-cannot yet voyage: the colony worlds hold only people's seats.
+Any seat can voyage: a person's, a steward's or an AI rival's (`src/sim/ai/voyage.ts`). It builds a launch rail, probes the other
+worlds, sends a Hearthship from a grown settlement with the tools a colony needs, picks its landing site and ships bread to
+the colony. Colony worlds hold every seat, and each AI seat (rival or steward) gets a brain of its own there, so a colony is
+managed and can be terraformed (`terra.ts`).
 
 What each temperament will not do is a hard limit enforced by the world (`TEMPERS` in `ai/personality.ts`): a Builder never
 raids, pitches camps or breaks a treaty, a Warden never voyages. `ai/coverage.ts` lists, for every command and building type,
