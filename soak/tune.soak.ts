@@ -13,16 +13,18 @@ import { runMatches, type MatchJob } from "./pool";
  * with the seats rotated. Matches run in parallel, one process per core. The best numbers are then judged
  * against the hand-set Warden on seeds the search never saw, and are written to src/sim/data/learned-ai.json only
  * if they win there; otherwise the file is left alone. Run with `npm run soak -- tune`; writes soak-tune.json.
- * TUNE_GENS (default 8), TUNE_CHILDREN (3), TUNE_MATCHES (6 per candidate per generation), TUNE_CHECK (12) and
- * SOAK_DAYS (12) size it.
+ * TUNE_GENS (default 8), TUNE_CHILDREN (3), TUNE_MATCHES (16 per candidate per generation), TUNE_CHECK (24) and
+ * SOAK_DAYS (14) size it. The first search, at 6 matches per candidate, could not tell candidates apart (the same
+ * numbers scored from -24 to +37 between generations); the check now pairs the searched numbers with the hand-set
+ * ones on the same seeds and keeps them only if the gain is at least one standard error.
  */
 const GENS = Number(process.env.TUNE_GENS ?? 8);
 const CHILDREN = Number(process.env.TUNE_CHILDREN ?? 3);
-const MATCHES = Number(process.env.TUNE_MATCHES ?? 6);
-const CHECK = Number(process.env.TUNE_CHECK ?? 12);
-const DAYS = Number(process.env.SOAK_DAYS ?? 12);
-const TRAIN_SEEDS = ["russet-heron-417", "amber-fern-212", "glade-iris-904", "lantern-moss-55", "tidal-oak-808", "ember-sky-31", "birch-ford-12", "slate-owl-640"];
-const CHECK_SEEDS = ["mist-reed-77", "copper-vale-9", "quill-moor-303", "fable-glen-58", "salt-wren-21", "dune-lark-8", "heath-fox-101", "pine-sedge-67", "cairn-tern-14", "flint-vole-290", "wren-ash-45", "marl-pike-33"];
+const MATCHES = Number(process.env.TUNE_MATCHES ?? 16);
+const CHECK = Number(process.env.TUNE_CHECK ?? 24);
+const DAYS = Number(process.env.SOAK_DAYS ?? 14);
+const TRAIN_SEEDS = Array.from({ length: 24 }, (_, i) => `tune-train-${i + 1}`);
+const CHECK_SEEDS = Array.from({ length: 48 }, (_, i) => `tune-check-${i + 1}`);
 
 const BOUNDS: Record<keyof Tuning, [number, number]> = {
   attackOdds: [0.4, 0.95],
@@ -50,21 +52,29 @@ function jobsFor(t: Tuning, seeds: string[]): MatchJob[] {
   });
 }
 
-/** Mean of (the candidate's score minus the mean of the other two) over a candidate's matches. */
-function fitnessOf(results: { scores: number[] }[], seeds: string[]): number {
-  let sum = 0;
-  results.forEach((r, m) => {
+/** Per match: the candidate's score minus the mean of the other two. */
+function perMatch(results: { scores: number[] }[]): number[] {
+  return results.map((r, m) => {
     const seat = m % 3;
     const others = r.scores.filter((_, i) => i !== seat);
-    sum += (r.scores[seat] as number) - others.reduce((a, b) => a + b, 0) / others.length;
+    return (r.scores[seat] as number) - others.reduce((a, b) => a + b, 0) / others.length;
   });
-  return sum / seeds.length;
 }
 
-/** Judge several candidates at once (all their matches run together) and return each one's fitness. */
-async function judge(candidates: Tuning[], seeds: string[]): Promise<number[]> {
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const stderr = (xs: number[]) => {
+  const m = mean(xs);
+  return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / Math.max(1, xs.length - 1) / xs.length);
+};
+
+/** Judge several candidates at once (all their matches run together) and return each one's per-match fitness. */
+async function judgeAll(candidates: Tuning[], seeds: string[]): Promise<number[][]> {
   const results = await runMatches(candidates.flatMap((t) => jobsFor(t, seeds)));
-  return candidates.map((_, c) => fitnessOf(results.slice(c * seeds.length, (c + 1) * seeds.length), seeds));
+  return candidates.map((_, c) => perMatch(results.slice(c * seeds.length, (c + 1) * seeds.length)));
+}
+
+async function judge(candidates: Tuning[], seeds: string[]): Promise<number[]> {
+  return (await judgeAll(candidates, seeds)).map(mean);
 }
 
 describe("tune", () => {
@@ -91,12 +101,17 @@ describe("tune", () => {
       console.log(`gen ${g}: parent ${(fits[0] as number).toFixed(1)}, best ${(fits[best] as number).toFixed(1)}${best > 0 ? " (moved)" : ""}`);
     }
     const found = Object.fromEntries(KEYS.map((k) => [k, Math.round(parent[k] * 100) / 100])) as unknown as Tuning;
-    const checked = await judge([found, base], CHECK_SEEDS.slice(0, CHECK));
-    const learnedFit = checked[0] as number;
-    const handFit = checked[1] as number;
-    const wins = learnedFit > handFit;
-    console.log(`unseen check (${CHECK} matches each): searched ${learnedFit.toFixed(1)} vs hand-set ${handFit.toFixed(1)} points above the other two seats; ${wins ? "kept" : "NOT kept"}`);
+    // Paired on the same seeds and seats: the searched numbers' gain over the hand-set ones, with its standard error.
+    const seeds = CHECK_SEEDS.slice(0, CHECK);
+    const [mine, theirs] = await judgeAll([found, base], seeds);
+    const diffs = (mine as number[]).map((x, i) => x - (theirs as number[])[i]!);
+    const gain = mean(diffs);
+    const se = stderr(diffs);
+    const learnedFit = mean(mine as number[]);
+    const handFit = mean(theirs as number[]);
+    const wins = gain > 0 && gain > se;
+    console.log(`unseen check (${CHECK} paired matches): searched ${learnedFit.toFixed(1)} vs hand-set ${handFit.toFixed(1)}; gain ${gain.toFixed(1)} +/- ${se.toFixed(1)} (1 s.e.); ${wins ? "kept" : "NOT kept"}`);
     if (wins) writeFileSync("src/sim/data/learned-ai.json", JSON.stringify({ warden: found }, null, 1) + "\n");
-    writeFileSync("soak-tune.json", JSON.stringify({ gens: GENS, children: CHILDREN, matches: MATCHES, days: DAYS, log, found, check: { matches: CHECK, searched: learnedFit, handSet: handFit, kept: wins } }, null, 1));
+    writeFileSync("soak-tune.json", JSON.stringify({ gens: GENS, children: CHILDREN, matches: MATCHES, days: DAYS, log, found, check: { matches: CHECK, searched: learnedFit, handSet: handFit, gain, stderr: se, kept: wins } }, null, 1));
   }, 6 * 3_600_000);
 });
