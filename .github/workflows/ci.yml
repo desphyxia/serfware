@@ -23,6 +23,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run smoke
       - run: npm run touch-test
+      - run: npm run a11y-test
+      - run: npm run swap-leak
+      - run: npm run budget
       - run: npm run gpu-limits
       - run: npm run mp-test
       - run: MP_MODE=neighbours npm run mp-test
