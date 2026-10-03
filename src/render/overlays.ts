@@ -153,7 +153,7 @@ export class Overlays {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#ffe9a8", transparent: true, opacity: 0.6, depthWrite: false }));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#fff1b8", transparent: true, opacity: 0.9, depthWrite: false }));
     lines.renderOrder = 4;
     lines.frustumCulled = false;
     this.group.add(lines);
