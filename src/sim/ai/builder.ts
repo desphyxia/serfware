@@ -7,6 +7,7 @@ import type { World } from "../world";
 import type { TreatyKind } from "../econ/diplomacy";
 import { AI_LEVELS, type AiLevel, type Personality } from "./personality";
 import type { AiContext, Brain } from "./brain";
+import { SeaPlanner } from "./sea";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
 
@@ -26,8 +27,11 @@ export class AiBuilder implements Brain {
     private readonly rng: Rng,
     readonly personality: Personality = "builder",
     readonly level: AiLevel = "normal",
-  ) {}
+  ) {
+    this.sea = new SeaPlanner(player, personality);
+  }
 
+  private readonly sea: SeaPlanner;
   private started = false;
   private thoughts = 0;
   /** Wishes that found no site lately, and the thought they may be tried again. */
@@ -165,6 +169,10 @@ export class AiBuilder implements Brain {
     want(count("forester") < 1, near("forester", Feature.Tree));
     want(lanterns < 1 + Math.floor(mine.length / 5), grow());
     want(count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
+    // Beyond the shore: a boatyard to chart the sea, quays, and footholds on free land across the water.
+    const built = mine.filter((b) => b.built).length;
+    const landLocked = (this.resting.get("expand") ?? 0) > this.thoughts && built >= 12;
+    want(this.thoughts % 3 === 0 && this.sea.ready(ctx, built, landLocked), { key: "sea", fn: () => this.sea.step(ctx) });
     want(count("fisher") < 1, near("fisher", undefined, 11));
     want(count("farm") < 1, near("farm"));
     want(count("mill") < 1 && count("farm") > 0, near("mill"));
