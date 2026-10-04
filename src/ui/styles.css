@@ -694,6 +694,24 @@ input.switch {
   border-color: var(--line-strong);
   background: rgba(240, 178, 90, 0.08);
 }
+.pop-item.with-icon {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.pop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pop-icon {
+  flex: none;
+  width: calc(40px * var(--ui-scale));
+  height: calc(40px * var(--ui-scale));
+  object-fit: contain;
+}
+.pop-icon:not([src]), .pop-icon.none { visibility: hidden; }
 .pop-name {
   color: var(--ink);
   font-weight: 600;

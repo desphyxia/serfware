@@ -43,6 +43,8 @@ export interface InterfaceSettings {
   palette: string;
   /** Captions for sounds (hammering, birdsong, rain...) at the foot of the screen. */
   captions: boolean;
+  /** A small picture of each building in the build menu. */
+  buildIcons: boolean;
   invertZoom: boolean;
   edgeScroll: boolean;
   showFps: boolean;
@@ -145,7 +147,7 @@ export function defaultSettings(preset: PresetName = "medium"): Settings {
     preset,
     graphics: { ...PRESETS[preset] },
     audio: { master: 0.8, music: 0.6, ambience: 0.8, effects: 0.8 },
-    ui: { uiScale: 1, textScale: 1, language: "en", palette: "default", captions: false, invertZoom: false, edgeScroll: false, showFps: false },
+    ui: { uiScale: 1, textScale: 1, language: "en", palette: "default", captions: false, buildIcons: false, invertZoom: false, edgeScroll: false, showFps: false },
   };
 }
 

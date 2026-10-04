@@ -105,6 +105,7 @@ export class SettingsPanel extends Panel {
     ui.append(this.checkbox(t("FPS counter"), "u-fps", (s) => s.ui.showFps, (v) => store.setUi({ showFps: v })));
     ui.append(this.textRange(t("Text size"), "u-text", 0.85, 1.6, 0.05));
     ui.append(this.checkbox(t("Captions for sounds"), "u-cap", (s) => s.ui.captions, (v) => store.setUi({ captions: v })));
+    ui.append(this.checkbox(t("Building pictures in the build menu"), "u-bicons", (s) => s.ui.buildIcons, (v) => store.setUi({ buildIcons: v })));
     ui.append(this.uiSelect(t("Colours"), "u-pal", Object.entries(PALETTES).map(([id, p]) => [id, t(p.name)] as const), (s) => s.ui.palette, (v) => store.setUi({ palette: v })));
     ui.append(this.uiSelect(t("Language"), "u-lang", languages().map((l) => [l.id, l.name] as const), (s) => s.ui.language, (v) => store.setUi({ language: v })));
     ui.append(h("p", { class: "hint" }, t("Colours and language apply after a reload. Goods also have a shape, so they never rely on colour alone.")), h("button", { class: "btn", onclick: () => location.reload() }, t("Reload now")));
