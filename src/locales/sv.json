@@ -184,5 +184,13 @@
  "Controls": "Kontroller",
  "World": "Värld",
  "blades clashing": "klingor som klirrar",
- "arrows flying": "pilar som flyger"
+ "arrows flying": "pilar som flyger",
+ "Turn the flag to another side (mouse wheel)": "Vrid flaggan till en annan sida (mushjul)",
+ "auto": "auto",
+ "north": "norr",
+ "north-east": "nordost",
+ "north-west": "nordväst",
+ "south": "söder",
+ "south-east": "sydost",
+ "south-west": "sydväst"
 }

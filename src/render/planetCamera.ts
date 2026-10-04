@@ -5,6 +5,8 @@ export interface CameraInputOptions {
   edgeScroll: () => boolean;
   /** The key (lower case) bound to a camera action: left, right, up, down, turnLeft, turnRight, resetView, tiltUp, tiltDown, zoomIn, zoomOut. */
   key: (action: string) => string;
+  /** Offered each wheel notch (+1 / -1); return true to use it instead of zooming. */
+  wheel?: (step: number) => boolean;
 }
 
 /**
@@ -168,6 +170,7 @@ export class PlanetCamera {
       "wheel",
       (e) => {
         e.preventDefault();
+        if (this.opts.wheel?.(Math.sign(e.deltaY))) return;
         const dir = this.opts.invertZoom() ? -1 : 1;
         this.tDistance = THREE.MathUtils.clamp(this.tDistance * Math.exp(e.deltaY * 0.0012 * dir), this.minDistance, this.maxDistance);
       },

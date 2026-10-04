@@ -232,3 +232,28 @@ describe("placement reasons", () => {
     expect(blocked).toBeGreaterThan(0);
   });
 });
+
+describe("flag direction", () => {
+  it("each compass sector picks a neighbour, and the six sectors reach distinct sides on a hex tile", () => {
+    const w = new World(SEED, { size: "small" });
+    const grid = w.planet.grid;
+    const t = [...Array(grid.count).keys()].find((i) => grid.degree(i) === 6 && w.land.isLand(i))!;
+    const picks = [0, 1, 2, 3, 4, 5].map((d) => w.land.neighborInDirection(t, d));
+    for (const p of picks) expect(grid.neighborsOf(t)).toContain(p);
+    expect(new Set(picks).size).toBe(6);
+  });
+
+  it("a blocked chosen side is explained", () => {
+    const w = new World(SEED, { size: "small" });
+    const land = w.land;
+    const grid = land.planet.grid;
+    const hut = def("woodcutter");
+    const t = [...Array(grid.count).keys()].find((i) => land.territory[i] === 1 && land.buildBlocker(i, hut, 0) === null)!;
+    const sides = [0, 1, 2, 3, 4, 5].map((d) => land.neighborInDirection(t, d));
+    // Any side the building can't take is explained as a flag problem; the others come back clear.
+    for (const side of sides) {
+      const why = land.buildBlocker(t, hut, 0, false, side);
+      expect(why === null || /flag can't go that way/.test(why)).toBe(true);
+    }
+  });
+});

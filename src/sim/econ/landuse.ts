@@ -1,7 +1,7 @@
 import type { Planet } from "../planet/planet";
 import { Biome } from "../planet/terrain";
 import { SimNoise } from "../noise";
-import { log } from "../dmath";
+import { atan2, log } from "../dmath";
 import { mix32, type Rng } from "../rng";
 import type { BuildingDef } from "./defs";
 import { MinHeap } from "./heap";
@@ -592,6 +592,46 @@ export class LandUse {
     return best;
   }
 
+  /**
+   * The neighbour of `t` lying closest to compass sector `dir` (0..5, 60° apart, clockwise from
+   * north). Used to let the player pick which side a building's flag goes on.
+   */
+  neighborInDirection(t: number, dir: number): number {
+    const grid = this.planet.grid;
+    const [cx, cy, cz] = grid.centerOf(t);
+    // North = world +y projected onto the tangent plane (x axis near the poles); east = up × north.
+    let nx = -cx * cy;
+    let ny = 1 - cy * cy;
+    let nz = -cz * cy;
+    let nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (nl < 1e-6) {
+      nx = 1 - cx * cx;
+      ny = -cy * cx;
+      nz = -cz * cx;
+      nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    }
+    nx /= nl;
+    ny /= nl;
+    nz /= nl;
+    const ex = cy * nz - cz * ny;
+    const ey = cz * nx - cx * nz;
+    const ez = cx * ny - cy * nx;
+    // Sides sorted by bearing; sector 0 is the one nearest north and each step turns to the next
+    // side round, so the six sectors reach six different sides even where the grid is uneven.
+    const sides: { n: number; a: number }[] = [];
+    for (const n of grid.neighborsOf(t)) {
+      const [px, py, pz] = grid.centerOf(n);
+      const vx = px - cx;
+      const vy = py - cy;
+      const vz = pz - cz;
+      sides.push({ n, a: atan2(vx * ex + vy * ey + vz * ez, vx * nx + vy * ny + vz * nz) });
+    }
+    sides.sort((p, q) => p.a - q.a);
+    let first = 0;
+    for (let i = 1; i < sides.length; i++) if (Math.abs((sides[i] as { a: number }).a) < Math.abs((sides[first] as { a: number }).a)) first = i;
+    return (sides[(first + dir) % sides.length] as { n: number }).n;
+  }
+
   /** Why a flag can't stand on `t` for `owner`, or null if it can. */
   flagBlocker(t: number, owner = 0, foothold = false): string | null {
     if (this.use[t] === Use.Flag) return null;
@@ -611,7 +651,7 @@ export class LandUse {
    * Why `def` can't be built on `t` for `owner`, as a sentence, or null if it can. When no
    * neighbour can take the flag, the reasons for each neighbour are summed up.
    */
-  buildBlocker(t: number, def: BuildingDef, owner = 0, foothold = false): string | null {
+  buildBlocker(t: number, def: BuildingDef, owner = 0, foothold = false, chosenFlag = -1): string | null {
     const grid = this.planet.grid;
     if (!this.isLand(t)) return "Buildings go on dry land.";
     if (!(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return "That's outside your border.";
@@ -626,7 +666,11 @@ export class LandUse {
     }
     const maxSlope = def.terrain === "mountain" ? 3.2 : def.large ? MAX_LEVEL_SLOPE : 1.3;
     if (this.slope(t) > maxSlope) return "The ground is too steep here.";
-    const flagTile = this.bestFlagTile(t, owner, foothold);
+    const flagTile = chosenFlag >= 0 ? chosenFlag : this.bestFlagTile(t, owner, foothold);
+    if (chosenFlag >= 0) {
+      const r = this.use[chosenFlag] === Use.Flag ? (this.flagServes?.(chosenFlag) ? "a flag already serves another building" : null) : this.flagBlocker(chosenFlag, owner, foothold);
+      if (r) return `The flag can't go that way: ${r}. Turn it to another side.`;
+    }
     if (flagTile < 0) {
       const why = new Map<string, number>();
       for (const n of grid.neighborsOf(t)) {

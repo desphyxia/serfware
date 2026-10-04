@@ -25,6 +25,8 @@ export const ICONS: Record<string, string> = {
   economy: svg(`<path d="M4 20V10M10 20V4M16 20v-8M22 20H2" ${STROKE}/>`),
 };
 
+const ICON_TURN = "\u21BB";
+
 export const CATEGORIES: { id: Category; label: string; key: string }[] = [
   { id: "materials", label: tr("Materials"), key: "3" },
   { id: "food", label: tr("Food"), key: "4" },
@@ -82,6 +84,7 @@ export class BuildBar {
   /** Shows a button's explanation (touch: press and hold). */
   hint: (text: string) => void = () => {};
   private openCat: Category | null = null;
+  private readonly turnBtn: HTMLButtonElement;
 
   constructor(
     private readonly onPick: (id: ToolId) => void,
@@ -91,6 +94,8 @@ export class BuildBar {
     /** Why a building can't be chosen yet (not in the Almanac), or null. */
     private readonly locked: (id: string) => string | null = () => null,
     private readonly onDiplomacy: () => void = () => {},
+    /** Turn the flag of the building being placed to its next side. */
+    private readonly onTurnFlag: () => void = () => {},
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
@@ -145,7 +150,10 @@ export class BuildBar {
     add("almanac", t("Almanac"), "L", ICONS.almanac!, t("What your people have learned of their world, and what it unlocks."), () => this.onAlmanac());
     add("diplomacy", t("Diplomacy"), "J", ICONS.diplomacy!, t("Other settlements: treaties, offers, prisoners and your name among them."), () => this.onDiplomacy());
     this.popover = h("div", { class: "bb-pop", hidden: true, role: "menu" });
-    this.root = h("div", { class: "buildbar-wrap" }, this.popover, bar);
+    // Touch has no wheel: this button turns the flag, one side per tap, while a building is in hand.
+    this.turnBtn = h("button", { class: "bb-turn", hidden: true, title: t("Turn the flag to another side (mouse wheel)"), onclick: () => this.onTurnFlag() }) as HTMLButtonElement;
+    this.setFlagDir(null);
+    this.root = h("div", { class: "buildbar-wrap" }, this.popover, this.turnBtn, bar);
   }
 
   private pick(id: ToolId): void {
@@ -189,8 +197,14 @@ export class BuildBar {
     for (const [k, b] of this.buttons) b.classList.toggle("pulse", k === id);
   }
 
+  /** Show which side the flag will go on (null: the game picks). */
+  setFlagDir(label: string | null): void {
+    this.turnBtn.textContent = `${ICON_TURN} ${t("Flag")}: ${label ? t(label) : t("auto")}`;
+  }
+
   setActive(id: ToolId): void {
     const def = BUILDINGS.find((b) => b.id === id);
+    this.turnBtn.hidden = !def;
     for (const [k, b] of this.buttons) b.classList.toggle("on", k === id || (!!def && k === def.category));
   }
 

@@ -324,6 +324,7 @@ export class Game {
       notify: (text, kind) => this.toasts.show(text, kind),
       select: (sel: Selection) => this.info.select(sel),
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
+      flagDirChanged: (label) => this.buildBar.setFlagDir(label),
     });
     this.buildBar = new BuildBar(
       (id) => this.tools.set(id),
@@ -335,6 +336,7 @@ export class Game {
         return by && !this.world.economy.culture.unlocked(this.session.player, id) ? `Not yet in your Almanac: comes with "${DISCOVERIES[by].title}".` : null;
       },
       () => this.diplomacy.toggle(),
+      () => this.tools.rotateFlag(1),
     );
     this.buildBar.hint = (t) => this.toasts.show(t, "info");
     this.diplomacy = new DiplomacyPanel(
@@ -491,7 +493,7 @@ export class Game {
         const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.hoverTile : 0);
         return this.view ? this.view.frames.groundAt(dir, t) : planet.surfaceRadius(t);
       },
-      { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll, key: (a) => this.keys.key(a) },
+      { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll, key: (a) => this.keys.key(a), wheel: (step) => step !== 0 && this.tools.placing() && (this.tools.rotateFlag(step), true) },
     );
     cam.attach(canvas);
     return cam;
