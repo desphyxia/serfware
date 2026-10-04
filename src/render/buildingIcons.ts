@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import * as kit from "./kit";
 import { buildingGeometry, hedgeGeometry } from "./models";
 
 /** Icon size in pixels (a row is then 512 bytes, which WebGPU reads back unpadded; drawn at about a third of this in the menu, so it stays sharp on phones). */
@@ -38,7 +39,8 @@ export class BuildingIcons {
 
   private geometry(id: string): THREE.BufferGeometry | null {
     if (id === "hedge") return hedgeGeometry();
-    if (id === "causeway" || id === "bridge") return null;
+    if (id === "causeway") return causewayIcon();
+    if (id === "bridge") return bridgeIcon();
     return buildingGeometry(id);
   }
 
@@ -117,6 +119,32 @@ export class BuildingIcons {
     this.mat.dispose();
     this.cache.clear();
   }
+}
+
+/** Stand-ins for the two tools that have no model of their own: drawn only for the menu. */
+const slab = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z);
+
+/** A stone deck on two dressed piers, over a patch of water. */
+function causewayIcon(): THREE.BufferGeometry {
+  const parts: kit.Part[] = [[new THREE.CylinderGeometry(1.5, 1.5, 0.04, 20).translate(0, -0.02, 0), "#5f8ea0"]];
+  for (const z of [-0.8, 0.8]) {
+    parts.push([new THREE.CylinderGeometry(0.42, 0.5, 0.6, 6).translate(0, 0.3, z), "#7c766d"]);
+    parts.push([new THREE.CylinderGeometry(0.46, 0.46, 0.06, 6).translate(0, 0.63, z), "#9a948a"]);
+  }
+  parts.push([slab(0.9, 0.14, 2.4, 0, 0.62, 0), "#a39d92"]);
+  parts.push([slab(0.1, 0.1, 2.4, -0.45, 0.76, 0), "#8a8479"], [slab(0.1, 0.1, 2.4, 0.45, 0.76, 0), "#8a8479"]);
+  return kit.assemble(parts);
+}
+
+/** A plank deck with posts and rails, over a patch of water. */
+function bridgeIcon(): THREE.BufferGeometry {
+  const parts: kit.Part[] = [[new THREE.CylinderGeometry(1.5, 1.5, 0.04, 20).translate(0, -0.02, 0), "#5f8ea0"]];
+  for (let i = 0; i < 9; i++) parts.push([slab(0.9, 0.06, 0.24, 0, 0.5, -1 + i * 0.25), i % 2 ? "#d9b27a" : "#c9a06a"]);
+  for (const x of [-0.5, 0.5]) {
+    for (const z of [-1, 0, 1]) parts.push([slab(0.1, 0.85, 0.1, x, 0, z), "#7a5638"]);
+    parts.push([slab(0.06, 0.06, 2.2, x, 0.78, 0), "#8a6040"]);
+  }
+  return kit.assemble(parts);
 }
 
 const toSrgb = (u: number): number => {
