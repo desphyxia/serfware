@@ -145,7 +145,12 @@ export class PlanetCamera {
         const now = this.pinchState();
         if (this.pinch && now) {
           this.tDistance = THREE.MathUtils.clamp(this.tDistance * (this.pinch.dist / now.dist), this.minDistance, this.maxDistance);
-          this.tHeading += now.angle - this.pinch.angle;
+          // Wrap the angle change to (-PI, PI] so the atan2 seam does not spin the view, and skip
+          // the twist while the fingers are too close together for a stable angle.
+          if (Math.min(now.dist, this.pinch.dist) > 30) {
+            const d = Math.atan2(Math.sin(now.angle - this.pinch.angle), Math.cos(now.angle - this.pinch.angle));
+            this.tHeading -= d;
+          }
           // Two fingers sliding up or down together tilt the view.
           this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - (now.midY - this.pinch.midY) * 0.005, -0.6, 0.5);
         }
