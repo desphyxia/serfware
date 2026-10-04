@@ -148,6 +148,13 @@ export class GameRenderer {
     this.apply(this.settings);
   }
 
+  /** Build the shaders for everything in the scene now, reporting progress, so the first frame does not stall. */
+  async precompile(onProgress: (fraction: number) => void): Promise<void> {
+    await this.renderer.compileAsync(this.scene, this.camera, null, (e: ProgressEvent) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    });
+  }
+
   get backend(): string {
     const b = (this.renderer as unknown as { backend?: { isWebGPUBackend?: boolean } }).backend;
     return b?.isWebGPUBackend ? "WebGPU" : "WebGL2";

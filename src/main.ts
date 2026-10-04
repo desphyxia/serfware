@@ -8,6 +8,7 @@ import { applyPlayerPalette } from "./render/players";
 import { SettingsStore, suggestPreset } from "./core/settings";
 import { BUILD } from "./build";
 import { Game } from "./game";
+import { bootScreen } from "./ui/bootScreen";
 import { demoBattle, demoSettlement, placeConnected } from "./sim/econ/planner";
 import { ReportPanel } from "./ui/reportPanel";
 import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
@@ -45,6 +46,8 @@ async function boot(): Promise<void> {
   applyPlayerPalette();
   document.documentElement.lang = settings.get().ui.language;
   const root = document.getElementById("app") ?? document.body;
+  bootScreen.set(0.05, "Shaping the planet");
+  await new Promise((r) => setTimeout(r, 40));
   const game = new Game(root, settings, initialSeed());
   await game.start();
   const sf = window.__seedfall as NonNullable<typeof window.__seedfall>;
@@ -57,6 +60,7 @@ async function boot(): Promise<void> {
 
 boot().catch((err: unknown) => {
   const e = err as Error;
+  bootScreen.hide();
   // The game UI never came up, so mount a standalone report dialog before capturing.
   document.body.append(new ReportPanel().root);
   crash.capture({ kind: "error", message: `Start-up failed: ${e.message}`, stack: e.stack });
