@@ -37,18 +37,20 @@ export function speciesAt(temperature: number, moisture: number, biome: Biome, v
   return variety === 2 ? Species.Birch : variety === 3 && temperature < 18 ? Species.Spruce : Species.Oak;
 }
 
+/** Trees drawn per mature tree tile (and shrubs per scrub tile, plus one); fixed so it never depends on graphics settings. */
+const TREES_PER_TILE = 2;
+
 /**
  * Trees, rocks and stumps from the simulation's tile features, drawn as instanced meshes and
- * rebuilt when the features change. Each tree tile shows a small cluster; density follows the
- * vegetation setting (visual only, the simulation still sees one tree per tile).
+ * rebuilt when the features change. Each tree tile shows a small cluster. These are game
+ * resources, so the graphics vegetation setting must not change how many are drawn; it only
+ * scales decorative growth (grass, undergrowth).
  */
 export class NatureView {
   readonly group = new THREE.Group();
   /** One instanced mesh per Species. */
   private readonly trees: THREE.InstancedMesh[];
-  /** Full and lighter tree geometry per Species; the lighter set is used at low vegetation. */
   private readonly chunks = new Map<THREE.InstancedMesh, InstanceChunks>();
-  private readonly treeGeo: { full: THREE.BufferGeometry; lite: THREE.BufferGeometry }[];
   private readonly rocks: THREE.InstancedMesh;
   /** Emberglass vents and Saltglass spires. */
   private readonly vents: THREE.InstancedMesh;
@@ -81,7 +83,6 @@ export class NatureView {
   blight: { blight: Uint8Array; blightVersion: number } | null = null;
   private blightVersion = -1;
   private builtSeason = -1;
-  private density = -1;
 
   constructor(
     private readonly land: LandUse,
@@ -107,15 +108,9 @@ export class NatureView {
     // Palm fronds are thin sheets: drawn from both sides.
     const palmMat = new PainterlyMaterial({ vertexColors: true, wind: 1.3, brush: 1.2, side: THREE.DoubleSide });
     const palm = palmGeometry();
-    this.treeGeo = [
-      { full: coniferGeometry(), lite: coniferGeometry(true) },
-      { full: broadleafGeometry(), lite: broadleafGeometry(true) },
-      { full: birchGeometry(), lite: birchGeometry(true) },
-      { full: pineGeometry(), lite: pineGeometry(true) },
-      { full: palm, lite: palm },
-    ];
+    const treeGeo = [coniferGeometry(), broadleafGeometry(), birchGeometry(), pineGeometry(), palm];
     const sizes = [3, 3, 2, 2, 1];
-    this.trees = this.treeGeo.map((g, i) => make(g.full, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
+    this.trees = treeGeo.map((g, i) => make(g, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
     this.rocks = make(rockGeometry(), capacity);
     this.rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)), mat, false);
@@ -146,22 +141,17 @@ export class NatureView {
     this.group.name = "nature";
   }
 
-  update(density: number): void {
+  update(): void {
     if (this.land.signVersion !== this.signVersion) {
       this.signVersion = this.land.signVersion;
       this.updateSigns();
     }
     const bv = this.blight?.blightVersion ?? 0;
-    if (this.land.featureVersion === this.version && density === this.density && this.mask.version === this.maskVersion && this.seasonKey === this.builtSeason && bv === this.blightVersion) return;
+    if (this.land.featureVersion === this.version && this.mask.version === this.maskVersion && this.seasonKey === this.builtSeason && bv === this.blightVersion) return;
     this.blightVersion = bv;
     this.builtSeason = this.seasonKey;
     this.version = this.land.featureVersion;
     this.maskVersion = this.mask.version;
-    this.density = density;
-    for (let i = 0; i < this.trees.length; i++) {
-      const g = this.treeGeo[i] as { full: THREE.BufferGeometry; lite: THREE.BufferGeometry };
-      (this.trees[i] as THREE.InstancedMesh).geometry = density < 0.5 ? g.lite : g.full;
-    }
     const land = this.land;
     const n = land.planet.grid.count;
     const m = new THREE.Matrix4();
@@ -175,7 +165,7 @@ export class NatureView {
     const { temperature, moisture, biome } = land.planet.terrain;
     const green = new THREE.Color("#6f9a45");
     const gold = new THREE.Color("#e2c060");
-    const perTile = 1 + Math.round(density * 2);
+    const perTile = TREES_PER_TILE;
     for (let t = 0; t < n; t++) {
       const f = land.feature[t];
       if (f === Feature.None || hiddenAt(this.mask, t)) continue;
@@ -450,10 +440,6 @@ export class NatureView {
   }
 
   dispose(): void {
-    for (const g of this.treeGeo) {
-      g.full.dispose();
-      g.lite.dispose();
-    }
     for (const c of this.group.children) {
       const m = c as THREE.InstancedMesh;
       m.geometry.dispose();

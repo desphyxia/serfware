@@ -208,3 +208,27 @@ function placeConnectedTo(w: World, flagTile: number): boolean {
   }
   return w.command({ t: "road", tiles: path.slice(start) }).ok;
 }
+
+describe("placement reasons", () => {
+  it("names a reason for every spot a building can't go, and none for spots it can", () => {
+    const w = new World(SEED, { size: "small" });
+    const land = w.land;
+    const d = def("woodcutter");
+    let ok = 0;
+    let blocked = 0;
+    for (let t = 0; t < land.territory.length; t++) {
+      const flag = land.bestFlagTile(t, 0);
+      const can = flag >= 0 && land.canBuildDef(t, flag, d, 0);
+      const why = land.buildBlocker(t, d, 0);
+      if (can) {
+        expect(why).toBeNull();
+        ok++;
+      } else if (land.territory[t] === 1) {
+        expect(why).toBeTruthy();
+        blocked++;
+      }
+    }
+    expect(ok).toBeGreaterThan(0);
+    expect(blocked).toBeGreaterThan(0);
+  });
+});

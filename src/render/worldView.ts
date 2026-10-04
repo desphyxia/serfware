@@ -310,7 +310,7 @@ export class WorldView {
     distance?: number;
   }): void {
     WIND.uTime.value = p.time;
-    this.nature.update(p.vegetation);
+    this.nature.update();
     this.econ.night.value = 1 - p.daylight;
     // Far from the view nobody is drawn: beyond about 1.6 view-distances (and at least 14 tiles) people only keep their place.
     this.econ.cull = p.ground && p.distance !== undefined ? { center: p.ground, r2: Math.max(p.distance * 1.6, 14) ** 2 } : null;
@@ -413,7 +413,7 @@ export class WorldView {
     const hit = new THREE.Vector3();
     for (let i = 0; i < 4; i++) {
       sphere.radius = r;
-      if (!ray.intersectSphere(sphere, hit)) return tile;
+      if (!ray.intersectSphere(sphere, hit) || !Number.isFinite(hit.x + hit.y + hit.z)) return tile;
       const d = hit.clone().normalize();
       tile = planet.grid.nearestTile([d.x, d.y, d.z], tile >= 0 ? tile : hint);
       r = this.field.tileRadius(tile);
