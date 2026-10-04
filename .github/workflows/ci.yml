@@ -6,9 +6,10 @@ on:
     branches: [master]
 
 jobs:
-  check:
+  # Static checks are quick; they run beside the test shards.
+  static:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,7 +19,36 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+
+  # The unit suite is sharded across runners so it finishes in a few minutes
+  # instead of ~17. Shards are by test file (vitest --shard).
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --shard=${{ matrix.shard }}/6
+
+  # Browser and multiplayer checks against the single-file build.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm run build:single
       - run: npx playwright install --with-deps chromium
       - run: npm run smoke
@@ -36,3 +66,14 @@ jobs:
           path: |
             artifacts/
           if-no-files-found: ignore
+
+  # Single gate under the original job name, so branch protection that
+  # requires "check" keeps working.
+  check:
+    if: always()
+    needs: [static, test, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "static=${{ needs.static.result }} test=${{ needs.test.result }} e2e=${{ needs.e2e.result }}"
+          [ "${{ needs.static.result }}" = success ] && [ "${{ needs.test.result }}" = success ] && [ "${{ needs.e2e.result }}" = success ]
