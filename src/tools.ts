@@ -168,6 +168,7 @@ export class Tools {
     const t = this.at();
     ov.setPreview(null, false);
     ov.setGhost(null, -1, -1, false);
+    ov.setAnchor(this.tool === "road" ? this.roadStart : -1);
 
     const pl = this.host.player();
     const key = `${this.tool}:${this.flagDir}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}:${land.causewayVersion}`;
