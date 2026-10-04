@@ -8,6 +8,7 @@ import { birchGeometry, broadleafGeometry, coniferGeometry, fruitTreeGeometry, g
 import { PAINT, PainterlyMaterial } from "./painterly";
 import { vec3 } from "three/tsl";
 import { bushGeometry } from "./undergrowth";
+import { InstanceChunks } from "./instanceChunks";
 import type { Ecology } from "../sim/econ/ecology";
 import { Biome } from "../sim/planet/terrain";
 
@@ -49,6 +50,7 @@ export class NatureView {
   readonly group = new THREE.Group();
   /** One instanced mesh per Species. */
   private readonly trees: THREE.InstancedMesh[];
+  private readonly chunks = new Map<THREE.InstancedMesh, InstanceChunks>();
   private readonly rocks: THREE.InstancedMesh;
   /** Emberglass vents and Saltglass spires. */
   private readonly vents: THREE.InstancedMesh;
@@ -92,13 +94,15 @@ export class NatureView {
     const mat = new PainterlyMaterial({ vertexColors: true, flatShading: true });
     // Smooth shading: the foliage carries soft, outward-leaning normals.
     const treeMat = new PainterlyMaterial({ vertexColors: true, wind: 1, brush: 1.4 });
-    const make = (g: THREE.BufferGeometry, n: number, material = mat) => {
+    // Planet-wide meshes are split into regional chunks (see `InstanceChunks`) so they are culled.
+    const make = (g: THREE.BufferGeometry, n: number, material = mat, chunked = true) => {
       const m = new THREE.InstancedMesh(g, material, n);
       m.castShadow = true;
       m.receiveShadow = true;
       m.count = 0;
       m.frustumCulled = false;
       this.group.add(m);
+      if (chunked) this.chunks.set(m, new InstanceChunks(m, this.group));
       return m;
     };
     // Palm fronds are thin sheets: drawn from both sides.
@@ -109,16 +113,16 @@ export class NatureView {
     this.trees = treeGeo.map((g, i) => make(g, capacity * (sizes[i] as number), i === 4 ? palmMat : treeMat));
     this.rocks = make(rockGeometry(), capacity);
     this.rocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
-    this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)));
+    this.vents = make(ventGeometry(), Math.max(64, Math.ceil(capacity / 20)), mat, false);
     const ruinMat = new PainterlyMaterial({ vertexColors: true, flatShading: true, emissive: "#0c2a30", brush: 0.7 });
-    this.ruins = make(ruinGeometry(), 32, ruinMat);
-    this.digs = make(ruinGeometry(true), 32, ruinMat);
+    this.ruins = make(ruinGeometry(), 32, ruinMat, false);
+    this.digs = make(ruinGeometry(true), 32, ruinMat, false);
     // Spires glow faintly rose after dark.
     const capMat = new PainterlyMaterial({ vertexColors: true, brush: 0.4 });
     capMat.emissiveNode = vec3(0.16, 0.55, 0.46).mul(PAINT.night.mul(2.4).add(0.2));
     this.glowcaps = make(glowcapGeometry(), Math.max(128, Math.ceil(capacity / 6)), capMat);
     this.glowcaps.castShadow = false;
-    this.spires = make(spireGeometry(), Math.max(64, Math.ceil(capacity / 16)), new PainterlyMaterial({ vertexColors: true, flatShading: true, emissive: "#3a1e2c", brush: 0.6 }));
+    this.spires = make(spireGeometry(), Math.max(64, Math.ceil(capacity / 16)), new PainterlyMaterial({ vertexColors: true, flatShading: true, emissive: "#3a1e2c", brush: 0.6 }), false);
     this.stumps = make(stumpGeometry(), capacity);
     this.stumps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3);
     this.giants = make(giantTreeGeometry(), Math.max(64, Math.ceil(capacity / 6)), treeMat);
@@ -133,7 +137,7 @@ export class NatureView {
     this.soil.castShadow = false;
     const rowMat = new PainterlyMaterial({ vertexColors: true, wind: 0.35 });
     this.rows = make(fieldRowsGeometry(), capacity, rowMat);
-    this.signs = make(signpostGeometry(), 2000);
+    this.signs = make(signpostGeometry(), 2000, mat, false);
     this.group.name = "nature";
   }
 
@@ -346,6 +350,7 @@ export class NatureView {
       mesh.count = Math.min(c, mesh.instanceMatrix.count);
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      this.chunks.get(mesh)?.partition();
     }
   }
 
