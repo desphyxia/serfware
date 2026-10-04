@@ -153,7 +153,7 @@ export class PlanetCamera {
         return;
       }
       if (this.dragButton === 2 || this.dragButton === 1 || e.shiftKey) {
-        this.tHeading += dx * 0.005;
+        this.tHeading -= dx * 0.005;
         this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - dy * 0.004, -0.6, 0.5);
       } else {
         this.pan(-dx, dy, r.height);
