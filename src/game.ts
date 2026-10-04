@@ -2610,7 +2610,7 @@ export class Game {
   /** Select the settler under the pointer, if any. */
   private pickPerson(): boolean {
     if (Math.abs(this.pointer.x) > 1) return false;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
+    if (!this.aimRay()) return false;
     const id = this.view.econ.pickSettler(this.raycaster, Math.max(0.35, this.cam.distance * 0.012));
     const s = id >= 0 ? this.world.economy.settlers[id] : undefined;
     if (!s || s.person < 0 || s.owner !== this.session.player) return false;
@@ -2639,8 +2639,14 @@ export class Game {
     if (!this.pointerDirty) return;
     this.pointerDirty = false;
     if (Math.abs(this.pointer.x) > 1) return;
+    this.setHover(this.aimRay() ? this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? this.hoverTile : 0) : -1);
+  }
+
+  /** Aim the shared raycaster through the pointer; false when no sound ray exists. */
+  private aimRay(): boolean {
+    if (this.cam.rayAt(this.pointer.x, this.pointer.y, this.raycaster.ray)) return true;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    this.setHover(this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? this.hoverTile : 0));
+    return Number.isFinite(this.raycaster.ray.direction.x + this.raycaster.ray.direction.y + this.raycaster.ray.direction.z);
   }
 
   private setHover(tile: number): void {
@@ -2661,6 +2667,9 @@ export class Game {
       ["Moisture", `${Math.round((terrain.moisture[tile] as number) * 100)} %`],
     ];
     const land = this.world.land;
+    this.tools.hoverTile(tile);
+    const blocker = this.tools.hoverBlocker();
+    if (blocker) rows.unshift(["Can't build here", blocker]);
     if (land.feature[tile] === Feature.Giant) rows.push(["Ancient tree", land.variety[tile] === 1 ? "marked for felling" : `${land.amount[tile]} logs · Demolish marks it`]);
     else if (land.feature[tile] === Feature.Hedge) rows.push(["Hedgerow", "shelters fields"]);
     else if (land.feature[tile] === Feature.Vent) {

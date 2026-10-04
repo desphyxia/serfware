@@ -592,6 +592,62 @@ export class LandUse {
     return best;
   }
 
+  /** Why a flag can't stand on `t` for `owner`, or null if it can. */
+  flagBlocker(t: number, owner = 0, foothold = false): string | null {
+    if (this.use[t] === Use.Flag) return null;
+    if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) return "water";
+    if (!(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return "outside your border";
+    if (this.use[t] === Use.Building) return "a building";
+    const f = this.feature[t];
+    if (f === Feature.Tree) return "a tree";
+    if (f === Feature.Rock) return "a rock";
+    if (f !== Feature.None && f !== Feature.Shrub) return "something growing or standing there";
+    if (this.slope(t) >= 2.2) return "too steep";
+    for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return "another flag next to it";
+    return this.canPlaceFlag(t, owner, foothold) ? null : "in the way";
+  }
+
+  /**
+   * Why `def` can't be built on `t` for `owner`, as a sentence, or null if it can. When no
+   * neighbour can take the flag, the reasons for each neighbour are summed up.
+   */
+  buildBlocker(t: number, def: BuildingDef, owner = 0, foothold = false): string | null {
+    const grid = this.planet.grid;
+    if (!this.isLand(t)) return "Buildings go on dry land.";
+    if (!(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return "That's outside your border.";
+    if (grid.degree(t) === 5) return "Star Wells are sacred ground.";
+    if (this.use[t] === Use.Building) return "There's already a building here.";
+    if (this.use[t] === Use.Flag) return "A flag stands here.";
+    if (this.use[t] === Use.Road) return "A road runs over this spot.";
+    const f = this.feature[t];
+    if (f !== Feature.None && f !== Feature.Shrub && def.terrain !== "giant") {
+      const what = f === Feature.Tree ? "A tree" : f === Feature.Rock ? "A rock" : f === Feature.Field ? "A field" : f === Feature.Giant ? "An ancient tree" : "Something";
+      return `${what} is in the way.`;
+    }
+    const maxSlope = def.terrain === "mountain" ? 3.2 : def.large ? MAX_LEVEL_SLOPE : 1.3;
+    if (this.slope(t) > maxSlope) return "The ground is too steep here.";
+    const flagTile = this.bestFlagTile(t, owner, foothold);
+    if (flagTile < 0) {
+      const why = new Map<string, number>();
+      for (const n of grid.neighborsOf(t)) {
+        const r = this.flagBlocker(n, owner, foothold);
+        if (r) why.set(r, (why.get(r) ?? 0) + 1);
+      }
+      const top = [...why.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([r]) => r);
+      return `No room for this building's flag: the spots beside it are blocked (${top.join(", ") || "taken"}).`;
+    }
+    if (this.canBuildDef(t, flagTile, def, owner)) return null;
+    if (def.terrain === "mountain" && !this.isMountain(t)) return "This needs mountain ground.";
+    if (def.terrain === "coast" && !this.isCoast(t)) return "This needs to stand by the water.";
+    if (def.terrain === "aquifer") return "There's no water underground here.";
+    if (def.terrain === "vent") return "This must stand near a vent.";
+    if (def.terrain === "giant") return "This goes up an ancient giant tree.";
+    if (def.slots && this.lanternAt && this.ring(t, LANTERN_GAP - 1).some((n) => this.use[n] === Use.Building && this.lanternAt?.(n))) return "Too close to another lantern building.";
+    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Building && (def.large || this.largeAt?.(n) !== false)) return "Too close to a neighbouring building.";
+    if (def.large) return "A large building needs clear ground all round.";
+    return "It can't be built here.";
+  }
+
   /** Claim unowned tiles within `radius` steps of `center` for `owner`. */
   claim(center: number, radius: number, owner = 0): void {
     const grid = this.planet.grid;

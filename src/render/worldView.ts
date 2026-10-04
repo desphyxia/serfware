@@ -413,7 +413,7 @@ export class WorldView {
     const hit = new THREE.Vector3();
     for (let i = 0; i < 4; i++) {
       sphere.radius = r;
-      if (!ray.intersectSphere(sphere, hit)) return tile;
+      if (!ray.intersectSphere(sphere, hit) || !Number.isFinite(hit.x + hit.y + hit.z)) return tile;
       const d = hit.clone().normalize();
       tile = planet.grid.nearestTile([d.x, d.y, d.z], tile >= 0 ? tile : hint);
       r = this.field.tileRadius(tile);

@@ -64,6 +64,15 @@ export class Tools {
     this.refresh();
   }
 
+  /** Why the building in hand can't go on the hovered tile, or null (also null for other tools). */
+  hoverBlocker(): string | null {
+    if (this.hover < 0 || !this.isBuilding(this.tool)) return null;
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    if (!def) return null;
+    const land = this.host.world().land;
+    return land.buildBlocker(this.hover, def, this.host.player(), def.ferry !== undefined && land.territory[this.hover] === 0);
+  }
+
   private isBuilding(id: ToolId): boolean {
     return BUILDING_INDEX.has(id);
   }
@@ -206,9 +215,11 @@ export class Tools {
       default: {
         if (!this.isBuilding(this.tool)) return;
         const bdef = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
-        const flagTile = land.bestFlagTile(t, pl, bdef?.ferry !== undefined && land.territory[t] === 0);
-        if (flagTile < 0) {
-          this.host.notify("No room for this building's flag here.", "warn");
+        const foothold = bdef?.ferry !== undefined && land.territory[t] === 0;
+        const flagTile = land.bestFlagTile(t, pl, foothold);
+        const why = bdef ? land.buildBlocker(t, bdef, pl, foothold) : null;
+        if (flagTile < 0 || why) {
+          this.host.notify(why ?? "No room for this building's flag here.", "warn");
           return;
         }
         if (this.host.command({ t: "build", type: this.tool, tile: t, flagTile })) {
