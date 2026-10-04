@@ -72,12 +72,46 @@ export class Tools {
     return this.isBuilding(this.tool);
   }
 
-  /** Turn the flag to the next (step 1) or previous (-1) side; "auto" sits before north. */
+  /** Can the building in hand stand on `t` with its flag on side `d` (-1: the game's pick)? */
+  private sideWorks(t: number, d: number): boolean {
+    const w = this.host.world();
+    const land = w.land;
+    const pl = this.host.player();
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    if (!def) return false;
+    const foothold = def.ferry !== undefined && land.territory[t] === 0;
+    const f = d < 0 ? land.bestFlagTile(t, pl, foothold) : land.neighborInDirection(t, d);
+    const existing = w.economy.flagAt(f);
+    return f >= 0 && land.canBuildDef(t, f, def, pl) && !(existing && existing.building >= 0);
+  }
+
+  /**
+   * Turn the flag to the next (step 1) or previous (-1) side that works on the hovered tile,
+   * skipping sides that don't; "auto" sits before north.
+   */
   rotateFlag(step: number): void {
     if (!this.placing()) return;
     const n = FLAG_DIRS.length + 1;
-    this.setFlagDir((((this.flagDir + 1 + step) % n) + n) % n - 1);
-    this.refresh();
+    // With no spot under the pointer (a phone, before the tap) there is nothing to check yet.
+    if (this.hover < 0) {
+      this.setFlagDir((((this.flagDir + 1 + step) % n) + n) % n - 1);
+      return;
+    }
+    const land = this.host.world().land;
+    const pl = this.host.player();
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    const foothold = def?.ferry !== undefined && land.territory[this.hover] === 0;
+    const flagOf = (d: number) => (d < 0 ? land.bestFlagTile(this.hover, pl, foothold) : land.neighborInDirection(this.hover, d));
+    const here = flagOf(this.flagDir);
+    for (let i = 1; i < n; i++) {
+      const d = ((((this.flagDir + 1 + step * i) % n) + n) % n) - 1;
+      // A side that lands on the same tile as the current one is no change.
+      if (flagOf(d) === here || !this.sideWorks(this.hover, d)) continue;
+      this.setFlagDir(d);
+      this.refresh();
+      return;
+    }
+    this.host.notify("The flag can only go on one side here.", "info");
   }
 
   private setFlagDir(d: number): void {
