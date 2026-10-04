@@ -2061,7 +2061,7 @@ export class Game {
         if (this.painting) return this.paintClick(this.hoverTile);
         if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
-        this.tools.click(this.hoverTile);
+        this.tools.click(this.hoverTile, e.pointerType === "touch");
       }
       else if (d.button === 2) this.tools.cancel();
     });

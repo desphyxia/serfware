@@ -36,6 +36,8 @@ export class Tools {
   tool: ToolId = "select";
   private roadStart = -1;
   private hover = -1;
+  /** Touch placement: the tile the first tap put the ghost on, waiting for a second tap. -1 if none. */
+  private pending = -1;
   private markerKey = "";
   private demolishArm = -1;
   private demolishTime = 0;
@@ -49,12 +51,18 @@ export class Tools {
     this.roadStart = -1;
     this.demolishArm = -1;
     this.markerKey = "";
+    this.pending = -1;
     if (!this.isBuilding(id)) this.setFlagDir(-1);
     this.host.toolChanged(id);
     this.refresh();
   }
 
   cancel(): boolean {
+    if (this.pending >= 0) {
+      this.pending = -1;
+      this.refresh();
+      return true;
+    }
     if (this.tool === "road" && this.roadStart >= 0) {
       this.roadStart = -1;
       this.refresh();
@@ -65,6 +73,11 @@ export class Tools {
       return true;
     }
     return false;
+  }
+
+  /** The tile the building ghost sits on: the one a touch tap chose, else the hovered one. */
+  private at(): number {
+    return this.pending >= 0 ? this.pending : this.hover;
   }
 
   /** Is a building in hand, so the flag direction can be turned? */
@@ -93,20 +106,20 @@ export class Tools {
     if (!this.placing()) return;
     const n = FLAG_DIRS.length + 1;
     // With no spot under the pointer (a phone, before the tap) there is nothing to check yet.
-    if (this.hover < 0) {
+    if (this.at() < 0) {
       this.setFlagDir((((this.flagDir + 1 + step) % n) + n) % n - 1);
       return;
     }
     const land = this.host.world().land;
     const pl = this.host.player();
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
-    const foothold = def?.ferry !== undefined && land.territory[this.hover] === 0;
-    const flagOf = (d: number) => (d < 0 ? land.bestFlagTile(this.hover, pl, foothold) : land.neighborInDirection(this.hover, d));
+    const foothold = def?.ferry !== undefined && land.territory[this.at()] === 0;
+    const flagOf = (d: number) => (d < 0 ? land.bestFlagTile(this.at(), pl, foothold) : land.neighborInDirection(this.at(), d));
     const here = flagOf(this.flagDir);
     for (let i = 1; i < n; i++) {
       const d = ((((this.flagDir + 1 + step * i) % n) + n) % n) - 1;
       // A side that lands on the same tile as the current one is no change.
-      if (flagOf(d) === here || !this.sideWorks(this.hover, d)) continue;
+      if (flagOf(d) === here || !this.sideWorks(this.at(), d)) continue;
       this.setFlagDir(d);
       this.refresh();
       return;
@@ -134,13 +147,13 @@ export class Tools {
 
   /** Why the building in hand can't go on the hovered tile, or null (also null for other tools). */
   hoverBlocker(): string | null {
-    if (this.hover < 0 || !this.isBuilding(this.tool)) return null;
+    if (this.at() < 0 || !this.isBuilding(this.tool)) return null;
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return null;
     const land = this.host.world().land;
     const pl = this.host.player();
-    const foothold = def.ferry !== undefined && land.territory[this.hover] === 0;
-    return land.buildBlocker(this.hover, def, pl, foothold, this.flagDir < 0 ? -1 : this.flagTileFor(this.hover, pl, foothold));
+    const foothold = def.ferry !== undefined && land.territory[this.at()] === 0;
+    return land.buildBlocker(this.at(), def, pl, foothold, this.flagDir < 0 ? -1 : this.flagTileFor(this.at(), pl, foothold));
   }
 
   private isBuilding(id: ToolId): boolean {
@@ -152,7 +165,7 @@ export class Tools {
     const w = this.host.world();
     const land = w.land;
     const ov = this.host.overlays();
-    const t = this.hover;
+    const t = this.at();
     ov.setPreview(null, false);
     ov.setGhost(null, -1, -1, false);
 
@@ -200,7 +213,7 @@ export class Tools {
     return land.findPath(from, to, (x) => land.roadable(x, pl), 2500);
   }
 
-  click(t: number): void {
+  click(t: number, touch = false): void {
     const w = this.host.world();
     const land = w.land;
     const eco = w.economy;
@@ -284,6 +297,15 @@ export class Tools {
       }
       default: {
         if (!this.isBuilding(this.tool)) return;
+        // Touch has no hover: the first tap shows the ghost (turn its flag with the Flag button),
+        // a second tap on the same spot places it.
+        if (touch && this.pending !== t) {
+          this.pending = t;
+          this.refresh();
+          const why = this.hoverBlocker();
+          if (why) this.host.notify(why, "warn");
+          return;
+        }
         const bdef = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
         const foothold = bdef?.ferry !== undefined && land.territory[t] === 0;
         const flagTile = this.flagTileFor(t, pl, foothold);
@@ -293,6 +315,7 @@ export class Tools {
           return;
         }
         if (this.host.command({ t: "build", type: this.tool, tile: t, flagTile })) {
+          this.pending = -1;
           const name = BUILDINGS[BUILDING_INDEX.get(this.tool) as number]?.name ?? "Building";
           // Flow into road building from the new flag, unless it already touches the network.
           const flag = eco.flagAt(flagTile);

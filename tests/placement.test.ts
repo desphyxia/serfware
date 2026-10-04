@@ -291,3 +291,37 @@ describe("rotating the flag", () => {
     }
   });
 });
+
+describe("touch placement", () => {
+  it("the first tap shows the ghost, the second on the same spot places the building", () => {
+    const w = new World(SEED, { size: "small" });
+    const land = w.land;
+    const hut = def("woodcutter");
+    const ghosts: number[] = [];
+    const ov = { setPreview() {}, setMarkers() {}, setGhost: (_id: string | null, tile: number) => ghosts.push(tile) };
+    const built: unknown[] = [];
+    const tools = new Tools({
+      world: () => w,
+      player: () => 0,
+      overlays: () => ov as never,
+      command: (cmd) => {
+        built.push(cmd);
+        return true;
+      },
+      notify: () => {},
+      select: () => {},
+      toolChanged: () => {},
+      flagDirChanged: () => {},
+    });
+    const t = [...Array(land.territory.length).keys()].find((i) => land.territory[i] === 1 && land.buildBlocker(i, hut, 0) === null)!;
+    tools.set("woodcutter");
+    tools.click(t, true);
+    expect(built).toHaveLength(0);
+    expect(ghosts.at(-1)).toBe(t);
+    // Lifting the finger clears the hover, but the ghost stays for the second tap.
+    tools.hoverTile(-1);
+    expect(ghosts.at(-1)).toBe(t);
+    tools.click(t, true);
+    expect(built).toHaveLength(1);
+  });
+});
