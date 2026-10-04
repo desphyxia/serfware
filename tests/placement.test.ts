@@ -264,7 +264,7 @@ describe("rotating the flag", () => {
     const w = new World(SEED, { size: "small" });
     const land = w.land;
     const hut = def("woodcutter");
-    const ov = { setPreview() {}, setGhost() {}, setMarkers() {} };
+    const ov = { setPreview() {}, setGhost() {}, setMarkers() {}, setAnchor() {} };
     const dirs: (string | null)[] = [];
     const tools = new Tools({
       world: () => w,
@@ -298,7 +298,7 @@ describe("touch placement", () => {
     const land = w.land;
     const hut = def("woodcutter");
     const ghosts: number[] = [];
-    const ov = { setPreview() {}, setMarkers() {}, setGhost: (_id: string | null, tile: number) => ghosts.push(tile) };
+    const ov = { setPreview() {}, setMarkers() {}, setAnchor() {}, setGhost: (_id: string | null, tile: number) => ghosts.push(tile) };
     const built: unknown[] = [];
     const tools = new Tools({
       world: () => w,
