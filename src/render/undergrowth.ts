@@ -18,7 +18,7 @@ export function bushGeometry(): THREE.BufferGeometry {
     [-0.12, 0.11, -0.04, 0.15],
     [0.02, 0.1, -0.14, 0.13],
   ];
-  const geos = lumps.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 1).translate(x, y, z).toNonIndexed());
+  const geos = lumps.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 1).translate(x, y, z));
   const out = new THREE.BufferGeometry();
   const count = geos.reduce((s, g) => s + g.getAttribute("position").count, 0);
   const pos = new Float32Array(count * 3);
@@ -45,7 +45,7 @@ export function bushGeometry(): THREE.BufferGeometry {
 }
 
 function boulderGeometry(): THREE.BufferGeometry {
-  const g = new THREE.DodecahedronGeometry(0.22, 0).toNonIndexed();
+  const g = new THREE.DodecahedronGeometry(0.22, 0);
   const p = g.getAttribute("position");
   for (let i = 0; i < p.count; i++) {
     const y = p.getY(i);

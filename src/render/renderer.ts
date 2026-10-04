@@ -1,8 +1,8 @@
 import * as THREE from "three/webgpu";
 import {
   clamp,
-  colorToDirection,
-  directionToColor,
+  unpackRGBToNormal,
+  packNormalToRGB,
   dot,
   emissive,
   float,
@@ -181,7 +181,7 @@ export class GameRenderer {
     // which is what phones' tile-based GPUs run out of first.
     if (g.ao || g.bloom) {
       const targets: Record<string, THREE.Node> = { output };
-      if (g.ao) targets.normal = directionToColor(normalView);
+      if (g.ao) targets.normal = packNormalToRGB(normalView);
       if (g.bloom) targets.emissive = emissive;
       scenePass.setMRT(mrt(targets));
     }
@@ -191,7 +191,7 @@ export class GameRenderer {
     if (g.ao) {
       const depth = scenePass.getTextureNode("depth");
       const normalTex = scenePass.getTextureNode("normal");
-      const normal = sample((suv: THREE.Node<"vec2">) => colorToDirection(normalTex.sample(suv).rgb));
+      const normal = sample((suv: THREE.Node<"vec2">) => unpackRGBToNormal(normalTex.sample(suv).rgb));
       const aoPass = ao(depth, normal, this.camera);
       aoPass.resolutionScale = 0.5;
       const occ = aoPass.getTextureNode().r;
@@ -228,7 +228,7 @@ export class GameRenderer {
     const dpr = Math.min(2, window.devicePixelRatio || 1) * g.resolutionScale;
     this.renderer.setPixelRatio(dpr);
     this.renderer.shadowMap.enabled = g.shadows !== "off";
-    this.renderer.shadowMap.type = g.shadows === "soft" ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.rebuild();
     this.resize();
   }
