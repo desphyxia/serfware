@@ -52,13 +52,23 @@ export class Ambience {
 
   constructor(settings: AudioSettings) {
     this.settings = settings;
-    const start = () => {
+    // Chrome only lets an AudioContext run after an activating gesture (not a modifier key or a
+    // bare pointerdown on touch), so keep listening until the context is actually running.
+    const events = ["pointerup", "click", "keydown", "touchend"] as const;
+    const start = (e: Event) => {
+      if (e instanceof KeyboardEvent && (e.key === "Escape" || e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta" || /^F\d+$/.test(e.key))) return;
       this.start();
-      window.removeEventListener("pointerdown", start);
-      window.removeEventListener("keydown", start);
+      const ctx = this.ctx;
+      if (!ctx) return;
+      if (ctx.state === "running") {
+        for (const n of events) window.removeEventListener(n, start);
+      } else {
+        void ctx.resume().then(() => {
+          if (ctx.state === "running") for (const n of events) window.removeEventListener(n, start);
+        }, () => {});
+      }
     };
-    window.addEventListener("pointerdown", start);
-    window.addEventListener("keydown", start);
+    for (const n of events) window.addEventListener(n, start);
   }
 
   get running(): boolean {

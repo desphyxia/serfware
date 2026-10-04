@@ -58,8 +58,8 @@ function fishGeometry(): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(0.05, 7, 5).scale(0.55, 0.7, 2.2);
   const tail = new THREE.ConeGeometry(0.045, 0.07, 4).rotateX(-Math.PI / 2).scale(0.3, 1, 1).translate(0, 0, -0.13);
   const merged = new THREE.BufferGeometry();
-  const a = g.toNonIndexed();
-  const b = tail.toNonIndexed();
+  const a = g.index ? g.toNonIndexed() : g;
+  const b = tail.index ? tail.toNonIndexed() : tail;
   const pos = new Float32Array([...(a.getAttribute("position").array as Float32Array), ...(b.getAttribute("position").array as Float32Array)]);
   merged.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   merged.computeVertexNormals();

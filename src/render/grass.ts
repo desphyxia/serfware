@@ -71,7 +71,7 @@ export class GrassPatch {
     this.flowers.count = 0;
     this.flowers.frustumCulled = false;
     // Pebbles: small flattened stones, darker underneath.
-    const pebble = new THREE.DodecahedronGeometry(0.05, 0).scale(1.2, 0.55, 1).translate(0, 0.012, 0).toNonIndexed();
+    const pebble = new THREE.DodecahedronGeometry(0.05, 0).scale(1.2, 0.55, 1).translate(0, 0.012, 0);
     pebble.computeVertexNormals();
     const pp = pebble.getAttribute("position");
     const pc = new Float32Array(pp.count * 3);
