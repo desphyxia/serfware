@@ -26,12 +26,23 @@ export class PlanetCamera {
   readonly minDistance = 5;
   readonly maxDistance: number;
 
+  /**
+   * What "north" means for the heading. It is carried along as the focus moves (parallel
+   * transport) instead of being the planet's pole direction, so panning across a pole does not
+   * spin the view; Home (resetView) realigns it with true north.
+   */
+  private readonly refNorth = new THREE.Vector3(0, 1, 0);
+  private readonly moved = new THREE.Quaternion();
+  private groundR = -1;
   private readonly up = new THREE.Vector3();
   private readonly north = new THREE.Vector3();
   private readonly east = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private readonly ground = new THREE.Vector3();
+  private readonly forward2 = new THREE.Vector3();
+  private readonly right2 = new THREE.Vector3();
+  private readonly up2 = new THREE.Vector3();
   private readonly keys = new Set<string>();
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private dragButton = -1;
@@ -73,6 +84,15 @@ export class PlanetCamera {
 
   /** Back to north-up and the default tilt. */
   resetView(): void {
+    // Fold the drift between the carried north and true north into the heading, so the view
+    // does not jump, then turn smoothly to north-up.
+    this.basis(this.focus);
+    const trueNorth = this.truthNorth(this.focus);
+    const east = new THREE.Vector3().crossVectors(trueNorth, this.up);
+    const a = Math.atan2(this.refNorth.dot(east), this.refNorth.dot(trueNorth));
+    this.heading += a;
+    this.tHeading += a;
+    this.refNorth.copy(trueNorth);
     this.tHeading = Math.round(this.tHeading / (Math.PI * 2)) * Math.PI * 2;
     this.tPitchOffset = 0;
   }
@@ -80,6 +100,7 @@ export class PlanetCamera {
   lookAt(dir: THREE.Vector3, distance?: number): void {
     this.tFocus.copy(dir).normalize();
     this.focus.copy(this.tFocus);
+    this.refNorth.copy(this.truthNorth(this.focus));
     if (distance !== undefined) this.distance = this.tDistance = THREE.MathUtils.clamp(distance, this.minDistance, this.maxDistance);
   }
 
@@ -130,7 +151,7 @@ export class PlanetCamera {
         return;
       }
       if (this.dragButton === 2 || this.dragButton === 1 || e.shiftKey) {
-        this.tHeading -= dx * 0.005;
+        this.tHeading += dx * 0.005;
         this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - dy * 0.004, -0.6, 0.5);
       } else {
         this.pan(-dx, dy, r.height);
@@ -213,14 +234,19 @@ export class PlanetCamera {
 
     // Smooth toward targets.
     const s = 1 - Math.exp(-dt * 9);
+    this.moved.setFromUnitVectors(this.focus, this.tFocus.clone().lerp(this.focus, 1 - s).normalize());
     this.focus.lerp(this.tFocus, s).normalize();
+    this.refNorth.applyQuaternion(this.moved).normalize();
     this.heading += (this.tHeading - this.heading) * s;
     this.distance += (this.tDistance - this.distance) * s;
     this.pitchOffset += (this.tPitchOffset - this.pitchOffset) * s;
 
     this.basis(this.focus);
-    const gr = Math.max(this.radius, this.surfaceRadius(this.focus));
-    this.ground.copy(this.focus).multiplyScalar(gr);
+    // The ground height under the focus is smoothed, so panning over hills and valleys does not
+    // bob the camera up and down.
+    const grNow = Math.max(this.radius, this.surfaceRadius(this.focus));
+    this.groundR = this.groundR < 0 ? grNow : this.groundR + (grNow - this.groundR) * (1 - Math.exp(-dt * 3));
+    this.ground.copy(this.focus).multiplyScalar(this.groundR);
     const p = this.pitch();
     const cam = this.camera;
     cam.position
@@ -239,14 +265,38 @@ export class PlanetCamera {
     cam.updateProjectionMatrix();
   }
 
+  /**
+   * Ray through a point of the screen (x, y in -1..1), built from the camera's own pose rather
+   * than the renderer's matrices, so picking never depends on the graphics backend's depth
+   * convention or on matrices the renderer has not refreshed yet. False if the pose is unusable.
+   */
+  rayAt(x: number, y: number, out: THREE.Ray): boolean {
+    const aspect = this.camera.aspect;
+    this.forward2.copy(this.ground).sub(this.camera.position).normalize();
+    this.right2.crossVectors(this.forward2, this.camera.up).normalize();
+    this.up2.crossVectors(this.right2, this.forward2);
+    const k = Math.tan((this.camera.fov * Math.PI) / 360);
+    out.origin.copy(this.camera.position);
+    out.direction.copy(this.forward2).addScaledVector(this.right2, x * k * aspect).addScaledVector(this.up2, y * k).normalize();
+    return Number.isFinite(out.direction.x + out.direction.y + out.direction.z + out.origin.x + out.origin.y + out.origin.z);
+  }
+
   groundPoint(): THREE.Vector3 {
     return this.ground;
   }
 
+  /** The planet's north (towards the pole) at a point on the surface. */
+  private truthNorth(dir: THREE.Vector3): THREE.Vector3 {
+    const up = dir.clone().normalize();
+    const n = new THREE.Vector3(0, 1, 0).addScaledVector(up, -up.y);
+    if (n.lengthSq() < 1e-6) n.set(1, 0, 0).addScaledVector(up, -up.x);
+    return n.normalize();
+  }
+
   private basis(dir: THREE.Vector3): void {
     this.up.copy(dir).normalize();
-    this.north.set(0, 1, 0).addScaledVector(this.up, -this.up.y);
-    if (this.north.lengthSq() < 1e-6) this.north.set(1, 0, 0).addScaledVector(this.up, -this.up.x);
+    this.north.copy(this.refNorth).addScaledVector(this.up, -this.refNorth.dot(this.up));
+    if (this.north.lengthSq() < 1e-6) this.north.copy(this.truthNorth(this.up));
     this.north.normalize();
     this.east.crossVectors(this.north, this.up);
     this.forward.copy(this.north).multiplyScalar(Math.cos(this.heading)).addScaledVector(this.east, Math.sin(this.heading));
