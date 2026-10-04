@@ -649,6 +649,17 @@ input.switch {
   position: static;
   transform: none;
 }
+.bb-turn {
+  padding: 8px 14px;
+  min-height: 40px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.bb-turn[hidden] { display: none; }
 .bb.open {
   color: var(--ink);
   border-color: var(--line);

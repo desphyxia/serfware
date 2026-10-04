@@ -5,6 +5,7 @@ import type { World } from "./sim/world";
 import type { Overlays } from "./render/overlays";
 import type { ToolId } from "./ui/buildBar";
 import type { Selection } from "./ui/infoPanel";
+import { tr } from "./core/i18n";
 
 /** Open ground where a hedgerow can be planted. */
 function hedgeable(land: World["land"], t: number): boolean {
@@ -20,7 +21,12 @@ export interface ToolHost {
   notify(text: string, kind?: "info" | "warn" | "good"): void;
   select(sel: Selection): void;
   toolChanged(id: ToolId): void;
+  /** The side the next building's flag goes on changed (null: chosen automatically). */
+  flagDirChanged(label: string | null): void;
 }
+
+/** Compass sectors for the flag direction, clockwise from north (see LandUse.neighborInDirection). */
+export const FLAG_DIRS = [tr("north"), tr("north-east"), tr("south-east"), tr("south"), tr("south-west"), tr("north-west")];
 
 /**
  * Turns hover and clicks into commands. Road building works like Serf City: start at a flag,
@@ -33,6 +39,8 @@ export class Tools {
   private markerKey = "";
   private demolishArm = -1;
   private demolishTime = 0;
+  /** Which side the flag of a building being placed goes on: -1 picks the best, else 0..5 (FLAG_DIRS). */
+  private flagDir = -1;
 
   constructor(private readonly host: ToolHost) {}
 
@@ -41,6 +49,7 @@ export class Tools {
     this.roadStart = -1;
     this.demolishArm = -1;
     this.markerKey = "";
+    if (!this.isBuilding(id)) this.setFlagDir(-1);
     this.host.toolChanged(id);
     this.refresh();
   }
@@ -58,6 +67,65 @@ export class Tools {
     return false;
   }
 
+  /** Is a building in hand, so the flag direction can be turned? */
+  placing(): boolean {
+    return this.isBuilding(this.tool);
+  }
+
+  /** Can the building in hand stand on `t` with its flag on side `d` (-1: the game's pick)? */
+  private sideWorks(t: number, d: number): boolean {
+    const w = this.host.world();
+    const land = w.land;
+    const pl = this.host.player();
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    if (!def) return false;
+    const foothold = def.ferry !== undefined && land.territory[t] === 0;
+    const f = d < 0 ? land.bestFlagTile(t, pl, foothold) : land.neighborInDirection(t, d);
+    const existing = w.economy.flagAt(f);
+    return f >= 0 && land.canBuildDef(t, f, def, pl) && !(existing && existing.building >= 0);
+  }
+
+  /**
+   * Turn the flag to the next (step 1) or previous (-1) side that works on the hovered tile,
+   * skipping sides that don't; "auto" sits before north.
+   */
+  rotateFlag(step: number): void {
+    if (!this.placing()) return;
+    const n = FLAG_DIRS.length + 1;
+    // With no spot under the pointer (a phone, before the tap) there is nothing to check yet.
+    if (this.hover < 0) {
+      this.setFlagDir((((this.flagDir + 1 + step) % n) + n) % n - 1);
+      return;
+    }
+    const land = this.host.world().land;
+    const pl = this.host.player();
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    const foothold = def?.ferry !== undefined && land.territory[this.hover] === 0;
+    const flagOf = (d: number) => (d < 0 ? land.bestFlagTile(this.hover, pl, foothold) : land.neighborInDirection(this.hover, d));
+    const here = flagOf(this.flagDir);
+    for (let i = 1; i < n; i++) {
+      const d = ((((this.flagDir + 1 + step * i) % n) + n) % n) - 1;
+      // A side that lands on the same tile as the current one is no change.
+      if (flagOf(d) === here || !this.sideWorks(this.hover, d)) continue;
+      this.setFlagDir(d);
+      this.refresh();
+      return;
+    }
+    this.host.notify("The flag can only go on one side here.", "info");
+  }
+
+  private setFlagDir(d: number): void {
+    this.flagDir = d;
+    this.markerKey = "";
+    this.host.flagDirChanged(d < 0 ? null : (FLAG_DIRS[d] as string));
+  }
+
+  /** Where the flag of a building on `t` would stand: the chosen side, or the best spot. */
+  private flagTileFor(t: number, pl: number, foothold: boolean): number {
+    const land = this.host.world().land;
+    return this.flagDir < 0 ? land.bestFlagTile(t, pl, foothold) : land.neighborInDirection(t, this.flagDir);
+  }
+
   hoverTile(t: number): void {
     if (t === this.hover) return;
     this.hover = t;
@@ -70,7 +138,9 @@ export class Tools {
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return null;
     const land = this.host.world().land;
-    return land.buildBlocker(this.hover, def, this.host.player(), def.ferry !== undefined && land.territory[this.hover] === 0);
+    const pl = this.host.player();
+    const foothold = def.ferry !== undefined && land.territory[this.hover] === 0;
+    return land.buildBlocker(this.hover, def, pl, foothold, this.flagDir < 0 ? -1 : this.flagTileFor(this.hover, pl, foothold));
   }
 
   private isBuilding(id: ToolId): boolean {
@@ -87,7 +157,7 @@ export class Tools {
     ov.setGhost(null, -1, -1, false);
 
     const pl = this.host.player();
-    const key = `${this.tool}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}:${land.causewayVersion}`;
+    const key = `${this.tool}:${this.flagDir}:${pl}:${land.useVersion}:${land.featureVersion}:${land.territoryVersion}:${land.causewayVersion}`;
     if (key !== this.markerKey) {
       this.markerKey = key;
       const tiles: number[] = [];
@@ -96,7 +166,7 @@ export class Tools {
         for (let i = 0; i < land.territory.length; i++) {
           const free = def?.ferry !== undefined && land.territory[i] === 0;
           if (land.territory[i] !== pl + 1 && !free) continue;
-          if (def ? land.canBuildDef(i, land.bestFlagTile(i, pl, free), def, pl) : land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
+          if (def ? land.canBuildDef(i, this.flagTileFor(i, pl, free), def, pl) : land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
         }
       } else if (this.tool === "hedge") {
         for (let i = 0; i < land.territory.length; i++) if (land.territory[i] === pl + 1 && hedgeable(land, i)) tiles.push(i);
@@ -113,7 +183,7 @@ export class Tools {
       ov.setGhost("flag", t, -1, land.canPlaceFlag(t, pl));
     } else if (this.isBuilding(this.tool)) {
       const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
-      const flagTile = land.bestFlagTile(t, pl, def?.ferry !== undefined && land.territory[t] === 0);
+      const flagTile = this.flagTileFor(t, pl, def?.ferry !== undefined && land.territory[t] === 0);
       const eco = w.economy;
       const existing = eco.flagAt(flagTile);
       const ok = flagTile >= 0 && !!def && land.canBuildDef(t, flagTile, def, pl) && !(existing && existing.building >= 0);
@@ -216,8 +286,8 @@ export class Tools {
         if (!this.isBuilding(this.tool)) return;
         const bdef = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
         const foothold = bdef?.ferry !== undefined && land.territory[t] === 0;
-        const flagTile = land.bestFlagTile(t, pl, foothold);
-        const why = bdef ? land.buildBlocker(t, bdef, pl, foothold) : null;
+        const flagTile = this.flagTileFor(t, pl, foothold);
+        const why = bdef ? land.buildBlocker(t, bdef, pl, foothold, this.flagDir < 0 ? -1 : flagTile) : null;
         if (flagTile < 0 || why) {
           this.host.notify(why ?? "No room for this building's flag here.", "warn");
           return;

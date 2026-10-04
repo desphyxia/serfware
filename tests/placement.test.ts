@@ -3,6 +3,7 @@ import { BUILDINGS, buildingType, goodId } from "../src/sim/econ/defs";
 import { LANTERN_GAP, LEVEL_SLOPE, MAX_LEVEL_SLOPE } from "../src/sim/econ/landuse";
 import { placeConnected, placeOn } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
+import { Tools } from "../src/tools";
 
 const SEED = "russet-heron-417";
 const def = (id: string) => BUILDINGS[buildingType(id)]!;
@@ -230,5 +231,63 @@ describe("placement reasons", () => {
     }
     expect(ok).toBeGreaterThan(0);
     expect(blocked).toBeGreaterThan(0);
+  });
+});
+
+describe("flag direction", () => {
+  it("each compass sector picks a neighbour, and the six sectors reach distinct sides on a hex tile", () => {
+    const w = new World(SEED, { size: "small" });
+    const grid = w.planet.grid;
+    const t = [...Array(grid.count).keys()].find((i) => grid.degree(i) === 6 && w.land.isLand(i))!;
+    const picks = [0, 1, 2, 3, 4, 5].map((d) => w.land.neighborInDirection(t, d));
+    for (const p of picks) expect(grid.neighborsOf(t)).toContain(p);
+    expect(new Set(picks).size).toBe(6);
+  });
+
+  it("a blocked chosen side is explained", () => {
+    const w = new World(SEED, { size: "small" });
+    const land = w.land;
+    const grid = land.planet.grid;
+    const hut = def("woodcutter");
+    const t = [...Array(grid.count).keys()].find((i) => land.territory[i] === 1 && land.buildBlocker(i, hut, 0) === null)!;
+    const sides = [0, 1, 2, 3, 4, 5].map((d) => land.neighborInDirection(t, d));
+    // Any side the building can't take is explained as a flag problem; the others come back clear.
+    for (const side of sides) {
+      const why = land.buildBlocker(t, hut, 0, false, side);
+      expect(why === null || /flag can't go that way/.test(why)).toBe(true);
+    }
+  });
+});
+
+describe("rotating the flag", () => {
+  it("only stops on sides where the building works", () => {
+    const w = new World(SEED, { size: "small" });
+    const land = w.land;
+    const hut = def("woodcutter");
+    const ov = { setPreview() {}, setGhost() {}, setMarkers() {} };
+    const dirs: (string | null)[] = [];
+    const tools = new Tools({
+      world: () => w,
+      player: () => 0,
+      overlays: () => ov as never,
+      command: () => false,
+      notify: () => {},
+      select: () => {},
+      toolChanged: () => {},
+      flagDirChanged: (l) => dirs.push(l),
+    });
+    // A spot where some, but not all, sides take the flag.
+    const t = [...Array(land.territory.length).keys()].find((i) => {
+      if (land.territory[i] !== 1) return false;
+      const ok = [0, 1, 2, 3, 4, 5].filter((d) => land.canBuildDef(i, land.neighborInDirection(i, d), hut, 0)).length;
+      return ok > 1 && ok < 6;
+    });
+    if (t === undefined) return;
+    tools.set("woodcutter");
+    tools.hoverTile(t);
+    for (let i = 0; i < 12; i++) {
+      tools.rotateFlag(1);
+      expect(land.buildBlocker(t, hut, 0, false, dirs.at(-1) === null ? -1 : land.neighborInDirection(t, ["north", "north-east", "south-east", "south", "south-west", "north-west"].indexOf(dirs.at(-1)!)))).toBeNull();
+    }
   });
 });
