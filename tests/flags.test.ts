@@ -29,4 +29,20 @@ describe("a building's flag", () => {
     const beside = [...land.planet.grid.neighborsOf(free!)].find((t) => land.bestFlagTile(t, 0) === free && land.canBuildDef(t, free!, def, 0));
     if (beside !== undefined) expect(land.bestFlagTile(beside, 0)).toBe(free);
   });
+
+  it("may stand on the tiles right around the Hearthship, but never next to another flag", () => {
+    const w = new World("russet-heron-417", { size: "small" });
+    const eco = w.economy;
+    const land = w.land;
+    const keep = eco.buildings[eco.keeps[0]!]!;
+    const keepFlag = eco.flags[keep.flag]!.tile;
+    const ring = [...land.planet.grid.neighborsOf(keep.tile)].filter((t) => t !== keepFlag);
+    const ok = ring.filter((t) => land.canPlaceFlag(t, 0));
+    expect(ok.length).toBeGreaterThan(0);
+    // Tiles beside the Hearthship's own flag still keep the spacing rule.
+    for (const t of ring) if (land.planet.grid.neighborsOf(t).includes(keepFlag)) expect(land.canPlaceFlag(t, 0)).toBe(false);
+    const t = ok[0]!;
+    expect(w.command({ t: "flag", tile: t }).ok).toBe(true);
+    expect(land.use[t]).toBe(Use.Flag);
+  });
 });

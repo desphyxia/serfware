@@ -535,9 +535,12 @@ export class LandUse {
 
   canPlaceFlag(t: number, owner = 0, foothold = false): boolean {
     if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
-    if (this.use[t] === Use.Blocked) return false;
+    // Tiles reserved around the Hearthship are Blocked for buildings but may carry a flag; a lone
+    // Blocked tile (a hamlet) may not.
+    const grid = this.planet.grid;
+    if (this.use[t] === Use.Blocked && !grid.neighborsOf(t).some((n) => this.use[n] === Use.Building)) return false;
     // Flags need breathing room: no neighbouring flag.
-    for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
+    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
     return this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0);
   }
 
@@ -583,7 +586,8 @@ export class LandUse {
     for (const n of grid.neighborsOf(t)) {
       if (this.use[n] === Use.Flag) continue;
       if (!this.canPlaceFlag(n, owner, foothold)) continue;
-      const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + n * 1e-9;
+      // The ring around the Hearthship is a last resort: automatic flags keep clear of it.
+      const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + (this.use[n] === Use.Blocked ? 1e6 : 0) + n * 1e-9;
       if (s < bestScore) {
         bestScore = s;
         best = n;
