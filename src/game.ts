@@ -31,6 +31,7 @@ import { makeSave, replaySave, ReplaySession, SoloSession, type SaveFile, type S
 import { GameMenu, saveMeta, type SaveMeta } from "./ui/gameMenu";
 import { demoSettlement, placeConnected, placeOn, starterChain } from "./sim/econ/planner";
 import { Tools } from "./tools";
+import { BuildingIcons } from "./render/buildingIcons";
 import { BuildBar, Toasts, type ToolId } from "./ui/buildBar";
 import { DebugPanel } from "./ui/debugPanel";
 import { EconomyPanel } from "./ui/economyPanel";
@@ -106,6 +107,8 @@ export class Game {
   private readonly report: ReportPanel;
   private readonly inspector: HTMLElement;
   private readonly buildBar: BuildBar;
+  /** Pictures for the build menu, made the first time they are asked for. */
+  private buildIcons: BuildingIcons | null = null;
   private readonly toasts = new Toasts();
   private readonly info: InfoPanel;
   private readonly economyPanel: EconomyPanel;
@@ -337,6 +340,11 @@ export class Game {
       },
       () => this.diplomacy.toggle(),
       () => this.tools.rotateFlag(1),
+      (id) => {
+        if (!this.settings.get().ui.buildIcons) return null;
+        this.buildIcons ??= new BuildingIcons(this.gfx.renderer);
+        return this.buildIcons.get(id);
+      },
     );
     this.buildBar.hint = (t) => this.toasts.show(t, "info");
     this.diplomacy = new DiplomacyPanel(

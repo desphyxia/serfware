@@ -96,6 +96,8 @@ export class BuildBar {
     private readonly onDiplomacy: () => void = () => {},
     /** Turn the flag of the building being placed to its next side. */
     private readonly onTurnFlag: () => void = () => {},
+    /** A small picture of a building (data URL) when the menu should show them, else null. */
+    private readonly icon: (id: string) => Promise<string | null> | null = () => null,
   ) {
     const bar = h("div", { class: "buildbar", role: "toolbar", "aria-label": "Build tools" });
     const add = (id: string, label: string, key: string, icon: string, hint: string, fn: () => void) => {
@@ -172,12 +174,22 @@ export class BuildBar {
     this.popover.replaceChildren(
       ...[...defs, ...extra].map((d) => {
         const why = this.locked(d.id);
-        return h(
+        const pic = this.icon(d.id);
+        const text = h("span", { class: "pop-text" }, h("span", { class: "pop-name" }, d.name), h("span", { class: "pop-cost" }, why ? "locked" : costText(d)));
+        const item = h(
           "button",
-          { class: `pop-item${why ? " locked" : ""}`, role: "menuitem", title: why ?? d.description, "aria-disabled": why ? "true" : undefined, onclick: () => (why ? undefined : this.pick(d.id)) },
-          h("span", { class: "pop-name" }, d.name),
-          h("span", { class: "pop-cost" }, why ? "locked" : costText(d)),
+          { class: `pop-item${why ? " locked" : ""}${pic ? " with-icon" : ""}`, role: "menuitem", title: why ?? d.description, "aria-disabled": why ? "true" : undefined, onclick: () => (why ? undefined : this.pick(d.id)) },
+          text,
         );
+        if (pic) {
+          const img = h("img", { class: "pop-icon", alt: "", width: 40, height: 40, draggable: false });
+          item.prepend(img);
+          void pic.then((url) => {
+            if (url) img.src = url;
+            else img.classList.add("none");
+          });
+        }
+        return item;
       }),
     );
     this.popover.hidden = false;

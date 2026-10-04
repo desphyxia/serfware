@@ -1,0 +1,146 @@
+import * as THREE from "three/webgpu";
+import { buildingGeometry, hedgeGeometry } from "./models";
+
+/** Icon size in pixels (drawn at about half this in the menu, so it stays sharp on phones). */
+const SIZE = 96;
+
+/**
+ * Small pictures of the buildings for the build menu: each model is drawn once, on demand, into a
+ * tiny offscreen target of the game's own renderer, read back and kept as a data URL. Nothing is
+ * drawn until a menu with icons is opened, and one icon at a time, between frames.
+ */
+export class BuildingIcons {
+  private readonly cache = new Map<string, Promise<string | null>>();
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+  private readonly mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 });
+  private target: THREE.RenderTarget | null = null;
+  private flip: Promise<boolean> | null = null;
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly renderer: THREE.WebGPURenderer) {
+    this.scene.add(new THREE.HemisphereLight("#fff4e0", "#5a4a3a", 1.6));
+    const sun = new THREE.DirectionalLight("#fff0d0", 2.6);
+    sun.position.set(-3, 5, 4);
+    this.scene.add(sun);
+  }
+
+  /** The icon for a building (or tool) as a data URL, or null when it has no model. */
+  get(id: string): Promise<string | null> {
+    let p = this.cache.get(id);
+    if (!p) {
+      p = this.queue.then(() => this.draw(id)).catch(() => null);
+      this.queue = p;
+      this.cache.set(id, p);
+    }
+    return p;
+  }
+
+  private geometry(id: string): THREE.BufferGeometry | null {
+    if (id === "hedge") return hedgeGeometry();
+    if (id === "causeway" || id === "bridge") return null;
+    return buildingGeometry(id);
+  }
+
+  private async draw(id: string): Promise<string | null> {
+    const geo = this.geometry(id);
+    if (!geo) return null;
+    const flip = await this.needsFlip();
+    const pixels = await this.render(geo);
+    return toDataUrl(pixels, flip);
+  }
+
+  private async render(geo: THREE.BufferGeometry): Promise<Uint8Array> {
+    const mesh = new THREE.Mesh(geo, this.mat);
+    this.scene.add(mesh);
+    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    const s = geo.boundingSphere as THREE.Sphere;
+    const dist = (s.radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2))) * 1.02;
+    // From the front (+Z, where the door is), a little above and to the right.
+    const dir = new THREE.Vector3(0.55, 0.62, 1).normalize();
+    this.camera.position.copy(s.center).addScaledVector(dir, dist);
+    this.camera.lookAt(s.center);
+    this.camera.updateMatrixWorld();
+    try {
+      return await this.readTarget(this.scene, this.camera);
+    } finally {
+      this.scene.remove(mesh);
+    }
+  }
+
+  private async readTarget(scene: THREE.Scene, camera: THREE.Camera): Promise<Uint8Array> {
+    const r = this.renderer;
+    this.target ??= new THREE.RenderTarget(SIZE, SIZE, { depthBuffer: true, samples: 4 });
+    const prevTarget = r.getRenderTarget();
+    const prevColor = new THREE.Color();
+    r.getClearColor(prevColor);
+    const prevAlpha = r.getClearAlpha();
+    r.setRenderTarget(this.target);
+    r.setClearColor(0x000000, 0);
+    try {
+      r.render(scene, camera);
+    } finally {
+      r.setRenderTarget(prevTarget);
+      r.setClearColor(prevColor, prevAlpha);
+    }
+    const data = await r.readRenderTargetPixelsAsync(this.target, 0, 0, SIZE, SIZE);
+    return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + SIZE * SIZE * 4));
+  }
+
+  /** Backends differ on whether a read-back starts at the top or the bottom row: draw a test card to find out. */
+  private needsFlip(): Promise<boolean> {
+    this.flip ??= (async () => {
+      const scene = new THREE.Scene();
+      const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+      cam.position.z = 5;
+      const quad = (y: number, c: string) => {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 1), new THREE.MeshBasicMaterial({ color: c }));
+        m.position.y = y;
+        scene.add(m);
+      };
+      quad(0.5, "#ff0000");
+      quad(-0.5, "#0000ff");
+      const px = await this.readTarget(scene, cam);
+      // The first pixel is red when the top row comes first.
+      return (px[0] ?? 0) < (px[2] ?? 0);
+    })();
+    return this.flip;
+  }
+
+  dispose(): void {
+    this.target?.dispose();
+    this.mat.dispose();
+    this.cache.clear();
+  }
+}
+
+const toSrgb = (u: number): number => {
+  const c = u / 255;
+  return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055));
+};
+
+/** Linear RGBA pixels to a PNG data URL (sRGB, rows turned over when the read-back came bottom first). */
+function toDataUrl(px: Uint8Array, flip: boolean): string | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = SIZE;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const img = ctx.createImageData(SIZE, SIZE);
+  for (let y = 0; y < SIZE; y++) {
+    const src = (flip ? SIZE - 1 - y : y) * SIZE * 4;
+    for (let x = 0; x < SIZE; x++) {
+      const i = src + x * 4;
+      const a = px[i + 3] as number;
+      // Targets hold premultiplied colour; undo it, encode as sRGB.
+      const k = a > 0 ? 255 / a : 0;
+      const o = (y * SIZE + x) * 4;
+      img.data[o] = toSrgb(Math.min(255, (px[i] as number) * k));
+      img.data[o + 1] = toSrgb(Math.min(255, (px[i + 1] as number) * k));
+      img.data[o + 2] = toSrgb(Math.min(255, (px[i + 2] as number) * k));
+      img.data[o + 3] = a;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas.toDataURL("image/png");
+}
