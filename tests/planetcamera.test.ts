@@ -1,6 +1,6 @@
 import * as THREE from "three/webgpu";
 import { describe, expect, it } from "vitest";
-import { PlanetCamera, wrapAngle } from "../src/render/planetCamera";
+import { PlanetCamera, pinchTurn, wrapAngle } from "../src/render/planetCamera";
 
 const make = (surface: (d: THREE.Vector3) => number) =>
   new PlanetCamera(new THREE.PerspectiveCamera(42, 1.6, 0.5, 9000), 40, surface, { invertZoom: () => false, edgeScroll: () => false, key: () => "none" });
@@ -62,5 +62,30 @@ describe("tilting to nadir", () => {
     expect(wrapAngle(-Math.PI * 2 + 0.1)).toBeCloseTo(0.1);
     expect(wrapAngle(Math.PI * 2 - 0.1)).toBeCloseTo(-0.1);
     expect(wrapAngle(0.4)).toBeCloseTo(0.4);
+  });
+});
+
+describe("two-finger turn", () => {
+  it("fingers sliding past each other never whip the heading", () => {
+    // Opposite vertical motion: the pair angle sweeps through vertical and past it.
+    let prev = { dist: 200, angle: 0 };
+    let total = 0;
+    for (let i = 0; i <= 60; i++) {
+      const y = -100 + i * 3.3; // left finger rises while the right one falls
+      const now = { dist: Math.hypot(200, 2 * y), angle: Math.atan2(2 * y, 200) };
+      const d = pinchTurn(prev, now);
+      expect(Math.abs(d)).toBeLessThanOrEqual(0.15);
+      total += d;
+      prev = now;
+    }
+    expect(total).toBeLessThan(Math.PI);
+  });
+
+  it("ignores the angle when the fingers are nearly together", () => {
+    expect(pinchTurn({ dist: 20, angle: 0 }, { dist: 25, angle: 3 })).toBe(0);
+  });
+
+  it("does not spin when the angle wraps across horizontal", () => {
+    expect(Math.abs(pinchTurn({ dist: 200, angle: Math.PI - 0.02 }, { dist: 200, angle: -Math.PI + 0.02 }))).toBeLessThan(0.1);
   });
 });

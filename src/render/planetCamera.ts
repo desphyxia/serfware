@@ -19,6 +19,17 @@ export function wrapAngle(a: number): number {
 }
 
 /**
+ * Heading change for one step of a two-finger gesture. Fingers sliding past each other (up and
+ * down in opposite directions) sweep the finger-pair angle quickly, and with the fingers close
+ * together the angle is mostly noise, so the step is ignored when the pair is tight and capped
+ * per event, which stops the view from whipping around.
+ */
+export function pinchTurn(prev: { dist: number; angle: number }, now: { dist: number; angle: number }): number {
+  if (Math.min(prev.dist, now.dist) < 60) return 0;
+  return THREE.MathUtils.clamp(wrapAngle(now.angle - prev.angle), -0.15, 0.15);
+}
+
+/**
  * Camera for small planets. It orbits a focus point on the surface: far away it looks straight
  * down at the globe; close in it tilts toward the horizon like a town-builder camera.
  * Drag to move over the planet, right-drag (or Q/E, R/F) to turn and tilt, wheel to zoom.
@@ -155,7 +166,7 @@ export class PlanetCamera {
         const now = this.pinchState();
         if (this.pinch && now) {
           this.tDistance = THREE.MathUtils.clamp(this.tDistance * (this.pinch.dist / now.dist), this.minDistance, this.maxDistance);
-          this.tHeading += wrapAngle(now.angle - this.pinch.angle);
+          this.tHeading += pinchTurn(this.pinch, now);
           // Two fingers sliding up or down together tilt the view.
           this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - (now.midY - this.pinch.midY) * 0.005, -0.6, 0.5);
         }
