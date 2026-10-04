@@ -1006,6 +1006,7 @@ function keep(b: Build): void {
   b.add(...h.parts);
   const strips = 7;
   for (let k = 0; k < strips; k++) {
+    // Wound counter-clockwise from above so the deck faces up; the other way it is culled and the hull looks open.
     const pos: number[] = [];
     for (let i = 0; i < 20; i++) {
       const z0 = -1.95 + (i / 20) * 3.9;
@@ -1013,7 +1014,7 @@ function keep(b: Build): void {
       const x = (z: number, f: number) => (f * 2 - 1) * h.halfWidth(z) * 0.97;
       const f0 = k / strips;
       const f1 = (k + 1) / strips;
-      pos.push(x(z0, f0), deck, z0, x(z1, f1), deck, z1, x(z1, f0), deck, z1, x(z0, f0), deck, z0, x(z0, f1), deck, z0, x(z1, f1), deck, z1);
+      pos.push(x(z0, f0), deck, z0, x(z1, f0), deck, z1, x(z1, f1), deck, z1, x(z0, f0), deck, z0, x(z1, f1), deck, z1, x(z0, f1), deck, z0);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
