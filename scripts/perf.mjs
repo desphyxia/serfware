@@ -18,7 +18,7 @@ try {
     const { page } = await openGame(browser, { seed, width: 960, height: 600 });
     // Terrain detail applies at load: store the preset, then reload.
     await page.evaluate((preset) => window.__seedfall.game.settings.applyPreset(preset), preset);
-    await page.reload();
+    await page.reload({ timeout: 120000 });
     await page.waitForFunction(() => window.__seedfall?.ready === true, null, { timeout: 60000 });
     const r = await page.evaluate((preset) => {
       const g = window.__seedfall.game;
