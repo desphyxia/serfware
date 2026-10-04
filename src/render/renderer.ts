@@ -1,7 +1,7 @@
 import * as THREE from "three/webgpu";
 import {
   clamp,
-  colorToDirection,
+  unpackRGBToNormal,
   packNormalToRGB,
   dot,
   emissive,
@@ -191,7 +191,7 @@ export class GameRenderer {
     if (g.ao) {
       const depth = scenePass.getTextureNode("depth");
       const normalTex = scenePass.getTextureNode("normal");
-      const normal = sample((suv: THREE.Node<"vec2">) => colorToDirection(normalTex.sample(suv).rgb));
+      const normal = sample((suv: THREE.Node<"vec2">) => unpackRGBToNormal(normalTex.sample(suv).rgb));
       const aoPass = ao(depth, normal, this.camera);
       aoPass.resolutionScale = 0.5;
       const occ = aoPass.getTextureNode().r;
