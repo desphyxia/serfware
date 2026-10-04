@@ -8,7 +8,6 @@ import {
   float,
   length,
   max,
-  metalness,
   mix,
   mrt,
   normalView,
@@ -178,14 +177,14 @@ export class GameRenderer {
     // MSAA (FXAA still smooths edges). WebGL2 resolves the samples first, so it keeps MSAA.
     const samples = g.ao && this.backend === "WebGPU" ? 0 : g.msaa;
     const scenePass = pass(this.scene, this.camera, { samples });
-    scenePass.setMRT(
-      mrt({
-        output,
-        normal: directionToColor(normalView),
-        emissive,
-        metalness,
-      }),
-    );
+    // Only write the attachments a pass will read: every extra render target costs bandwidth,
+    // which is what phones' tile-based GPUs run out of first.
+    if (g.ao || g.bloom) {
+      const targets: Record<string, THREE.Node> = { output };
+      if (g.ao) targets.normal = directionToColor(normalView);
+      if (g.bloom) targets.emissive = emissive;
+      scenePass.setMRT(mrt(targets));
+    }
     this.scenePass = scenePass;
     const color = scenePass.getTextureNode("output");
     let lit = color.rgb;
@@ -224,7 +223,9 @@ export class GameRenderer {
 
   apply(g: GraphicsSettings): void {
     this.settings = g;
-    const dpr = Math.min(2, (window.devicePixelRatio || 1) * g.resolutionScale);
+    // Scale the capped device ratio, not the raw one: on a 3x phone the preset's resolution scale
+    // used to vanish under the cap of 2.
+    const dpr = Math.min(2, window.devicePixelRatio || 1) * g.resolutionScale;
     this.renderer.setPixelRatio(dpr);
     this.renderer.shadowMap.enabled = g.shadows !== "off";
     this.renderer.shadowMap.type = g.shadows === "soft" ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;

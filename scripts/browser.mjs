@@ -27,6 +27,6 @@ export async function openGame(browser, { seed, width = 1280, height = 800 } = {
     if (m.type() === "error") errors.push(m.text());
   });
   await page.goto(gameUrl(seed));
-  await page.waitForFunction(() => window.__seedfall?.ready === true, null, { timeout: 180000 });
+  await page.waitForFunction(() => window.__seedfall?.ready === true, null, { timeout: 120000 });
   return { page, errors };
 }

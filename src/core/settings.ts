@@ -10,7 +10,7 @@ export interface GraphicsSettings {
   shadowMapSize: 1024 | 2048 | 4096;
   msaa: 0 | 2 | 4;
   bloom: boolean;
-  /** 0..1 density of trees, grass and flowers. */
+  /** 0..1 density of decorative grass, flowers and undergrowth. Never affects trees or rocks, which are game resources. */
   vegetation: number;
   /** 0..1 amount of smoke, dust, birds and other particles. */
   particles: number;
