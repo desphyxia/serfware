@@ -20,6 +20,7 @@ export class Overlays {
   private readonly anchor: THREE.Group;
   /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
   private tileEdges: THREE.LineSegments | null = null;
+  private triEdges: THREE.LineSegments | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -148,6 +149,7 @@ export class Overlays {
   setTileEdges(on: boolean): void {
     if (on && !this.tileEdges) this.tileEdges = this.buildTileEdges();
     if (this.tileEdges) this.tileEdges.visible = on;
+    if (this.triEdges) this.triEdges.visible = on;
   }
 
   get tileEdgesOn(): boolean {
@@ -178,10 +180,39 @@ export class Overlays {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#fff1b8", transparent: true, opacity: 0.9, depthWrite: false }));
-    lines.renderOrder = 4;
+    // The hexagon borders are the point of the overlay: bright and opaque, drawn above the subdued triangle lines.
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#ffe14d", transparent: true, opacity: 1, depthWrite: false }));
+    lines.renderOrder = 5;
     lines.frustumCulled = false;
     this.group.add(lines);
+    this.group.add(this.buildTileTriangles(lines));
+    return lines;
+  }
+
+  /** The triangulation the tiles are the vertices of (centre to centre), faint so the hexagon borders stand out. */
+  private buildTileTriangles(parent: THREE.LineSegments): THREE.LineSegments {
+    const { grid } = this.land.planet;
+    const R = this.land.planet.params.radius;
+    const elevation = this.land.planet.terrain.elevation;
+    const pos: number[] = [];
+    const centre = (t: number) => {
+      const r = R + Math.max(0, elevation[t] as number) + 0.1;
+      pos.push((grid.center[t * 3] as number) * r, (grid.center[t * 3 + 1] as number) * r, (grid.center[t * 3 + 2] as number) * r);
+    };
+    for (let t = 0; t < grid.count; t++) {
+      for (const n of grid.neighborsOf(t)) {
+        if (n < t) continue;
+        centre(t);
+        centre(n);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#6fb4d9", transparent: true, opacity: 0.3, depthWrite: false }));
+    lines.renderOrder = 4;
+    lines.frustumCulled = false;
+    lines.visible = parent.visible;
+    this.triEdges = lines;
     return lines;
   }
 
@@ -271,5 +302,6 @@ export class Overlays {
     this.reach.dispose();
     this.preview.geometry.dispose();
     this.tileEdges?.geometry.dispose();
+    this.triEdges?.geometry.dispose();
   }
 }
