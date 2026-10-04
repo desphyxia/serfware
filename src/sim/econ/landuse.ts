@@ -586,7 +586,8 @@ export class LandUse {
     for (const n of grid.neighborsOf(t)) {
       if (this.use[n] === Use.Flag) continue;
       if (!this.canPlaceFlag(n, owner, foothold)) continue;
-      const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + n * 1e-9;
+      // The ring around the Hearthship is a last resort: automatic flags keep clear of it.
+      const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + (this.use[n] === Use.Blocked ? 1e6 : 0) + n * 1e-9;
       if (s < bestScore) {
         bestScore = s;
         best = n;
