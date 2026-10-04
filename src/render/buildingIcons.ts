@@ -1,8 +1,8 @@
 import * as THREE from "three/webgpu";
 import { buildingGeometry, hedgeGeometry } from "./models";
 
-/** Icon size in pixels (drawn at about half this in the menu, so it stays sharp on phones). */
-const SIZE = 96;
+/** Icon size in pixels (a row is then 512 bytes, which WebGPU reads back unpadded; drawn at about a third of this in the menu, so it stays sharp on phones). */
+const SIZE = 128;
 
 /**
  * Small pictures of the buildings for the build menu: each model is drawn once, on demand, into a
@@ -84,7 +84,12 @@ export class BuildingIcons {
       r.setClearColor(prevColor, prevAlpha);
     }
     const data = await r.readRenderTargetPixelsAsync(this.target, 0, 0, SIZE, SIZE);
-    return new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + SIZE * SIZE * 4));
+    const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    // WebGPU pads each row to a multiple of 256 bytes; take the stride from the data's own size.
+    const stride = Math.max(SIZE * 4, Math.floor(bytes.length / SIZE));
+    const out = new Uint8Array(SIZE * SIZE * 4);
+    for (let y = 0; y < SIZE; y++) out.set(bytes.subarray(y * stride, y * stride + SIZE * 4), y * SIZE * 4);
+    return out;
   }
 
   /** Backends differ on whether a read-back starts at the top or the bottom row: draw a test card to find out. */
