@@ -535,9 +535,12 @@ export class LandUse {
 
   canPlaceFlag(t: number, owner = 0, foothold = false): boolean {
     if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
-    if (this.use[t] === Use.Blocked) return false;
+    // Tiles reserved around the Hearthship are Blocked for buildings but may carry a flag; a lone
+    // Blocked tile (a hamlet) may not.
+    const grid = this.planet.grid;
+    if (this.use[t] === Use.Blocked && !grid.neighborsOf(t).some((n) => this.use[n] === Use.Building)) return false;
     // Flags need breathing room: no neighbouring flag.
-    for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
+    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
     return this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0);
   }
 
