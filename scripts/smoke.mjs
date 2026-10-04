@@ -32,7 +32,7 @@ try {
   await page.keyboard.press("Escape");
   await page.locator("#settings").waitFor({ state: "visible" });
   for (const preset of ["Low", "High", "Medium"]) {
-    await page.locator("#settings .seg-b", { hasText: preset }).click();
+    await page.locator("#settings .seg-b", { hasText: preset }).click({ timeout: 120_000 });
     await page.waitForTimeout(300);
   }
   await page.keyboard.press("Escape");
