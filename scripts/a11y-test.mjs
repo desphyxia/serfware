@@ -14,7 +14,7 @@ try {
     window.localStorage.setItem("seedfall.settings.v1", JSON.stringify(s));
     window.localStorage.setItem("seedfall.keys", JSON.stringify({ grid: "h" }));
   });
-  await page.reload();
+  await page.reload({ timeout: 120000 });
   await page.waitForFunction(() => window.__seedfall?.ready === true, null, { timeout: 60000 });
   await page.evaluate(() => { const g = window.__seedfall.game; g.speed = 0; g.hold = true; });
   // Swedish interface text.
