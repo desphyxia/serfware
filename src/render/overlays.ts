@@ -16,6 +16,8 @@ export class Overlays {
   private ghost: THREE.Mesh | null = null;
   private ghostKey = "";
   private readonly ghostFlag: THREE.Mesh;
+  /** Pulsing double ring around the flag a road is being drawn from. */
+  private readonly anchor: THREE.Group;
   /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
   private tileEdges: THREE.LineSegments | null = null;
 
@@ -41,7 +43,29 @@ export class Overlays {
     this.preview.frustumCulled = false;
     this.ghostFlag = new THREE.Mesh(flagGeometry(), this.ghostMat);
     this.ghostFlag.visible = false;
-    this.group.add(this.markers, this.reach, this.preview, this.ghostFlag);
+    this.anchor = new THREE.Group();
+    const ringMat = new THREE.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+    const outer = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 32).rotateX(-Math.PI / 2), ringMat);
+    const inner = new THREE.Mesh(new THREE.CircleGeometry(0.3, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#ffe066", transparent: true, opacity: 0.45, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    for (const m of [outer, inner]) {
+      m.renderOrder = 13;
+      m.frustumCulled = false;
+      this.anchor.add(m);
+    }
+    this.anchor.visible = false;
+    this.group.add(this.markers, this.reach, this.preview, this.ghostFlag, this.anchor);
+  }
+
+  /** Highlight the flag a road starts from (-1 hides it). */
+  setAnchor(tile: number): void {
+    if (tile < 0) {
+      this.anchor.visible = false;
+      return;
+    }
+    const p = this.frames.pos(tile, 0.2);
+    this.anchor.position.copy(p);
+    this.frames.orient(p, null, this.anchor.quaternion);
+    this.anchor.visible = true;
   }
 
   private visionKey = "";
@@ -64,6 +88,7 @@ export class Overlays {
    */
   update(_time = 0, night = 0, explored?: Uint8Array, visionVersion = 0, colors?: (owner: number) => THREE.Color): void {
     this.borderNight.value = night;
+    if (this.anchor.visible) this.anchor.scale.setScalar(1 + 0.18 * Math.sin(performance.now() / 160));
     const key = `${this.land.territoryVersion}:${visionVersion}`;
     if (key !== this.visionKey) {
       this.visionKey = key;
