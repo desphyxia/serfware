@@ -10,13 +10,13 @@ describe("the tile-edge debug overlay", () => {
     expect(ov.tileEdgesOn).toBe(false);
     ov.setTileEdges(true);
     expect(ov.tileEdgesOn).toBe(true);
-    const lines = ov.group.children.find((c) => (c as { isLineSegments?: boolean }).isLineSegments) as unknown as { geometry: { getAttribute(n: string): { count: number } } };
+    const lines = ov.group.children.find((c) => c.name === "tile-edges") as unknown as { geometry: { getAttribute(n: string): { count: number } } };
     // Tiles are the vertices of a triangulation, so the edges between tiles number half the sum of their degrees,
-    // and each is a segment of two points.
+    // and each is a strip of two triangles (six vertices).
     const grid = w.planet.grid;
     let sides = 0;
     for (let t = 0; t < grid.count; t++) sides += grid.neighborsOf(t).length;
-    expect(lines.geometry.getAttribute("position").count).toBe(sides);
+    expect(lines.geometry.getAttribute("position").count).toBe((sides / 2) * 6);
     ov.setTileEdges(false);
     expect(ov.tileEdgesOn).toBe(false);
   });

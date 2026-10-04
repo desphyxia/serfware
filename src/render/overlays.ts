@@ -19,8 +19,8 @@ export class Overlays {
   /** Pulsing double ring around the flag a road is being drawn from. */
   private readonly anchor: THREE.Group;
   /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
-  private tileEdges: THREE.LineSegments | null = null;
-  private triEdges: THREE.LineSegments | null = null;
+  private tileEdges: THREE.Mesh | null = null;
+  private triEdges: THREE.Mesh | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -156,17 +156,33 @@ export class Overlays {
     return !!this.tileEdges?.visible;
   }
 
-  private buildTileEdges(): THREE.LineSegments {
+  private buildTileEdges(): THREE.Mesh {
     const { grid } = this.land.planet;
-    const R = this.land.planet.params.radius;
     const elevation = this.land.planet.terrain.elevation;
-    const pos: number[] = [];
+    const R = this.land.planet.params.radius;
+    const hexes: number[] = [];
+    const tris: number[] = [];
+    const up = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    // Draws the segment a-b as a flat strip of the given width lying on the ground (1px lines are barely visible).
+    const strip = (out: number[], a: THREE.Vector3, b: THREE.Vector3, width: number) => {
+      dir.subVectors(b, a).normalize();
+      up.addVectors(a, b).normalize();
+      side.crossVectors(dir, up).normalize().multiplyScalar(width / 2);
+      const p = [a.clone().sub(side), a.clone().add(side), b.clone().add(side), b.clone().sub(side)];
+      for (const i of [0, 1, 2, 0, 2, 3]) out.push(p[i]!.x, p[i]!.y, p[i]!.z);
+    };
     // A corner stands at the mean height of the three tiles that meet there, a little above the ground.
-    const corner = (c: number) => {
+    const corner = (c: number, lift: number) => {
       let h = 0;
       for (let j = 0; j < 3; j++) h += Math.max(0, elevation[grid.cornerTiles[c * 3 + j] as number] as number);
-      const r = R + h / 3 + 0.1;
-      pos.push((grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
+      const r = R + h / 3 + lift;
+      return new THREE.Vector3((grid.corners[c * 3] as number) * r, (grid.corners[c * 3 + 1] as number) * r, (grid.corners[c * 3 + 2] as number) * r);
+    };
+    const centre = (t: number, lift: number) => {
+      const r = R + Math.max(0, elevation[t] as number) + lift;
+      return new THREE.Vector3((grid.center[t * 3] as number) * r, (grid.center[t * 3 + 1] as number) * r, (grid.center[t * 3 + 2] as number) * r);
     };
     for (let t = 0; t < grid.count; t++) {
       const ns = grid.neighborsOf(t);
@@ -174,46 +190,26 @@ export class Overlays {
       for (let k = 0; k < ns.length; k++) {
         // The edge shared with neighbour k runs between corners k-1 and k; each shared edge is drawn once.
         if ((ns[k] as number) < t) continue;
-        corner(cs[(k - 1 + cs.length) % cs.length] as number);
-        corner(cs[k] as number);
+        strip(hexes, corner(cs[(k - 1 + cs.length) % cs.length] as number, 0.12), corner(cs[k] as number, 0.12), 0.1);
+        // The triangle line joins the two tile centres, crossing that edge.
+        strip(tris, centre(t, 0.1), centre(ns[k] as number, 0.1), 0.035);
       }
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    // The hexagon borders are the point of the overlay: bright and opaque, drawn above the subdued triangle lines.
-    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#ffe14d", transparent: true, opacity: 1, depthWrite: false }));
-    lines.renderOrder = 5;
-    lines.frustumCulled = false;
-    this.group.add(lines);
-    this.group.add(this.buildTileTriangles(lines));
-    return lines;
-  }
-
-  /** The triangulation the tiles are the vertices of (centre to centre), faint so the hexagon borders stand out. */
-  private buildTileTriangles(parent: THREE.LineSegments): THREE.LineSegments {
-    const { grid } = this.land.planet;
-    const R = this.land.planet.params.radius;
-    const elevation = this.land.planet.terrain.elevation;
-    const pos: number[] = [];
-    const centre = (t: number) => {
-      const r = R + Math.max(0, elevation[t] as number) + 0.1;
-      pos.push((grid.center[t * 3] as number) * r, (grid.center[t * 3 + 1] as number) * r, (grid.center[t * 3 + 2] as number) * r);
+    const mesh = (pos: number[], color: string, opacity: number, order: number) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      m.renderOrder = order;
+      m.frustumCulled = false;
+      return m;
     };
-    for (let t = 0; t < grid.count; t++) {
-      for (const n of grid.neighborsOf(t)) {
-        if (n < t) continue;
-        centre(t);
-        centre(n);
-      }
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: "#6fb4d9", transparent: true, opacity: 0.3, depthWrite: false }));
-    lines.renderOrder = 4;
-    lines.frustumCulled = false;
-    lines.visible = parent.visible;
-    this.triEdges = lines;
-    return lines;
+    // The hexagon borders are the point of the overlay: wide, bright and opaque, above the subdued triangle lines.
+    const hex = mesh(hexes, "#ffe14d", 1, 5);
+    hex.name = "tile-edges";
+    this.triEdges = mesh(tris, "#6fb4d9", 0.55, 4);
+    this.group.add(this.triEdges);
+    this.group.add(hex);
+    return hex;
   }
 
   /** Show placement markers on the given tiles (or hide with an empty list). */
