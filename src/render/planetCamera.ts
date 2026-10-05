@@ -166,7 +166,8 @@ export class PlanetCamera {
         const now = this.pinchState();
         if (this.pinch && now) {
           this.tDistance = THREE.MathUtils.clamp(this.tDistance * (this.pinch.dist / now.dist), this.minDistance, this.maxDistance);
-          this.tHeading += pinchTurn(this.pinch, now);
+          // Inverted to match the drag direction.
+          this.tHeading -= pinchTurn(this.pinch, now);
           // Two fingers sliding up or down together tilt the view.
           this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - (now.midY - this.pinch.midY) * 0.005, -0.6, 0.5);
         }
