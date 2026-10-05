@@ -1,6 +1,6 @@
 import * as THREE from "three/webgpu";
 import { describe, expect, it } from "vitest";
-import { PlanetCamera } from "../src/render/planetCamera";
+import { PlanetCamera, pinchTurn, wrapAngle } from "../src/render/planetCamera";
 
 const make = (surface: (d: THREE.Vector3) => number) =>
   new PlanetCamera(new THREE.PerspectiveCamera(42, 1.6, 0.5, 9000), 40, surface, { invertZoom: () => false, edgeScroll: () => false, key: () => "none" });
@@ -34,5 +34,58 @@ describe("planet camera", () => {
     h = 44;
     cam.update(0.016);
     expect(Math.abs(cam.camera.position.length() - before)).toBeLessThan(1);
+  });
+});
+
+describe("tilting to nadir", () => {
+  it("keeps the view steady while tilting straight down at any heading", () => {
+    for (const heading of [0, 1.3, 3.1, -2.4]) {
+      const cam = make(() => 40);
+      cam.lookAt(new THREE.Vector3(0, 1, 0), 60);
+      cam.snap(60, heading, 0);
+      cam.update(0.016);
+      let last = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.camera.quaternion);
+      let worst = 0;
+      for (let i = 0; i < 200; i++) {
+        cam.tilt(-0.01);
+        cam.update(0.016);
+        const u = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.camera.quaternion);
+        worst = Math.max(worst, u.angleTo(last));
+        last = u;
+      }
+      expect(cam.pitch()).toBeLessThan(0.05);
+      expect(worst).toBeLessThan(0.05);
+    }
+  });
+
+  it("wraps the two-finger angle so crossing horizontal does not spin the view", () => {
+    expect(wrapAngle(-Math.PI * 2 + 0.1)).toBeCloseTo(0.1);
+    expect(wrapAngle(Math.PI * 2 - 0.1)).toBeCloseTo(-0.1);
+    expect(wrapAngle(0.4)).toBeCloseTo(0.4);
+  });
+});
+
+describe("two-finger turn", () => {
+  it("fingers sliding past each other never whip the heading", () => {
+    // Opposite vertical motion: the pair angle sweeps through vertical and past it.
+    let prev = { dist: 200, angle: 0 };
+    let total = 0;
+    for (let i = 0; i <= 60; i++) {
+      const y = -100 + i * 3.3; // left finger rises while the right one falls
+      const now = { dist: Math.hypot(200, 2 * y), angle: Math.atan2(2 * y, 200) };
+      const d = pinchTurn(prev, now);
+      expect(Math.abs(d)).toBeLessThanOrEqual(0.15);
+      total += d;
+      prev = now;
+    }
+    expect(total).toBeLessThan(Math.PI);
+  });
+
+  it("ignores the angle when the fingers are nearly together", () => {
+    expect(pinchTurn({ dist: 20, angle: 0 }, { dist: 25, angle: 3 })).toBe(0);
+  });
+
+  it("does not spin when the angle wraps across horizontal", () => {
+    expect(Math.abs(pinchTurn({ dist: 200, angle: Math.PI - 0.02 }, { dist: 200, angle: -Math.PI + 0.02 }))).toBeLessThan(0.1);
   });
 });
