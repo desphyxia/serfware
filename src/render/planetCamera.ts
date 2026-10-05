@@ -10,6 +10,26 @@ export interface CameraInputOptions {
 }
 
 /**
+ * Shortest signed difference for an angle step. The two-finger angle comes from atan2, which
+ * jumps by 2π when the fingers' line crosses horizontal (the natural posture for a two-finger
+ * tilt); taken raw, that jump spins the view a full turn.
+ */
+export function wrapAngle(a: number): number {
+  return a - Math.PI * 2 * Math.round(a / (Math.PI * 2));
+}
+
+/**
+ * Heading change for one step of a two-finger gesture. Fingers sliding past each other (up and
+ * down in opposite directions) sweep the finger-pair angle quickly, and with the fingers close
+ * together the angle is mostly noise, so the step is ignored when the pair is tight and capped
+ * per event, which stops the view from whipping around.
+ */
+export function pinchTurn(prev: { dist: number; angle: number }, now: { dist: number; angle: number }): number {
+  if (Math.min(prev.dist, now.dist) < 60) return 0;
+  return THREE.MathUtils.clamp(wrapAngle(now.angle - prev.angle), -0.15, 0.15);
+}
+
+/**
  * Camera for small planets. It orbits a focus point on the surface: far away it looks straight
  * down at the globe; close in it tilts toward the horizon like a town-builder camera.
  * Drag to move over the planet, right-drag (or Q/E, R/F) to turn and tilt, wheel to zoom.
@@ -45,6 +65,7 @@ export class PlanetCamera {
   private readonly forward2 = new THREE.Vector3();
   private readonly right2 = new THREE.Vector3();
   private readonly up2 = new THREE.Vector3();
+  private readonly m = new THREE.Matrix4();
   private readonly keys = new Set<string>();
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private dragButton = -1;
@@ -145,12 +166,8 @@ export class PlanetCamera {
         const now = this.pinchState();
         if (this.pinch && now) {
           this.tDistance = THREE.MathUtils.clamp(this.tDistance * (this.pinch.dist / now.dist), this.minDistance, this.maxDistance);
-          // Wrap the angle change to (-PI, PI] so the atan2 seam does not spin the view, and skip
-          // the twist while the fingers are too close together for a stable angle.
-          if (Math.min(now.dist, this.pinch.dist) > 30) {
-            const d = Math.atan2(Math.sin(now.angle - this.pinch.angle), Math.cos(now.angle - this.pinch.angle));
-            this.tHeading -= d;
-          }
+          // Inverted to match the drag direction.
+          this.tHeading -= pinchTurn(this.pinch, now);
           // Two fingers sliding up or down together tilt the view.
           this.tPitchOffset = THREE.MathUtils.clamp(this.tPitchOffset - (now.midY - this.pinch.midY) * 0.005, -0.6, 0.5);
         }
@@ -266,11 +283,26 @@ export class PlanetCamera {
     const minR = this.surfaceRadius(camDir) + 1.2;
     if (cam.position.length() < minR) cam.position.copy(camDir.multiplyScalar(minR));
     cam.up.copy(this.up).multiplyScalar(Math.sin(p)).addScaledVector(this.forward, Math.cos(p)).normalize();
-    cam.lookAt(this.ground);
+    this.orient(cam);
     cam.fov = this.fov();
     cam.near = Math.max(0.05, this.distance * 0.02);
     cam.far = Math.max(this.radius * 60, 9000);
     cam.updateProjectionMatrix();
+  }
+
+  /**
+   * Point the camera at the ground along its own up vector. The frame is built from the heading
+   * basis directly, so looking straight down (view parallel to the surface normal) cannot make
+   * lookAt's cross product degenerate and flip the view.
+   */
+  private orient(cam: THREE.PerspectiveCamera): void {
+    const z = this.forward2.copy(cam.position).sub(this.ground).normalize(); // backwards
+    const x = this.right2.crossVectors(cam.up, z);
+    if (x.lengthSq() < 1e-10) x.crossVectors(this.forward, z);
+    if (x.lengthSq() < 1e-10) x.copy(this.right);
+    x.normalize();
+    const y = this.up2.crossVectors(z, x);
+    cam.quaternion.setFromRotationMatrix(this.m.makeBasis(x, y, z));
   }
 
   /**
