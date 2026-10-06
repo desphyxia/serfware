@@ -1,7 +1,7 @@
 import { BUILDINGS, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { clearForest, frontierTiles, placeConnected, placeOn } from "../econ/planner";
-import { goodId } from "../econ/defs";
+import { clearForBorder, clearForest, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
+import { goodId, goodsFor } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
 import type { TreatyKind } from "../econ/diplomacy";
@@ -9,6 +9,7 @@ import { AI_LEVELS, baselineTuning, temperAllows, type AiLevel, type Personality
 import type { AiContext, Brain } from "./brain";
 import type { WorldCommand } from "../world";
 import { BiomePlanner } from "./biome";
+import { diagnoseBorder } from "./borderwhy";
 import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
 import { TerraPlanner } from "./terra";
@@ -17,6 +18,61 @@ import { WarPlanner } from "./war";
 import { WorksPlanner } from "./works";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
+
+/**
+ * Behaviours that are off unless a harness switches them on, so the AI plays as before by default.
+ * `relocateQuarries`: a quarry with no rock left in reach stops counting against the quarry quota and is
+ * pulled down (its worker and tool go back to the pool), and new quarries are looked for farther out.
+ * `stoneFallback`: when the rock inside the border is nearly used up, start on granite (a geologist, a mine) before
+ * the stores are bare, and push the border toward rock outside it.
+ * `foodByNeed`: while the food in the warehouses runs under a day's need, keep adding food buildings (one at a time,
+ * up to a cap that grows with the population) past the fixed opening quotas.
+ * `stonePriority`: no new houses while there is room for everyone, and, with stone nearly gone, none of the wants that
+ * spend it on comforts and side projects (wells, flowerbeds, benches, sea, works, biome and terra), so food, lanterns and
+ * the basic chains get what stone there is.
+ * `borderReach`: lanterns for the border are only tried on tiles the Hearthship's land reaches (by land or bridge), with at
+ * least BORDER_FREE free tiles of that land within 5: a tile across water cannot be joined by road, and a border try on one
+ * is wasted. A seat with no such tile counts as land-locked, which is what lets it turn to the sea.
+ * `borderClear`: when a border try placed nothing and a tree is what stands in the way (on the tile, on every spot for its
+ * flag, or across the road to it), build a woodcutter within reach of that tree: at most BORDER_CUTS of them, a day apart.
+ */
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false };
+/**
+ * Counts per player for the balance probe, which reads them (they change no decision): thoughts that got past the
+ * pace check, thoughts that stopped at the sites cap, thoughts with no idle hands, thoughts where the border was
+ * wanted, border tries, tries with no frontier tile, lanterns placed, tries that chose a beacon, tries that chose a lamp
+ * house, tries with frontier tiles that placed nothing, woodcutters built to clear the way (`borderClear`).
+ */
+export const aiStats: number[][] = [];
+/** Per player, running: what stood in the way in a sample of the border tries that placed nothing (see `diagnoseBorder`). */
+export const aiWhy: Record<string, number>[] = [];
+const tally = (player: number, i: number): void => {
+  const row = (aiStats[player] ??= Array.from({ length: 11 }, () => 0));
+  row[i] = (row[i] as number) + 1;
+};
+/** With `borderReach`: free tiles of the Hearthship's land a frontier tile must have within 5 steps. */
+const BORDER_FREE = 6;
+/** With `borderClear`: woodcutters built to clear the way for the border, and thoughts (about a day: 7500 ticks / 120) between two. */
+const BORDER_CUTS = 3;
+const BORDER_CUT_GAP = 60;
+/** Wants that `stonePriority` drops while stone is short. */
+const STONE_HUNGRY = new Set(["well", "flowerbed", "bench", "sea", "works", "biome", "terra", "weaponsmith"]);
+/** Stone in the warehouses under which it counts as short. */
+const STONE_SHORT = 6;
+/** Room for this many more people than there are counts as housed. */
+const ROOM_SPARE = 6;
+/** Food in the warehouses, as a multiple of a day's need (0.45 a head), averaged over about a third of a day: under this the seat is short. */
+const FOOD_SHORT = 1;
+const FOOD_SMOOTH = 0.03;
+/** Buildings that make food; one unfinished among them holds back the next. */
+const FOOD_BUILDINGS = new Set(["fisher", "hunter", "orchard", "farm", "mill", "bakery", "apiary", "pasture", "butcher"]);
+const FOODS = goodsFor("food");
+/** The rock inside the border counts as nearly used up below this much material (about five days of quarrying). */
+const ROCK_LOW = 15;
+/** How far from the settlement's centre a quarry is looked for: normally 14 tiles, 22 with `relocateQuarries`. */
+const QUARRY_FAR = 22;
+/** Looks at a quarry that found no rock in reach, in a row, before it is pulled down. */
+const QUARRY_DEAD_LOOKS = 3;
 
 /**
  * AI rival, version 1: grows a settlement much like a careful player would. It keeps a small
@@ -129,6 +185,92 @@ export class AiBuilder implements Brain {
     for (const k of [...this.strays.keys()]) if (!seen.has(k)) this.strays.delete(k);
   }
 
+  /** Food in the warehouses over a day's need, smoothed. Only kept with `foodByNeed`. */
+  private foodCover = 2;
+  private trackFood(stock: readonly number[], people: number): void {
+    const have = FOODS.reduce((n, g) => n + (stock[g] ?? 0), 0);
+    this.foodCover += ((have / Math.max(1, Math.ceil(people * 0.45))) - this.foodCover) * FOOD_SMOOTH;
+  }
+
+  /** `rockLow`: the thought it was last worked out at, and the answer. */
+  private rockAt = -99;
+  private rockIsLow = false;
+  private expansions = 0;
+  /** Is the rock with material left inside the border nearly used up? Only with `stoneFallback`; looked at every sixth thought. */
+  private rockLow(w: World): boolean {
+    if (!aiOptions.stoneFallback) return false;
+    if (this.thoughts - this.rockAt < 6) return this.rockIsLow;
+    const land = w.economy.land;
+    let material = 0;
+    for (let t = 0; t < land.territory.length; t++) {
+      if (land.territory[t] === this.player + 1 && land.feature[t] === Feature.Rock) material += land.amount[t] as number;
+    }
+    this.rockAt = this.thoughts;
+    this.rockIsLow = material < ROCK_LOW;
+    return this.rockIsLow;
+  }
+
+  /** `homeLand`: the thought it was last worked out at, and the answer. */
+  private homeAt = -99;
+  private home = new Set<number>();
+  /** The tiles the Hearthship's land reaches (by land or bridge), looked at again every sixth thought. */
+  private homeLand(w: World): Set<number> {
+    if (this.thoughts - this.homeAt < 6) return this.home;
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[this.player] ?? -1];
+    this.home = keep ? landmassOf(w, keep.tile) : new Set<number>();
+    this.homeAt = this.thoughts;
+    return this.home;
+  }
+
+  /** Frontier tiles that a road can reach and that have free land of the Hearthship's land beside them (`borderReach`). */
+  private reachable(w: World, tiles: number[]): number[] {
+    const land = w.economy.land;
+    const home = this.homeLand(w);
+    return tiles.filter((t) => home.has(t) && land.ring(t, 5).filter((n) => land.territory[n] === 0 && home.has(n)).length >= BORDER_FREE);
+  }
+
+  /** Frontier tiles for a lantern, those nearest rock outside every border first. */
+  private towardRock(w: World, tiles: number[]): number[] {
+    const land = w.economy.land;
+    const c = land.planet.grid.center;
+    const rocks: number[] = [];
+    for (let t = 0; t < land.territory.length; t++) if (land.territory[t] === 0 && land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0 && land.isLand(t)) rocks.push(t);
+    if (!rocks.length) return tiles;
+    const d2 = (a: number, b: number) => ((c[a * 3] as number) - (c[b * 3] as number)) ** 2 + ((c[a * 3 + 1] as number) - (c[b * 3 + 1] as number)) ** 2 + ((c[a * 3 + 2] as number) - (c[b * 3 + 2] as number)) ** 2;
+    return tiles
+      .map((t) => [Math.min(...rocks.map((r) => d2(t, r))), t] as const)
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+      .map(([, t]) => t);
+  }
+
+  /** Quarries seen with no rock left in reach, by building id, and how many looks in a row. */
+  private readonly dry = new Map<number, number>();
+  /**
+   * A quarry only cuts `Feature.Rock` with material left within its radius, and rock does not grow back, so one
+   * that finds none stands idle for good and holds a worker and a tool. After a few looks in a row it is pulled
+   * down, so the quarry wishes can place a new one where rock is left. Returns the ids pulled down.
+   */
+  private retireQuarries(w: World, mine: readonly { id: number; tile: number; built: boolean; def: { id: string; radius?: number } }[]): Set<number> {
+    const land = w.economy.land;
+    const gone = new Set<number>();
+    const seen = new Set<number>();
+    for (const b of mine) {
+      if (b.def.id !== "quarry" || !b.built) continue;
+      seen.add(b.id);
+      const reach = land.ring(b.tile, b.def.radius ?? 5).some((t) => land.feature[t] === Feature.Rock && (land.amount[t] as number) > 0);
+      if (reach) {
+        this.dry.delete(b.id);
+        continue;
+      }
+      const looks = (this.dry.get(b.id) ?? 0) + 1;
+      this.dry.set(b.id, looks);
+      if (looks >= QUARRY_DEAD_LOOKS && w.command({ t: "demolish", tile: b.tile, player: this.player }).ok) gone.add(b.id);
+    }
+    for (const id of [...this.dry.keys()]) if (!seen.has(id) || gone.has(id)) this.dry.delete(id);
+    return gone;
+  }
+
   allows(cmd: WorldCommand): boolean {
     return temperAllows(this.personality, cmd as { t: string; type?: string });
   }
@@ -155,9 +297,12 @@ export class AiBuilder implements Brain {
     const log = stock[goodId("log")] ?? 0;
     this.thoughts++;
     if (this.thoughts % lv.every !== 0) return;
+    tally(pl, 0);
     if (this.thoughts % 6 === 3) this.talk(w);
     if (this.thoughts % 4 === 1) this.tools(w);
     if (this.thoughts % 10 === 5) this.tidy(w);
+    if (aiOptions.foodByNeed) this.trackFood(stock, eco.peopleOf(pl).length);
+    const retired = aiOptions.relocateQuarries ? this.retireQuarries(w, mine) : new Set<number>();
     if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
     // Wardens look for a fight often, Traders seldom, Builders hardly ever.
     const temper = Math.max(1, Math.round(this.tuning.temper));
@@ -165,20 +310,23 @@ export class AiBuilder implements Brain {
     // Palisades, field camps, outriders and breaking truces.
     if (this.thoughts % 5 === 3 && this.war.step(ctx, this.thoughts)) return;
     // Stone gone: geologists and granite mines, which cannot wait behind sites that are waiting for stone.
-    if (this.thoughts % 3 === 1 && this.econ.relieveStone(ctx, this.thoughts)) return;
+    if (this.thoughts % 3 === 1 && this.econ.relieveStone(ctx, this.thoughts, this.rockLow(w))) return;
     // Voyages (for a seat the rules let fly) are orders, not sites, so they do not wait for the builders.
     if (this.thoughts % 5 === 4 && VoyagePlanner.allowed(ctx) && mine.filter((b) => b.built).length >= 25 && this.voyage.step(ctx, this.thoughts)) return;
-    if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) return;
+    if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) {
+      tally(pl, 1);
+      return;
+    }
     // Keep enough hands free: when nobody is idle, build homes before anything else.
     const idle = eco.population(pl).idle;
-    const count = (id: string) => mine.filter((b) => b.def.id === id).length;
+    const count = (id: string) => mine.filter((b) => b.def.id === id && !retired.has(b.id)).length;
     const lanterns = mine.filter((b) => LANTERNS.has(b.def.id)).length;
     const people = eco.peopleOf(pl).length;
     const wants: { key: string; fn: () => boolean }[] = [];
     const want = (cond: boolean, w: { key: string; fn: () => boolean }) => {
       if (cond) wants.push(w);
     };
-    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: feature === Feature.Rock ? Math.max(max, 14) : max, near: feature, need: feature === Feature.Rock ? 2 : 0, player: pl, center: this.center(w), splitRoads: true }) });
+    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: feature === Feature.Rock ? Math.max(max, aiOptions.relocateQuarries ? QUARRY_FAR : 14) : max, near: feature, need: feature === Feature.Rock ? 2 : 0, player: pl, center: this.center(w), splitRoads: true }) });
     const grow = () => ({ key: "expand", fn: () => this.expand(w, plank, stone) });
     // Try the wishes in order; one that finds no site steps aside for a while, so a cramped spot
     // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.
@@ -191,17 +339,29 @@ export class AiBuilder implements Brain {
       }
       return false;
     };
-    want(idle < 2 && plank >= 4 && count("house") < 2 + Math.floor(people / 6), near("house"));
+    const housed = aiOptions.stonePriority && eco.capacity(pl) >= people + ROOM_SPARE;
+    const triage = (list: typeof wants) => (aiOptions.stonePriority && stone < STONE_SHORT ? list.filter((x) => !STONE_HUNGRY.has(x.key)) : list);
+    want(!housed && idle < 2 && plank >= 4 && count("house") < 2 + Math.floor(people / 6), near("house"));
     if (idle < 1) {
+      tally(pl, 2);
       attempt(wants, wants.length);
       return;
+    }
+    // Short of food past the opening quotas: one more food building at a time, in the order cheapest first, each type capped by the population.
+    if (aiOptions.foodByNeed && this.foodCover < FOOD_SHORT && mine.filter((b) => b.built).length >= 12 && !mine.some((b) => !b.built && FOOD_BUILDINGS.has(b.def.id))) {
+      want(count("fisher") < 1 + Math.floor(people / 40), near("fisher", undefined, 11));
+      want(count("hunter") < 1 + Math.floor(people / 40), near("hunter", Feature.Tree, 10));
+      want(count("orchard") < 1 + Math.floor(people / 30), near("orchard"));
+      want(count("farm") < 2 + Math.floor(people / 20), near("farm"));
+      want(count("mill") < Math.ceil(count("farm") / 3) && count("farm") > 0, near("mill"));
+      want(count("bakery") < Math.ceil(count("farm") / 3) && count("mill") > 0, near("bakery"));
     }
     want(count("woodcutter") < 1, near("woodcutter", Feature.Tree));
     want(count("quarry") < 1, near("quarry", Feature.Rock));
     want(count("sawmill") < 1, near("sawmill"));
     want(count("forester") < 1, near("forester", Feature.Tree));
     want(lanterns < 1 + Math.floor(mine.length / 5), grow());
-    want(count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
+    want(!housed && count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
     // Beyond the shore: a boatyard to chart the sea, quays, and footholds on free land across the water.
     const built = mine.filter((b) => b.built).length;
     const landLocked = (this.resting.get("expand") ?? 0) > this.thoughts && built >= 12;
@@ -241,8 +401,9 @@ export class AiBuilder implements Brain {
     want(idle >= 6 && count("woodcutter") < 2 + Math.floor(idle / 8), near("woodcutter", Feature.Tree));
     want(idle >= 6 && count("quarry") < 2 + Math.floor(idle / 12), near("quarry", Feature.Rock));
     want(lanterns < 3 + Math.floor(mine.length / 3), grow());
+    if (lanterns < 3 + Math.floor(mine.length / 3)) tally(pl, 3);
     // Nothing could be placed with hands idle: perhaps forest or rock has boxed the settlement in.
-    if (!attempt(wants, Math.max(1, Math.round(this.tuning.wants))) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
+    if (!attempt(triage(wants), Math.max(1, Math.round(this.tuning.wants))) && idle >= 6 && (this.resting.get("clear") ?? 0) <= this.thoughts) {
       const did = clearForest(w, pl);
       if (!did) this.resting.set("clear", this.thoughts + 12);
       if (did === "built") this.cuts = 0;
@@ -289,9 +450,39 @@ export class AiBuilder implements Brain {
   }
 
   /** Place a lantern near the border where it would light up the most unclaimed land. */
+  private failedTries = 0;
+  /** `borderClear`: woodcutters built so far, and the thought of the last. */
+  private borderCuts = 0;
+  private cutAt = -BORDER_CUT_GAP;
+
   private expand(w: World, plank: number, stone: number): boolean {
     const pl = this.player;
     const type = plank >= 6 && stone >= 9 ? "beacon" : plank >= 3 && stone >= 3 ? "lamphouse" : "lantern";
-    return placeOn(w, type, frontierTiles(w, pl, () => this.rng.next() * 3).slice(0, 40), pl, true, 12) >= 0;
+    let tiles = frontierTiles(w, pl, () => this.rng.next() * 3);
+    if (aiOptions.borderReach) tiles = this.reachable(w, tiles);
+    // Every other lantern, while the rock is nearly gone, goes toward rock outside the border.
+    if (this.rockLow(w) && this.expansions++ % 2 === 0) tiles = this.towardRock(w, tiles);
+    tally(pl, 4);
+    if (!tiles.length) tally(pl, 5);
+    let placed = placeOn(w, type, tiles.slice(0, 40), pl, true, 12) >= 0;
+    if (placed) tally(pl, 6);
+    else if (tiles.length) {
+      tally(pl, 9);
+      if (aiOptions.borderClear && this.borderCuts < BORDER_CUTS && this.thoughts - this.cutAt >= BORDER_CUT_GAP && clearForBorder(w, pl, tiles)) {
+        this.borderCuts++;
+        this.cutAt = this.thoughts;
+        tally(pl, 10);
+        placed = true;
+      }
+      // One failed try in eight is taken apart for the probe: what stood in the way, tile by tile (a read-only diagnostic).
+      if (this.failedTries++ % 8 === 0) {
+        const sum = (aiWhy[pl] ??= {});
+        sum["tries diagnosed"] = (sum["tries diagnosed"] ?? 0) + 1;
+        diagnoseBorder(w, pl, type, tiles.slice(0, 40), (reason) => (sum[reason] = (sum[reason] ?? 0) + 1));
+      }
+    }
+    if (type === "beacon") tally(pl, 7);
+    else if (type === "lamphouse") tally(pl, 8);
+    return placed;
   }
 }

@@ -1,4 +1,4 @@
-import { AiBuilder } from "../../src/sim/ai/builder";
+import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
 import type { AiLevel, Personality } from "../../src/sim/ai/personality";
 import { GOODS } from "../../src/sim/econ/defs";
 import type { Difficulty } from "../../src/sim/econ/adversity";
@@ -6,6 +6,7 @@ import { ORE_PRESETS, type MapOptions } from "../../src/sim/econ/landuse";
 import type { GridSize } from "../../src/sim/planet/grid";
 import { World } from "../../src/sim/world";
 import { invariants } from "../invariants";
+import { Probe, SAMPLES_PER_DAY, type ProbeData } from "./probe";
 
 /** One balance game as plain data, so it can be handed to another process. */
 export interface GameSpec {
@@ -52,14 +53,29 @@ export interface GameRecord {
   winner: number;
   /** The day the game ended with a winner, or -1. */
   endDay: number;
-  /** Rule violations found by the daily invariant check (first 10). */
+  /** Rule violations found by the daily invariant check (first 10, in the order found). */
   broken: string[];
+  /** All of them: every (day, message) pair, and the same counted per kind of message with the numbers replaced by #. Absent in older records, whose `broken` is capped at 10. */
+  brokenTotal?: number;
+  brokenKinds?: Record<string, number>;
   wallMs: number;
+  /** Experimental AI behaviours that were on (BALANCE_AI); absent when none. */
+  ai?: string[];
+  /** Production, idle reasons, build timeline, logistics, people and war record (see probe.ts). Absent in older records, or when BALANCE_PROBE=0. */
+  flow?: ProbeData;
 }
 
 /** Play a game to its end or its day limit, sampling every rival seat once a day. */
 export function playGame(spec: GameSpec): GameRecord {
   const t0 = Date.now();
+  // Experimental AI behaviours (see aiOptions in builder.ts): BALANCE_AI="quarry" turns one on; a record says which.
+  const ai = (process.env.BALANCE_AI ?? "").split(",").filter(Boolean);
+  aiOptions.relocateQuarries = ai.includes("quarry");
+  aiOptions.stoneFallback = ai.includes("stone");
+  aiOptions.foodByNeed = ai.includes("food");
+  aiOptions.stonePriority = ai.includes("priority");
+  aiOptions.borderReach = ai.includes("reach");
+  aiOptions.borderClear = ai.includes("clear");
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,
@@ -85,10 +101,18 @@ export function playGame(spec: GameSpec): GameRecord {
   const seats = spec.personalities.map((_, i) => i + 1);
   const days: PlayerSample[][] = [];
   const broken = new Set<string>();
+  const brokenKinds: Record<string, number> = {};
   let endDay = -1;
+  // The probe only reads and wraps (see probe.ts); BALANCE_PROBE=0 plays the game without it.
+  const probe = process.env.BALANCE_PROBE === "0" ? null : new Probe(eco, seats.length, w.tick);
   for (let d = 0; d < spec.days && eco.winner < 0; d++) {
-    const stop = w.tick + eco.dayTicks;
-    while (w.tick < stop && eco.winner < 0) w.step();
+    probe?.beginDay(d);
+    const start = w.tick;
+    for (let slot = 1; slot <= SAMPLES_PER_DAY; slot++) {
+      const stop = start + Math.round((eco.dayTicks * slot) / SAMPLES_PER_DAY);
+      while (w.tick < stop && eco.winner < 0) w.step();
+      probe?.sample(slot);
+    }
     days.push(
       seats.map((p) => {
         const mine = eco.buildings.filter((b) => b.alive && b.built && b.owner === p);
@@ -103,7 +127,14 @@ export function playGame(spec: GameSpec): GameRecord {
         };
       }),
     );
-    for (const msg of invariants(w)) broken.add(`day ${d + 1}: ${msg}`);
+    probe?.endDay();
+    for (const msg of invariants(w)) {
+      const line = `day ${d + 1}: ${msg}`;
+      if (broken.has(line)) continue;
+      broken.add(line);
+      const kind = msg.replace(/\d+/g, "#");
+      brokenKinds[kind] = (brokenKinds[kind] ?? 0) + 1;
+    }
   }
   if (eco.winner >= 0) endDay = days.length;
   const finalBuildings = seats.map((p) => {
@@ -121,6 +152,10 @@ export function playGame(spec: GameSpec): GameRecord {
     winner: eco.winner,
     endDay,
     broken: [...broken].slice(0, 10),
+    brokenTotal: broken.size,
+    brokenKinds,
     wallMs: Date.now() - t0,
+    ...(ai.length && { ai }),
+    ...(probe && { flow: probe.data }),
   };
 }

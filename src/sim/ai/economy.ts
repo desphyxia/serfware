@@ -116,7 +116,7 @@ export class EconPlanner {
    * a geologist to find it, then a granite mine (which costs no stone) as soon as the signs show. Called before the
    * builder's site throttle, because sites waiting for stone are what hold the throttle shut.
    */
-  relieveStone(ctx: AiContext, thoughts: number): boolean {
+  relieveStone(ctx: AiContext, thoughts: number, rockLow = false): boolean {
     this.thoughts = thoughts;
     const eco = ctx.eco;
     const land = ctx.world.land;
@@ -137,17 +137,20 @@ export class EconPlanner {
       return !tool || (stock[goodId(tool)] ?? 0) >= 1;
     };
     const stoneShort = stone < 6 && built.length >= 8;
+    // The rock is nearly used up (`rockLow`, only ever set when the builder's option is on): start on granite before the stores are bare, one mine and a few surveys.
+    const early = rockLow && !stoneShort && built.length >= 8;
     const fedAtAll = count("farm") + count("fisher") + count("butcher") + count("hunter") > 0;
-    if (!stoneShort || !fedAtAll) return false;
+    if ((!stoneShort && !early) || !fedAtAll) return false;
     const granite = sign(5);
-    if (granite.length && count("granitemine") < 2 && this.can("granitemine") && manned("granitemine")) {
+    if (granite.length && count("granitemine") < (early ? 1 : 2) && this.can("granitemine") && manned("granitemine")) {
       this.wait("granitemine", 6);
       if (placeOn(ctx.world, "granitemine", granite, pl, true, 16) >= 0) return true;
     }
-    if (!granite.length && unbuilt < 6 && this.can("geologist")) {
+    if (!granite.length && unbuilt < 6 && this.can("geologist") && (!early || this.surveys < 6)) {
       const flags = eco.flags.filter((f) => f.alive && f.owner === pl && f.building < 0 && eco.check({ t: "geologist", flagTile: f.tile, player: pl }) === null);
       const done = ctx.act({ t: "geologist", flagTile: (flags[this.thoughts % Math.max(1, flags.length)] ?? { tile: -1 }).tile });
       this.wait("geologist", done.ok ? 10 : 8);
+      if (early && done.ok) this.surveys++;
       return done.ok;
     }
     return false;

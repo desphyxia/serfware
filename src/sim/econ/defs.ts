@@ -125,20 +125,35 @@ export function goodsArray(rec: Record<string, number> | undefined): number[] {
 }
 
 /** Goods that satisfy an input key: the good itself, or every member of a group. */
-export function goodsFor(key: string): number[] {
-  if (GOOD_INDEX.has(key)) return [goodId(key)];
-  return GOODS.map((g, i) => (g.group === key ? i : -1)).filter((i) => i >= 0);
+export function goodsFor(key: string): readonly number[] {
+  let list = GOODS_FOR.get(key);
+  if (!list) {
+    list = GOOD_INDEX.has(key) ? [goodId(key)] : GOODS.map((g, i) => (g.group === key ? i : -1)).filter((i) => i >= 0);
+    GOODS_FOR.set(key, list);
+  }
+  return list;
 }
+/** goodsFor answers by key, worked out once (the goods table does not change). Callers must not change the lists. */
+const GOODS_FOR = new Map<string, readonly number[]>();
 
 /** The input key (good id or group) a good type satisfies for a building, if any. */
 export function inputKeyFor(def: BuildingDef, type: number): string | null {
   if (!def.inputs) return null;
+  let keys = INPUT_KEYS.get(def);
+  if (!keys) INPUT_KEYS.set(def, (keys = new Array<string | null | undefined>(GOODS.length).fill(undefined)));
+  const known = keys[type];
+  if (known !== undefined) return known;
   const g = GOODS[type];
-  if (!g) return null;
-  if (g.id in def.inputs) return g.id;
-  if (g.group && g.group in def.inputs) return g.group;
-  return null;
+  let key: string | null = null;
+  if (g) {
+    if (g.id in def.inputs) key = g.id;
+    else if (g.group && g.group in def.inputs) key = g.group;
+  }
+  if (g) keys[type] = key;
+  return key;
 }
+/** inputKeyFor answers per building definition and good, worked out once. */
+const INPUT_KEYS = new WeakMap<BuildingDef, (string | null | undefined)[]>();
 
 /** Distribution key for a good: its group if it has one (food), else its id. */
 export function distributionKey(type: number): string {
