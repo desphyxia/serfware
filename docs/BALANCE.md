@@ -128,6 +128,10 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `release`: a seat stopped at the builder's sites cap (`sites` in `AI_LEVELS`: 2, 3 or 4 unfinished sites) pulls down the
   site that has had no material delivered or used for 4 days (what was delivered is lost) and does not place that kind
   again for 3 days, so the builder reaches the land-use step (geologists, mines, smelter) again.
+- `smith`: the builder wants its toolsmith once a sawmill stands and 8 buildings are placed, with a quarry standing or, if
+  not, 4 stone in the stores. Before, a standing quarry was required, so a seat whose rock had run out (its quarry pulled
+  down) never built one. Smoke test (tiny and small, 3 seeds, 3 rivals, 60 days): 16 of 18 seats had a toolsmith by day 60
+  against 10 of 18, the median first toolsmith on day 5 against day 10.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -227,6 +231,8 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
 | 10 | + tools,ore | 42.3 / 48.5 / 50.1 / 51.2 | 114.5 | 32% / 25% / 17% | 107 / 49 / 28 | 19% |
 | 11 | quarry,stone,food,priority,release | 42.4 / 48.2 / 51.1 / 52.2 | 116.1 | 36% / 27% / 18% | 32 / 11 / 2.4 | 4% |
 | 12 | + tools,ore,release | 42.3 / 49.2 / 51.3 / 52.5 | 116.4 | 31% / 26% / 17% | 106 / 49 / 33 | 20% |
+| 13 | quarry,stone,food,priority,smith | 42.4 / 48.9 / 51.6 / 52.3 | 116.0 | 37% / 15% / 14% | 22 / 7.3 / 1.6 | 2% |
+| 14 | + tools,ore,release,smith | 42.5 / 49.4 / 51.9 / 53.1 | 116.3 | 27% / 9% / 12% | 110 / 53 / 32 | 15% |
 
 - `tools` alone changes little: the spare saws, cleavers and crooks are no longer made (0.24, 0.22, 0.16 per seat in pilot 6
   against 0.02, 0 and 0), scythes are made a little more, and the toolsmith still waits for iron on 90% of its snapshots.
@@ -247,6 +253,12 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   against 116.9 people), and mines are as in pilots 6 and 10. The 30% of the `players` run is higher because it includes
   medium maps and up to six rivals. How many sites `release` pulled down was not counted. Unfreezing the builder does not
   lift growth on tiny and small maps; what stalled the sites (logs, stone, planks) probably does, but that was not tested.
+- `smith` (pilots 13 and 14): seats with a toolsmith at the end rise from 46% to 87% (83% with all four switches). Farms
+  with no tool fall from 28% to 15% of their snapshots (9% in pilot 14) and fishers from 18% to 14% (12%); woodcutters stay
+  at 37% alone and fall to 27% with the other switches. Buildings at the end are 52.3 (pilot 13) and 53.1 (pilot 14) against
+  51.7, people 116.0 and 116.3 against 116.9: the tool shortage eases and growth does not follow. The toolsmith still waits
+  on iron on 81% of its snapshots in pilot 14 (smelters stand in 15% of seats). Frozen seats are 14% with `smith` alone
+  (no `release`) and 6% with all four.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
