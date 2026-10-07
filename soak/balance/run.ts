@@ -76,6 +76,8 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.stonePriority = ai.includes("priority");
   aiOptions.borderReach = ai.includes("reach");
   aiOptions.borderClear = ai.includes("clear");
+  aiOptions.toolsByDemand = ai.includes("tools");
+  aiOptions.oreMines = ai.includes("ore");
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,

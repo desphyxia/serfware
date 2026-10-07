@@ -10,6 +10,10 @@ import { World } from "../../src/sim/world";
  */
 const [size, seed, rivals, days] = process.argv.slice(2) as ["tiny" | "small" | "medium", string, string, string];
 aiOptions.relocateQuarries = aiOptions.stoneFallback = aiOptions.foodByNeed = aiOptions.stonePriority = true;
+// BALANCE_EXTRA="tools,ore" adds the experimental switches on top of the pilot 6 ones.
+const extra = (process.env.BALANCE_EXTRA ?? "").split(",");
+aiOptions.toolsByDemand = extra.includes("tools");
+aiOptions.oreMines = extra.includes("ore");
 const n = Number(rivals);
 const w = new World(seed, {
   size,

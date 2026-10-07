@@ -16,27 +16,13 @@ import { TerraPlanner } from "./terra";
 import { VoyagePlanner } from "./voyage";
 import { WarPlanner } from "./war";
 import { WorksPlanner } from "./works";
+import { aiOptions } from "./options";
 
 const LANTERNS = new Set(BUILDINGS.filter((b) => b.slots).map((b) => b.id));
 
-/**
- * Behaviours that are off unless a harness switches them on, so the AI plays as before by default.
- * `relocateQuarries`: a quarry with no rock left in reach stops counting against the quarry quota and is
- * pulled down (its worker and tool go back to the pool), and new quarries are looked for farther out.
- * `stoneFallback`: when the rock inside the border is nearly used up, start on granite (a geologist, a mine) before
- * the stores are bare, and push the border toward rock outside it.
- * `foodByNeed`: while the food in the warehouses runs under a day's need, keep adding food buildings (one at a time,
- * up to a cap that grows with the population) past the fixed opening quotas.
- * `stonePriority`: no new houses while there is room for everyone, and, with stone nearly gone, none of the wants that
- * spend it on comforts and side projects (wells, flowerbeds, benches, sea, works, biome and terra), so food, lanterns and
- * the basic chains get what stone there is.
- * `borderReach`: lanterns for the border are only tried on tiles the Hearthship's land reaches (by land or bridge), with at
- * least BORDER_FREE free tiles of that land within 5: a tile across water cannot be joined by road, and a border try on one
- * is wasted. A seat with no such tile counts as land-locked, which is what lets it turn to the sea.
- * `borderClear`: when a border try placed nothing and a tree is what stands in the way (on the tile, on every spot for its
- * flag, or across the road to it), build a woodcutter within reach of that tree: at most BORDER_CUTS of them, a day apart.
- */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false };
+export { aiOptions };
+/** With `toolsByDemand`: tools of which one is kept in the stores even when no building waits for it. */
+const SPARE_TOOLS = new Set(["hammer", "axe", "pick", "scythe", "rod"]);
 /**
  * Counts per player for the balance probe, which reads them (they change no decision): thoughts that got past the
  * pace check, thoughts that stopped at the sites cap, thoughts with no idle hands, thoughts where the border was
@@ -154,7 +140,10 @@ export class AiBuilder implements Brain {
       const have = stock[t] ?? 0;
       const wanted = need.get(id) ?? 0;
       // Short of a tool somebody is waiting for: make it first. Out of a basic tool: keep one in hand.
-      const value = wanted > have ? 1 : have < 1 ? 0.4 : 0.1;
+      let value = wanted > have ? 1 : have < 1 ? 0.4 : 0.1;
+      // With `toolsByDemand`, iron goes only to tools that someone waits for, plus one spare of the tools that man the food,
+      // wood, stone and building trades; the toolsmith otherwise tops every kind up to the same stock.
+      if (aiOptions.toolsByDemand && wanted <= have) value = SPARE_TOOLS.has(id) && have < 1 ? 0.4 : 0;
       if (Math.abs((prefs.tools[id] ?? 0) - value) > 0.05) w.command({ t: "toolprio", tool: id, value, player: pl });
     }
   }
