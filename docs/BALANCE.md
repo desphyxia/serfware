@@ -125,6 +125,9 @@ node scripts/balance-flows.mjs --out balance-pilot3
   signs are remembered after the signpost is gone; a mine may stand on any free mountain tile within 2 steps of a remembered
   sign (a mine digs within 2), not only on the sign tile; the mine step runs before hedges and causeways; an exhausted mine
   is pulled down; one coal and one iron mine per 50 buildings, not one for ever.
+- `release`: a seat stopped at the builder's sites cap (`sites` in `AI_LEVELS`: 2, 3 or 4 unfinished sites) pulls down the
+  site that has had no material delivered or used for 4 days (what was delivered is lost) and does not place that kind
+  again for 3 days, so the builder reaches the land-use step (geologists, mines, smelter) again.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -222,6 +225,8 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
 | 6 | quarry,stone,food,priority | 42.4 / 48.2 / 51.0 / 51.7 | 116.9 | 37% / 28% / 18% | 25 / 13 / 2.4 | 3% |
 | 9 | + tools | 42.3 / 48.4 / 50.8 / 51.5 | 116.6 | 37% / 25% / 18% | 32 / 15 / 3.6 | 6% |
 | 10 | + tools,ore | 42.3 / 48.5 / 50.1 / 51.2 | 114.5 | 32% / 25% / 17% | 107 / 49 / 28 | 19% |
+| 11 | quarry,stone,food,priority,release | 42.4 / 48.2 / 51.1 / 52.2 | 116.1 | 36% / 27% / 18% | 32 / 11 / 2.4 | 4% |
+| 12 | + tools,ore,release | 42.3 / 49.2 / 51.3 / 52.5 | 116.4 | 31% / 26% / 17% | 106 / 49 / 33 | 20% |
 
 - `tools` alone changes little: the spare saws, cleavers and crooks are no longer made (0.24, 0.22, 0.16 per seat in pilot 6
   against 0.02, 0 and 0), scythes are made a little more, and the toolsmith still waits for iron on 90% of its snapshots.
@@ -236,11 +241,23 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   reaches the economy step that places mines and sends geologists). In the one seat traced (bal-001 seat 1) the sites that
   held the cap were three flowerbeds, each waiting for one log. The unfinished sites left in frozen seats at the end are
   mostly houses, flowerbeds, quarries, foresters, orchards and granite mines, at a median age of 51 days.
+- `release` (pilots 11 and 12): seats that spend at least half their thoughts from day 30 on at the sites cap fall from
+  11 to 15% of the 108 seats (pilots 8, 9 and 10; pilot 6 predates the counter) to 4% (pilot 11) and 3% (pilot 12).
+  Buildings and people do not move beyond the noise (52.2 and 52.5 against 51.7 buildings at the end, 116.1 and 116.4
+  against 116.9 people), and mines are as in pilots 6 and 10. The 30% of the `players` run is higher because it includes
+  medium maps and up to six rivals. How many sites `release` pulled down was not counted. Unfreezing the builder does not
+  lift growth on tiny and small maps; what stalled the sites (logs, stone, planks) probably does, but that was not tested.
+- Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
+  54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
+  pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
+  seat-days, in 99% of them in a seat with no smelter; in one traced seat no tile within 9 steps of the keep (the smelter
+  is placed there, `placeConnected`) could take a smelter: 157 taken, 79 without a flag spot, 16 too steep, 2 without a road.
+  Where iron is made, the toolsmith holds a full set of inputs and idles by the `tools` priorities.
 - The design question behind these numbers (ore and ingots in building costs) is issue #131.
 
 ## Looking at the map
 
-Five small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
+Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
 
 - `mining.ts <size> <seed> <rivals> <days>`: plays the pilot 6 AI and, at days 5, 10, 15, 20, 30, 40, 60 and 90, prints one
   JSON line per seat: the conditions the AI tests before it opens a mine (fed, toolsmith, picks, stone, sites), the geologist
@@ -250,7 +267,10 @@ Five small helpers in `soak/balance/` bundle and run like the job (`node scripts
   each day, whether the builder reached the economy step and whether it gave an order, the rests that hold a family back,
   every sign tile of the kind with the first reason `placeOn` would turn it down (not mountain, no flag spot, no road),
   the orders given by kind, the geologist's flags and surveyable ground, and the unfinished sites with what they wait for.
-  Read-only.
+  Read-only. `BALANCE_TYPE=smelter` gives the reasons for that building on the tiles within 9 of the keep instead.
+- `toolsmith.ts <size> <seed> <rivals> <days>`: per seat and day (`BALANCE_EVERY=1` for every day), the toolsmiths and
+  smelters (worker, iron, plank, coal and ore held), the stores, the unfinished sites, the AI's thoughts and the ones
+  stopped at the sites cap. Read-only.
 
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
