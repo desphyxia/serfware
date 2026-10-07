@@ -57,7 +57,7 @@ function measure(g) {
     seat.push({
       b20: built[at(20)], b40: built[at(40)], b60: built[at(60)], bEnd: final,
       p20: g.days[at(20)][s].people, p60: g.days[at(60)][s].people, pEnd: g.days[last][s].people,
-      plateau, hungry: n ? hungry / n : null,
+      plateau, hungry: n ? hungry / n : null, hungryDays: hungry, standingDays: n,
       t10: F.landDay[Math.min(11, L)][s][0], t30: F.landDay[Math.min(31, L)][s][0], tEnd: lu[0],
       use: lu.slice(1).map((v) => ratio(v, lu[0])),
     });
@@ -149,11 +149,13 @@ out("");
 // 2. Growth.
 out("## Growth, per AI seat");
 out("");
-out("| Cell | Buildings d20 | d40 | d60 | end | People d20 | d60 | end | Day buildings reach 90% of final | Hungry, days 30+ |");
+out("Hungry is pooled over the seat-days from day 30 on (a seat-day is hungry when the stores held less food than the people need at the daily meal); a median of per-seat shares hides the seats that starve.");
+out("");
+out("| Cell | Buildings d20 | d40 | d60 | end | People d20 | d60 | end | Day buildings reach 90% of final | Hungry seat-days, days 30+ |");
 out("|---|---|---|---|---|---|---|---|---|---|");
 for (const c of cells) {
   const s = byCell.get(c).flatMap((x) => x.seat);
-  out(`| ${label(c)} | ${range(s.map((x) => x.b20))} | ${range(s.map((x) => x.b40))} | ${range(s.map((x) => x.b60))} | ${range(s.map((x) => x.bEnd))} | ${range(s.map((x) => x.p20))} | ${range(s.map((x) => x.p60))} | ${range(s.map((x) => x.pEnd))} | ${range(s.map((x) => x.plateau))} | ${pct(med(s.map((x) => x.hungry)))} |`);
+  out(`| ${label(c)} | ${range(s.map((x) => x.b20))} | ${range(s.map((x) => x.b40))} | ${range(s.map((x) => x.b60))} | ${range(s.map((x) => x.bEnd))} | ${range(s.map((x) => x.p20))} | ${range(s.map((x) => x.p60))} | ${range(s.map((x) => x.pEnd))} | ${range(s.map((x) => x.plateau))} | ${pct(ratio(s.reduce((n, x) => n + x.hungryDays, 0), s.reduce((n, x) => n + x.standingDays, 0)))} |`);
 }
 out("");
 

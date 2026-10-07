@@ -155,9 +155,64 @@ their final count, hunger); the land at the end (claimed by all players, free, e
 use); and, for stone (from rock and from granite), logs, coal, iron ore, gold ore and fish, what lay on the map, what lay
 inside the AI seats' borders at the end, what they took out, and the share of that used, lost or left in stock.
 
+`balance-flows.mjs` assumes the same number of rivals in every game, so run it once per cell: split `players.jsonl` by
+`spec.size` and the number of personalities into one directory each, and point `--out` at it. (`balance-report.mjs`
+runs on the whole file; its header says "3 seats per game", which is wrong for these cells.)
+
+### Result: the first run (2026-10-07)
+
+144 games (8 cells × 3 temperaments × 6 seeds), pilot-6 AI (`quarry,stone,food,priority`), 8 h 9 min on 15 workers,
+7137 CPU-minutes. Player 0 is the steward and is not measured; per-seat figures are medians over AI seats.
+
+| Cell | Land per player | Buildings (end) | Territory | Free land on the map | Open ground in a border |
+|---|---|---|---|---|---|
+| tiny, 2 players | 567 | 59 | 585 | 16% | 22% |
+| tiny, 3 players | 378 | 46 | 297 | 10% | 20% |
+| small, 3 players | 577 | 67 | 466 | 5% | 18% |
+| small, 4 players | 433 | 55 | 369 | 5% | 19% |
+| medium, 3 players | 1453 | 105 | 1209 | 19% | 41% |
+| medium, 4 players | 1090 | 97 | 770 | 23% | 29% |
+| medium, 5 players | 872 | 91 | 825 | 5% | 29% |
+| medium, 6 players | 726 | 83 | 654 | 7% | 25% |
+
+- Every seat stops growing early: buildings reach 90% of their final count by day 7 to 11 (tiny, small) and day 16 to 24
+  (medium), and territory is fixed after about day 10. On medium with 3 and 4 players this happens with 29 to 41% of the
+  border still open ground and 19 to 23% of the map unclaimed, so land per seat is not what stops them there.
+- Rock is the scarce resource: the AI takes 43% (tiny, 2 players) to 75% (medium, 6 players) of all the rock on the map,
+  and 81 to 95% of the rock inside its borders. Granite is plentiful and almost untouched (1 to 7% taken). Coal, iron
+  ore and gold ore are 0 to 6% taken; gold mines are built by 9% of the seats.
+- Hunger (the stores held less food than the 0.45 a head the people need at the daily meal), pooled over seat-days from
+  day 30 on: tiny 14% (2 players) and 31% (3), small 49% (3) and 44% (4), medium 39%, 40%, 28% and 26% (3 to 6 players).
+  The per-seat median shown in an earlier version of the report hid this (it read 0 to 5% for several cells); the report
+  now pools. A 20-day block with food made per day below what the people need is hungry on 50 to 62% of its seat-days on
+  medium, against 2 to 6% for a block above it, so hunger follows the food made, which is flat after about day 10.
+
+### Result: mining and hunger (same run, flow reports per cell)
+
+- Mines: every AI seat has coal and iron ore inside its border (700 to 4,600 loads under the land at day 5, and a median of
+  about 2,000 to 2,700 still there at the end), yet 54% of seats build a coal mine, 47% an iron mine, 9% a gold mine. A seat
+  that mines digs a median of about 170 to 200 loads. Exactly one mine of each kind is ever placed: `ai/economy.ts` tests
+  `count("coalmine") < 1`, which counts an exhausted mine, so nothing replaces it. There is no cap in the engine.
+  From day 30 on, 85 to 97% of mine snapshots are `exhausted` and 3 to 9% are waiting for food; miners eat 1 food per 2 loads
+  of coal or iron and use about 3% of what a seat eats, so food cost is not what stops mining.
+- Why a seat has no mine (`soak/balance/mining.ts`, 3 seeds × 3 seats, medium, 60 days): no toolsmith yet (4 of 9 seats at
+  day 10; geologists wait for one), then no geologist sign although ore lies under the land (some seats at day 60), then
+  exhaustion within 10 to 20 days, and in two seats a mine that every gate allowed was still not placed for 10 days or more.
+  Picks piled up in three seats (10 to 17 in stock).
+- Iron has no use in the cost of any common building (only tools, blades and six late works buildings). The toolsmith waits
+  for iron on 98 to 100% of its snapshots; farms, woodcutters and fishers have no tool in any warehouse for 20 to 38% of
+  their snapshots from day 10 on, and farms also find nothing to sow on about 43% of them.
+- Hunger follows food made per day, which is flat after about day 10 while the people are housed up to the room: a
+  20-day block with food made under the need is hungry on 50 to 62% of seat-days on medium, a block above it on 2 to 6%.
+  Hunger only stops births and slows work (`hungry` in `dailyLife`); no one starves.
+
 ## Looking at the map
 
-Three small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
+Four small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
+
+- `mining.ts <size> <seed> <rivals> <days>`: plays the pilot 6 AI and, at days 5, 10, 15, 20, 30, 40, 60 and 90, prints one
+  JSON line per seat: the conditions the AI tests before it opens a mine (fed, toolsmith, picks, stone, sites), the geologist
+  signs by kind, the ore under the seat's land, and the state of its mines. Read-only.
 
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
