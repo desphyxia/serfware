@@ -16,6 +16,7 @@ aiOptions.toolsByDemand = extra.includes("tools");
 aiOptions.oreMines = extra.includes("ore");
 aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
+aiOptions.forgeRoom = extra.includes("forge");
 const n = Number(rivals);
 const w = new World(seed, {
   size,

@@ -28,5 +28,8 @@
  * `toolsmithAnyway`: the builder wants its toolsmith once a sawmill stands and 8 buildings are placed, with a quarry standing
  * or, if not, at least TOOLSMITH_STONE stone in the stores. Before, a standing quarry was required, and with the rock gone
  * and the quarry pulled down a seat never built one.
+ * `forgeRoom`: the smelter, goldsmith, bowyer and stable are looked for within 9 steps of the Hearthship, as before, and,
+ * when that ring has no room, within 9 steps of a few lit lanterns (a different few on each try). The 9 steps round the
+ * Hearthship fill with the first buildings, and a seat with ore and no room for a smelter never makes iron.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false };

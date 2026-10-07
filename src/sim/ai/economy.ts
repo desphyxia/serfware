@@ -18,6 +18,8 @@ const ORE_PER_BUILT = 50;
 const GEOLOGIST_HAMMERS = 2;
 /** With `oreMines`: how far from a sign (a mine digs within two steps of itself) a mine may stand. */
 const MINE_REACH = 2;
+/** With `forgeRoom`: lit lanterns tried as the centre when the ring round the Hearthship has no room. */
+const FORGE_CENTRES = 3;
 
 /**
  * The scripted AI's land use and settings: it sends geologists where mountains stand, opens mines on
@@ -323,6 +325,21 @@ export class EconPlanner {
       return false;
     };
 
+    /**
+     * The smelter, goldsmith, bowyer and stable: within 9 steps of the Hearthship (placeConnected's default centre). With
+     * `forgeRoom`, when that ring is full, within 9 steps of up to FORGE_CENTRES of the lit lanterns, a different few each try.
+     */
+    const forge = (type: string): boolean => {
+      const opts = { minDist: 2, maxDist: 9, player: pl, splitRoads: true };
+      if (placeConnected(ctx.world, type, opts)) return true;
+      if (!aiOptions.forgeRoom) return false;
+      const lanterns = built.filter((b) => b.lit && b.def.slots).map((b) => b.tile).sort((a, b) => a - b);
+      for (let i = 0; i < Math.min(FORGE_CENTRES, lanterns.length); i++) {
+        if (placeConnected(ctx.world, type, { ...opts, center: lanterns[(this.thoughts + i) % lanterns.length] as number })) return true;
+      }
+      return false;
+    };
+
     // Mines on what they found, fed by the farms; then smelting, gold, and the Warden's arms.
     const mines = (): boolean => {
       const fed = count("farm") > 0 && (count("bakery") > 0 || count("fisher") > 0 || count("butcher") > 0) && built.length >= 12;
@@ -346,7 +363,7 @@ export class EconPlanner {
         for (const [cond, type, tiles] of tries) {
           // A building that costs stone waits for some; granite mines and the like do not.
           if (!cond || !this.can(type) || !manned(type) || ((BUILDINGS[buildingType(type)]?.cost.stone ?? 0) > 0 && stone < 4)) continue;
-          const placed = MINES.has(type) ? open(type, ore ? this.mineTiles(ctx, tiles, type) : tiles) : placeConnected(ctx.world, type, { minDist: 2, maxDist: 9, player: pl, splitRoads: true });
+          const placed = MINES.has(type) ? open(type, ore ? this.mineTiles(ctx, tiles, type) : tiles) : forge(type);
           if (placed) return true;
           this.wait(type, 10);
         }
