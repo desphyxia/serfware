@@ -79,6 +79,7 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.toolsByDemand = ai.includes("tools");
   aiOptions.oreMines = ai.includes("ore");
   aiOptions.releaseStalled = ai.includes("release");
+  aiOptions.toolsmithAnyway = ai.includes("smith");
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,

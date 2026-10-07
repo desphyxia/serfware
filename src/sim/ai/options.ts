@@ -25,5 +25,8 @@
  * STALL_DAYS (the delivered goods are lost) and does not place that kind of building again for SHUN_DAYS, so a site that
  * waits for something that never comes (a flowerbed for its log) no longer holds the builder, and with it the land-use
  * step (geologists, mines, smelter), shut for the rest of the game.
+ * `toolsmithAnyway`: the builder wants its toolsmith once a sawmill stands and 8 buildings are placed, with a quarry standing
+ * or, if not, at least TOOLSMITH_STONE stone in the stores. Before, a standing quarry was required, and with the rock gone
+ * and the quarry pulled down a seat never built one.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false };

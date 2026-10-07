@@ -13,6 +13,7 @@ const extra = (process.env.BALANCE_EXTRA ?? "").split(",");
 aiOptions.toolsByDemand = extra.includes("tools");
 aiOptions.oreMines = extra.includes("ore");
 aiOptions.releaseStalled = extra.includes("release");
+aiOptions.toolsmithAnyway = extra.includes("smith");
 const n = Number(rivals);
 const w = new World(seed, {
   size,

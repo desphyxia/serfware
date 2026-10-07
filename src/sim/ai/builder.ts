@@ -60,6 +60,8 @@ const QUARRY_FAR = 22;
 /** Looks at a quarry that found no rock in reach, in a row, before it is pulled down. */
 const QUARRY_DEAD_LOOKS = 3;
 /** With `releaseStalled`: days a site may go with no material delivered or used before a seat at its cap pulls it down, and days that kind then waits. */
+/** With `toolsmithAnyway`: stone in the stores that lets a seat without a standing quarry build its toolsmith (it costs 2). */
+const TOOLSMITH_STONE = 4;
 const STALL_DAYS = 4;
 const SHUN_DAYS = 3;
 
@@ -413,7 +415,8 @@ export class AiBuilder implements Brain {
     // A well (or more, as the settlement grows) against fire.
     want(count("well") < 1 + Math.floor(mine.length / 14) && mine.length >= 8 && stone >= 3, near("well"));
     // A toolsmith once the first tools are out, so woodcutters and the rest can keep taking up work.
-    want(count("toolsmith") < 1 && count("sawmill") > 0 && count("quarry") > 0 && mine.length >= 8, near("toolsmith"));
+    // With `toolsmithAnyway` a seat whose quarry has run dry (and been pulled down) still builds one when it has stone for it.
+    want(count("toolsmith") < 1 && count("sawmill") > 0 && (count("quarry") > 0 || (aiOptions.toolsmithAnyway && stone >= TOOLSMITH_STONE)) && mine.length >= 8, near("toolsmith"));
     // Land use: geologists and mines, hedgerows, causeways, smelting and arms.
     want(built >= 10 && this.thoughts % 2 === 1, { key: "econ", fn: () => this.econ.step(ctx, this.thoughts) });
     // Public works: bridges, pleasures, digs, gifts to allies.
