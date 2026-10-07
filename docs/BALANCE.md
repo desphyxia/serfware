@@ -118,6 +118,13 @@ node scripts/balance-flows.mjs --out balance-pilot3
   free tiles of that land within 5. Changes nothing on the maps tried (see the results).
 - `clear`: when a border try placed nothing and a tree is what stands in the way (on the tile, on every spot for its flag,
   or across the road to it), build a woodcutter within reach of that tree; at most 3, a day apart.
+- `tools`: the toolsmith's iron goes only to tools somebody is waiting for (more wanted than owned), plus one spare each of
+  hammer, axe, pick, scythe and rod; no spare saws, shovels, cleavers, crooks or tongs.
+- `ore`: geologists go without a toolsmith (two hammers in the stores are enough) and keep going while a wanted kind (coal,
+  iron, gold with a smelter, granite when stone is short) has no usable sign, from the flags with the most unsampled hills;
+  signs are remembered after the signpost is gone; a mine may stand on any free mountain tile within 2 steps of a remembered
+  sign (a mine digs within 2), not only on the sign tile; the mine step runs before hedges and causeways; an exhausted mine
+  is pulled down; one coal and one iron mine per 50 buildings, not one for ever.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -206,13 +213,44 @@ runs on the whole file; its header says "3 seats per game", which is wrong for t
   20-day block with food made under the need is hungry on 50 to 62% of seat-days on medium, a block above it on 2 to 6%.
   Hunger only stops births and slows work (`hungry` in `dailyLife`); no one starves.
 
+### Result: `tools` and `ore` (pilots 9 and 10, on top of pilot 6, 2 seeds, 36 economy games of 60 days)
+
+Mean over all rivals, from `economy.jsonl` (not the same aggregation as the table above):
+
+| Pilot | `BALANCE_AI` | Buildings d10 / d20 / d40 / end | People end | Woodcutter / farm / fisher with no tool | Coal / iron ore / iron made per seat | Seats with a smelter at the end |
+|---|---|---|---|---|---|---|
+| 6 | quarry,stone,food,priority | 42.4 / 48.2 / 51.0 / 51.7 | 116.9 | 37% / 28% / 18% | 25 / 13 / 2.4 | 3% |
+| 9 | + tools | 42.3 / 48.4 / 50.8 / 51.5 | 116.6 | 37% / 25% / 18% | 32 / 15 / 3.6 | 6% |
+| 10 | + tools,ore | 42.3 / 48.5 / 50.1 / 51.2 | 114.5 | 32% / 25% / 17% | 107 / 49 / 28 | 19% |
+
+- `tools` alone changes little: the spare saws, cleavers and crooks are no longer made (0.24, 0.22, 0.16 per seat in pilot 6
+  against 0.02, 0 and 0), scythes are made a little more, and the toolsmith still waits for iron on 90% of its snapshots.
+- `ore` makes about four times the coal and ore and about twelve times the iron, and exhausted mines are 24 to 35% of mine snapshots
+  against 71 to 81%. The toolsmith waits on its input 76% of its snapshots against 100%. Tool shortages ease a little
+  (woodcutters 37 to 32%) and building and population do not move: nothing common costs iron, so more iron has no
+  consumer (the toolsmith made 2.5 tools a seat in pilot 10 and 2.8 in pilot 6). Why the toolsmith still waits on
+  its input with 28 iron made a seat has not been looked at.
+- Hunger was not measured for pilots 9 and 10.
+- Frozen seats: in the `players` run, 118 of 396 AI seats (30%) spend at least half their thoughts from day 30 on stopped at
+  the builder's sites cap (`sites` in `AI_LEVELS`: 2, 3 or 4 unfinished sites; the builder places nothing new, and never
+  reaches the economy step that places mines and sends geologists). In the one seat traced (bal-001 seat 1) the sites that
+  held the cap were three flowerbeds, each waiting for one log. The unfinished sites left in frozen seats at the end are
+  mostly houses, flowerbeds, quarries, foresters, orchards and granite mines, at a median age of 51 days.
+- The design question behind these numbers (ore and ingots in building costs) is issue #131.
+
 ## Looking at the map
 
-Four small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
+Five small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
 
 - `mining.ts <size> <seed> <rivals> <days>`: plays the pilot 6 AI and, at days 5, 10, 15, 20, 30, 40, 60 and 90, prints one
   JSON line per seat: the conditions the AI tests before it opens a mine (fed, toolsmith, picks, stone, sites), the geologist
-  signs by kind, the ore under the seat's land, and the state of its mines. Read-only.
+  signs by kind, the ore under the seat's land, and the state of its mines. Read-only. `BALANCE_EXTRA="tools,ore"` adds the
+  experimental switches on top of the pilot 6 ones (also for `minewhy.ts`).
+- `minewhy.ts <size> <seed> <rivals> <seat> <kind> <from> <to>` (kind 2 coal, 3 iron, 4 gold, 5 granite): for one seat and
+  each day, whether the builder reached the economy step and whether it gave an order, the rests that hold a family back,
+  every sign tile of the kind with the first reason `placeOn` would turn it down (not mountain, no flag spot, no road),
+  the orders given by kind, the geologist's flags and surveyable ground, and the unfinished sites with what they wait for.
+  Read-only.
 
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
