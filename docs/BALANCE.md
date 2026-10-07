@@ -132,6 +132,8 @@ node scripts/balance-flows.mjs --out balance-pilot3
   not, 4 stone in the stores. Before, a standing quarry was required, so a seat whose rock had run out (its quarry pulled
   down) never built one. Smoke test (tiny and small, 3 seeds, 3 rivals, 60 days): 16 of 18 seats had a toolsmith by day 60
   against 10 of 18, the median first toolsmith on day 5 against day 10.
+- `forge`: the smelter, goldsmith, bowyer and stable are placed within 9 steps of the Hearthship as before and, when that
+  ring has no room, within 9 steps of up to 3 lit lanterns (a different few on each try).
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -233,6 +235,7 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
 | 12 | + tools,ore,release | 42.3 / 49.2 / 51.3 / 52.5 | 116.4 | 31% / 26% / 17% | 106 / 49 / 33 | 20% |
 | 13 | quarry,stone,food,priority,smith | 42.4 / 48.9 / 51.6 / 52.3 | 116.0 | 37% / 15% / 14% | 22 / 7.3 / 1.6 | 2% |
 | 14 | + tools,ore,release,smith | 42.5 / 49.4 / 51.9 / 53.1 | 116.3 | 27% / 9% / 12% | 110 / 53 / 32 | 15% |
+| 15 | + forge | 42.5 / 49.3 / 51.9 / 53.3 | 116.8 | 26% / 8% / 10% | 109 / 64 / 34 | 18% |
 
 - `tools` alone changes little: the spare saws, cleavers and crooks are no longer made (0.24, 0.22, 0.16 per seat in pilot 6
   against 0.02, 0 and 0), scythes are made a little more, and the toolsmith still waits for iron on 90% of its snapshots.
@@ -259,6 +262,13 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   51.7, people 116.0 and 116.3 against 116.9: the tool shortage eases and growth does not follow. The toolsmith still waits
   on iron on 81% of its snapshots in pilot 14 (smelters stand in 15% of seats). Frozen seats are 14% with `smith` alone
   (no `release`) and 6% with all four.
+- `forge` (pilot 15, on top of pilot 14): the smelter, goldsmith, bowyer and stable are looked for within 9 steps of the
+  Hearthship (the default centre of `placeConnected`; the land-use step of #101 passes `maxDist: 9` and nothing in the code
+  or the commit says why), and with `forge`, when that ring is full, within 9 steps of up to 3 lit lanterns. Of the 24 seats
+  (of 108) that ever built both a coal and an iron mine, 16 built a smelter in pilot 14 and 19 in pilot 15. Smelters stand in
+  18% of seats at the end (15%), iron made is 34 per seat (32), the toolsmith still waits on iron on 82% of its snapshots,
+  buildings and people are as in pilot 14 (53.3 and 116.8). What now limits the smelter is the mines: only 24 of 108 seats
+  ever built both a coal and an iron mine (37 a coal mine, 27 an iron mine) in either pilot.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
