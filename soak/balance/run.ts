@@ -78,6 +78,7 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.borderClear = ai.includes("clear");
   aiOptions.toolsByDemand = ai.includes("tools");
   aiOptions.oreMines = ai.includes("ore");
+  aiOptions.releaseStalled = ai.includes("release");
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,

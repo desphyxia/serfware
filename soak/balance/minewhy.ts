@@ -1,5 +1,5 @@
 import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
-import { BUILDINGS, buildingType, type BuildingDef } from "../../src/sim/econ/defs";
+import { BUILDINGS, buildingType, goodId, type BuildingDef } from "../../src/sim/econ/defs";
 import { Use } from "../../src/sim/econ/landuse";
 import { World } from "../../src/sim/world";
 
@@ -15,10 +15,12 @@ aiOptions.relocateQuarries = aiOptions.stoneFallback = aiOptions.foodByNeed = ai
 const extra = (process.env.BALANCE_EXTRA ?? "").split(",");
 aiOptions.toolsByDemand = extra.includes("tools");
 aiOptions.oreMines = extra.includes("ore");
+aiOptions.releaseStalled = extra.includes("release");
 const n = Number(rivals);
 const seat = Number(seatArg);
 const kind = Number(kindArg);
-const MINE = { 2: "coalmine", 3: "ironmine", 4: "goldmine", 5: "granitemine" }[kind] as string;
+// BALANCE_TYPE=smelter checks the reasons for that building instead (on the tiles within 9 of the keep, as placeConnected looks).
+const MINE = (process.env.BALANCE_TYPE ?? { 2: "coalmine", 3: "ironmine", 4: "goldmine", 5: "granitemine" }[kind]) as string;
 type Planner = { step: (ctx: unknown, th: number) => boolean; rest: Map<string, number>; thoughts: number };
 type Inner = { econ: Planner; resting: Map<string, number>; thoughts: number };
 const brains: Record<number, Inner> = {};
@@ -116,6 +118,16 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
     const key = why(t, seat).replace(/\(slope [0-9.]+\)/, "").replace(/\(\d+ tiles\)/g, "").replace(/\(road \d+ tiles\)/, "");
     viaReach.set(key, (viaReach.get(key) ?? 0) + 1);
   }
+  const nearKeep = new Map<string, number>();
+  if (process.env.BALANCE_TYPE) {
+    const keepTile = eco.buildings[eco.keeps[seat] ?? -1]?.tile ?? 0;
+    const inner = new Set(land.ring(keepTile, 1));
+    for (const t of land.ring(keepTile, 9)) {
+      if (inner.has(t)) continue;
+      const key = land.territory[t] !== seat + 1 ? "not ours" : land.use[t] !== Use.Free ? "not free" : why(t, seat).replace(/\(slope [0-9.]+\)/, "").replace(/\(\d+ tiles\)/g, "").replace(/\(road \d+ tiles\)/, "");
+      nearKeep.set(key, (nearKeep.get(key) ?? 0) + 1);
+    }
+  }
   // Can a geologist be sent at all: flags with ground to survey within four steps, and how much of the seat's land is surveyable.
   const flagsOwn = eco.flags.filter((f) => f.alive && f.owner === seat && f.building < 0);
   const flagsOk = flagsOwn.filter((f) => eco.check({ t: "geologist", flagTile: f.tile, player: seat }) === null).length;
@@ -139,12 +151,16 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
       day: d, builtN: mine.filter((b) => b.built).length, sites: mine.filter((b) => !b.built).length,
       stepReached: calls.reached, stepGave: calls.gave,
       builderRest: { econ: rest(brain.resting, "econ", brain.thoughts) },
-      plannerRest: { mine: rest(brain.econ.rest, "mine", brain.econ.thoughts), [MINE]: rest(brain.econ.rest, MINE, brain.econ.thoughts), hedge: rest(brain.econ.rest, "hedge", brain.econ.thoughts), geologist: rest(brain.econ.rest, "geologist", brain.econ.thoughts) },
+      plannerRest: { mine: rest(brain.econ.rest, "mine", brain.econ.thoughts), [MINE]: rest(brain.econ.rest, MINE, brain.econ.thoughts), hedge: rest(brain.econ.rest, "hedge", brain.econ.thoughts), geologist: rest(brain.econ.rest, "geologist", brain.econ.thoughts), smelter: rest(brain.econ.rest, "smelter", brain.econ.thoughts) },
+      hadMine: [...((brain.econ as unknown as { hadMine: Set<string> }).hadMine ?? [])],
+      stock: { stone: eco.storageTotals(seat)[goodId("stone")] ?? 0, tongs: eco.storageTotals(seat)[goodId("tongs")] ?? 0, iron: eco.storageTotals(seat)[goodId("iron")] ?? 0, ore: eco.storageTotals(seat)[goodId("ironore")] ?? 0, coal: eco.storageTotals(seat)[goodId("coal")] ?? 0 },
+      smelters: mine.filter((b) => b.def.id === "smelter").map((b) => (b.built ? "ok" : "site")),
       mines: mine.filter((b) => b.def.id === MINE).map((b) => (b.exhausted ? "x" : b.built ? "ok" : "site")),
       signTiles: tiles.length,
       reasons: Object.fromEntries(reasons),
       facts,
       withinTwo: Object.fromEntries(viaReach),
+      nearKeep: Object.fromEntries(nearKeep),
       orders: { ...orders },
       siteList,
       geologist: { flags: flagsOwn.length, flagsWithGroundToSurvey: flagsOk, surveyableTilesInBorder: surveyableOwn, unsampled },

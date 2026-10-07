@@ -59,6 +59,9 @@ const ROCK_LOW = 15;
 const QUARRY_FAR = 22;
 /** Looks at a quarry that found no rock in reach, in a row, before it is pulled down. */
 const QUARRY_DEAD_LOOKS = 3;
+/** With `releaseStalled`: days a site may go with no material delivered or used before a seat at its cap pulls it down, and days that kind then waits. */
+const STALL_DAYS = 4;
+const SHUN_DAYS = 3;
 
 /**
  * AI rival, version 1: grows a settlement much like a careful player would. It keeps a small
@@ -100,6 +103,43 @@ export class AiBuilder implements Brain {
   private thoughts = 0;
   /** Wishes that found no site lately, and the thought they may be tried again. */
   private readonly resting = new Map<string, number>();
+  /** With `releaseStalled`: per unfinished site, the goods delivered and used so far and the tick that changed. */
+  private readonly progress = new Map<number, { sum: number; since: number }>();
+  /** With `releaseStalled`: kinds of building not placed again before this tick. */
+  private readonly shun = new Map<string, number>();
+
+  /**
+   * With `releaseStalled`: the site that has made no progress for longest (at least STALL_DAYS), pulled down so the cap opens.
+   * Called while the seat is at its cap; `watchSites` keeps the clock on every thought.
+   */
+  private releaseStalled(w: World, sites: readonly { id: number; tile: number; def: { id: string } }[]): boolean {
+    const eco = w.economy;
+    let worst: { id: number; tile: number; def: { id: string } } | null = null;
+    let since = w.tick - STALL_DAYS * eco.dayTicks;
+    for (const b of sites) {
+      const p = this.progress.get(b.id);
+      if (p && p.since <= since) {
+        worst = b;
+        since = p.since;
+      }
+    }
+    if (!worst || !w.command({ t: "demolish", tile: worst.tile, player: this.player }).ok) return false;
+    this.shun.set(worst.def.id, w.tick + SHUN_DAYS * eco.dayTicks);
+    this.progress.delete(worst.id);
+    return true;
+  }
+
+  /** With `releaseStalled`: note which unfinished sites received or used material since the last look. */
+  private watchSites(w: World, sites: readonly { id: number; delivered: number[]; consumed: number }[]): void {
+    const live = new Set<number>();
+    for (const b of sites) {
+      live.add(b.id);
+      const sum = b.delivered.reduce((a, n) => a + n, 0) + b.consumed;
+      const p = this.progress.get(b.id);
+      if (!p || p.sum !== sum) this.progress.set(b.id, { sum, since: w.tick });
+    }
+    for (const id of [...this.progress.keys()]) if (!live.has(id)) this.progress.delete(id);
+  }
 
   /**
    * Attack the enemy lantern or Hearthship it can take with good odds, using as few wardens as
@@ -302,8 +342,11 @@ export class AiBuilder implements Brain {
     if (this.thoughts % 3 === 1 && this.econ.relieveStone(ctx, this.thoughts, this.rockLow(w))) return;
     // Voyages (for a seat the rules let fly) are orders, not sites, so they do not wait for the builders.
     if (this.thoughts % 5 === 4 && VoyagePlanner.allowed(ctx) && mine.filter((b) => b.built).length >= 25 && this.voyage.step(ctx, this.thoughts)) return;
+    const unfinished = aiOptions.releaseStalled ? mine.filter((b) => !b.built) : [];
+    if (aiOptions.releaseStalled) this.watchSites(w, unfinished);
     if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) {
       tally(pl, 1);
+      if (aiOptions.releaseStalled) this.releaseStalled(w, unfinished);
       return;
     }
     // Keep enough hands free: when nobody is idle, build homes before anything else.
@@ -321,7 +364,7 @@ export class AiBuilder implements Brain {
     // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.
     const attempt = (list: typeof wants, tries: number) => {
       for (const x of list) {
-        if ((this.resting.get(x.key) ?? 0) > this.thoughts) continue;
+        if ((this.resting.get(x.key) ?? 0) > this.thoughts || (this.shun.get(x.key) ?? 0) > w.tick) continue;
         if (x.fn()) return true;
         this.resting.set(x.key, this.thoughts + 6);
         if (--tries <= 0) return false;

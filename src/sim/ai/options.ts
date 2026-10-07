@@ -21,5 +21,9 @@
  * and go on while a kind the settlement wants shows no usable sign, starting from the flags with the most surveyable
  * ground near them; an exhausted mine is pulled down and no longer counts against its quota; and a coal or iron mine is
  * allowed for every ORE_PER_BUILT buildings.
+ * `releaseStalled`: a seat stopped at the sites cap pulls down the site that has had no material delivered or used for
+ * STALL_DAYS (the delivered goods are lost) and does not place that kind of building again for SHUN_DAYS, so a site that
+ * waits for something that never comes (a flowerbed for its log) no longer holds the builder, and with it the land-use
+ * step (geologists, mines, smelter), shut for the rest of the game.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false };

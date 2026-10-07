@@ -14,6 +14,7 @@ aiOptions.relocateQuarries = aiOptions.stoneFallback = aiOptions.foodByNeed = ai
 const extra = (process.env.BALANCE_EXTRA ?? "").split(",");
 aiOptions.toolsByDemand = extra.includes("tools");
 aiOptions.oreMines = extra.includes("ore");
+aiOptions.releaseStalled = extra.includes("release");
 const n = Number(rivals);
 const w = new World(seed, {
   size,
