@@ -172,6 +172,13 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
       blockers.set(k, (blockers.get(k) ?? 0) + 1);
     }
   }
+  // What levelling any slope would change: the same tiles checked again with every slope read as flat (placeOn's own checks).
+  const placeable = (t: number) => why(t, seat).startsWith("placeable");
+  const placeableNow = candidates.filter(placeable).length;
+  const slopeOf = land.slope.bind(land);
+  land.slope = () => 0;
+  const placeableIfLevel = candidates.filter(placeable).length;
+  land.slope = slopeOf;
   const rest = (m: Map<string, number>, k: string, th: number) => Math.max(0, (m.get(k) ?? 0) - th);
   console.log(
     JSON.stringify({
@@ -184,7 +191,7 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
       smelters: mine.filter((b) => b.def.id === "smelter").map((b) => (b.built ? "ok" : "site")),
       mines: mine.filter((b) => b.def.id === MINE).map((b) => (b.exhausted ? "x" : b.built ? "ok" : "site")),
       signTiles: tiles.length,
-      remembered: { signs: knownSigns.length, tried: candidates.length, steeper: candidates.filter((t) => land.slope(t) > 3.2).length, why: Object.fromEntries(candidateWhy), blockers: Object.fromEntries(blockers) },
+      remembered: { signs: knownSigns.length, tried: candidates.length, steeper: candidates.filter((t) => land.slope(t) > 3.2).length, placeableNow, placeableIfLevel, why: Object.fromEntries(candidateWhy), blockers: Object.fromEntries(blockers) },
       reasons: Object.fromEntries(reasons),
       facts,
       withinTwo: Object.fromEntries(viaReach),
