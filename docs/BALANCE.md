@@ -267,8 +267,16 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   or the commit says why), and with `forge`, when that ring is full, within 9 steps of up to 3 lit lanterns. Of the 24 seats
   (of 108) that ever built both a coal and an iron mine, 16 built a smelter in pilot 14 and 19 in pilot 15. Smelters stand in
   18% of seats at the end (15%), iron made is 34 per seat (32), the toolsmith still waits on iron on 82% of its snapshots,
-  buildings and people are as in pilot 14 (53.3 and 116.8). What now limits the smelter is the mines: only 24 of 108 seats
-  ever built both a coal and an iron mine (37 a coal mine, 27 an iron mine) in either pilot.
+  buildings and people are as in pilot 14 (53.3 and 116.8). The counts of seats with mines (24 of 108 with both, 37 coal,
+  27 iron) came from sweep snapshots and miss mines pulled down when exhausted, so they are too low; do not read them as a
+  limit. The planner's own record gives the figures in the next bullet.
+- Why seats have no iron mine (`mining.ts` and `minewhy.ts` with `tools,ore,release,smith,forge`, 12 games, 36 seats, 60
+  days, from the planner's `hadMine`): 20 built an iron mine, 23 a coal mine, 17 a smelter. Of the 16 without an iron mine, 8
+  never remembered an iron sign (7 of them have 8 or fewer iron tiles inside the border) and 8 remembered signs but none of
+  the tiles near them (23 to 28 in the largest cases) could take a mine: no flag spot, too steep, or no road path. Those 8
+  stay stuck: the remembered signs count as found, so no geologist goes out again, and the mine step retries the same tiles
+  every ~10 thoughts for the rest of the game. Seen in small bal-001 seat 1 (49 iron tiles under its land) and tiny bal-002
+  seat 1.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
@@ -284,7 +292,8 @@ Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/
 - `mining.ts <size> <seed> <rivals> <days>`: plays the pilot 6 AI and, at days 5, 10, 15, 20, 30, 40, 60 and 90, prints one
   JSON line per seat: the conditions the AI tests before it opens a mine (fed, toolsmith, picks, stone, sites), the geologist
   signs by kind, the ore under the seat's land, and the state of its mines. Read-only. `BALANCE_EXTRA="tools,ore"` adds the
-  experimental switches on top of the pilot 6 ones (also for `minewhy.ts`).
+  experimental switches on top of the pilot 6 ones (also for `minewhy.ts`). With `ore` it also prints the mines the planner
+  has built (`had`), the iron signs it remembers and the tiles it would try. Do not run twelve at once: some die in V8.
 - `minewhy.ts <size> <seed> <rivals> <seat> <kind> <from> <to>` (kind 2 coal, 3 iron, 4 gold, 5 granite): for one seat and
   each day, whether the builder reached the economy step and whether it gave an order, the rests that hold a family back,
   every sign tile of the kind with the first reason `placeOn` would turn it down (not mountain, no flag spot, no road),

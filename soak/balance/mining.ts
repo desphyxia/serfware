@@ -18,6 +18,8 @@ aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
 aiOptions.forgeRoom = extra.includes("forge");
 const n = Number(rivals);
+type Planner = { hadMine: Set<string>; known: Map<number, Set<number>>; mineTiles: (ctx: unknown, signs: number[], type: string) => number[] };
+const brains: Record<number, { econ: Planner }> = {};
 const w = new World(seed, {
   size,
   rivals: n,
@@ -25,12 +27,21 @@ const w = new World(seed, {
   aiLevel: "normal",
   difficulty: "honest",
   peaceDays: 999,
-  brain: (s: { player: number; rng: never; personality: never; level: never }) => new AiBuilder(s.player, s.rng, s.personality, s.level),
+  brain: (s: { player: number; rng: never; personality: never; level: never }) => {
+    const b = new AiBuilder(s.player, s.rng, s.personality, s.level);
+    brains[s.player] = b as unknown as { econ: Planner };
+    return b;
+  },
 } as never);
 w.command({ t: "steward", of: 0, on: true });
 const eco = w.economy;
 const land = w.land;
 const CHECK = [5, 10, 15, 20, 30, 40, 60, 90];
+const remembered = (p: number, s: number): number[] => [...(brains[p]?.econ.known?.get(s) ?? [])].filter((t) => land.territory[t] === p + 1 && land.use[t] === Use.Free);
+const tried = (p: number, s: number, type: string): number => {
+  const signs = remembered(p, s);
+  return signs.length ? (brains[p] as { econ: Planner }).econ.mineTiles({ world: w, eco }, signs, type).length : 0;
+};
 for (let d = 1; d <= Number(days) && eco.winner < 0; d++) {
   const stop = w.tick + eco.dayTicks;
   while (w.tick < stop && eco.winner < 0) w.step();
@@ -70,6 +81,10 @@ for (let d = 1; d <= Number(days) && eco.winner < 0; d++) {
         coalSign: sign(2), ironSign: sign(3), goldSign: sign(4), graniteSign: sign(5),
         coalUnder: under(Deposit.Coal), ironUnder: under(Deposit.Iron), goldUnder: under(Deposit.Gold), graniteUnder: under(Deposit.Granite),
         coalmine: miners("coalmine"), ironmine: miners("ironmine"), smelter: count("smelter"),
+        // What the planner holds (needs `ore`): the mines it has ever seen built, the iron signs it remembers and the tiles it would try for a mine on them.
+        had: [...(brains[p]?.econ.hadMine ?? [])],
+        ironKnown: remembered(p, 3),
+        ironTried: tried(p, 3, "ironmine"),
       }),
     );
   }

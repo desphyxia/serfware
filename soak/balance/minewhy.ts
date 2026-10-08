@@ -147,6 +147,16 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
     stranded: b.stranded,
     road: keepB ? eco.route(keepB.flag, b.flag).dist : -1,
   }));
+  // With `ore` the planner remembers the signs it has seen: how many it holds for this kind, the tiles it would try for a mine
+  // (mountain, free, ours, within reach of a sign) and the first reason `placeOn` turns each of them down.
+  const planner = brain.econ as unknown as { known: Map<number, Set<number>>; mineTiles: (ctx: unknown, signs: number[], type: string) => number[] };
+  const knownSigns = [...(planner.known?.get(kind) ?? [])].filter((t) => land.territory[t] === seat + 1 && land.use[t] === Use.Free);
+  const candidates = knownSigns.length ? planner.mineTiles({ world: w, eco }, knownSigns, MINE) : [];
+  const candidateWhy = new Map<string, number>();
+  for (const t of candidates) {
+    const key = why(t, seat).replace(/\(slope [0-9.]+\)/, "").replace(/\(\d+ tiles\)/g, "").replace(/\(road \d+ tiles\)/, "");
+    candidateWhy.set(key, (candidateWhy.get(key) ?? 0) + 1);
+  }
   const rest = (m: Map<string, number>, k: string, th: number) => Math.max(0, (m.get(k) ?? 0) - th);
   console.log(
     JSON.stringify({
@@ -159,6 +169,7 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
       smelters: mine.filter((b) => b.def.id === "smelter").map((b) => (b.built ? "ok" : "site")),
       mines: mine.filter((b) => b.def.id === MINE).map((b) => (b.exhausted ? "x" : b.built ? "ok" : "site")),
       signTiles: tiles.length,
+      remembered: { signs: knownSigns.length, tried: candidates.length, why: Object.fromEntries(candidateWhy) },
       reasons: Object.fromEntries(reasons),
       facts,
       withinTwo: Object.fromEntries(viaReach),
