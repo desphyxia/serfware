@@ -284,7 +284,7 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
   seat-days, in 99% of them in a seat with no smelter; in one traced seat no tile within 9 steps of the keep (the smelter
-  is placed there, `placeConnected`) could take a smelter: 157 taken, 79 without a flag spot, 16 too steep, 2 without a road.
+  is placed there, `placeConnected`) could take a smelter: 157 taken, 79 without a flag spot, 16 that could not be built on (the probe did not split slope from the other causes), 2 without a road.
   Where iron is made, the toolsmith holds a full set of inputs and idles by the `tools` priorities.
 - The design question behind these numbers (ore and ingots in building costs) is issue #131.
 
