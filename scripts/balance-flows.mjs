@@ -8,6 +8,7 @@
 // first ten windows. Rates are per seat per window over seat-days where the seat was still standing, so fallen
 // seats do not dilute them.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { URL } from "node:url";
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -244,7 +245,7 @@ function analyse(recs, label, md) {
   const per = new Map();
   for (const r of recs) {
     const seen = new Map();
-    for (const [type, rv, placed, finished, ended, how] of r.flow.buildings) {
+    for (const [type, rv, placed, finished, _ended, how] of r.flow.buildings) {
       const id = B[type];
       const e = per.get(id) ?? { placed: 0, done: 0, lost: 0, times: [], firsts: [], seats: 0 };
       per.set(id, e);

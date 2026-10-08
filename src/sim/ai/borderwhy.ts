@@ -115,7 +115,8 @@ export function diagnoseBorder(w: World, player: number, type: string, tiles: re
       continue;
     }
     // How far the nearest flag is, in tiles (straight line), in bands of 5.
-    const d = Math.hypot((c[(near[0] as number) * 3] as number) - (c[flag * 3] as number), (c[(near[0] as number) * 3 + 1] as number) - (c[flag * 3 + 1] as number), (c[(near[0] as number) * 3 + 2] as number) - (c[flag * 3 + 2] as number)) / land.spacing;
+    const nf = near[0] as number;
+    const d = Math.sqrt(((c[nf * 3] as number) - (c[flag * 3] as number)) ** 2 + ((c[nf * 3 + 1] as number) - (c[flag * 3 + 1] as number)) ** 2 + ((c[nf * 3 + 2] as number) - (c[flag * 3 + 2] as number)) ** 2) / land.spacing;
     add(`reach: nearest flag ${Math.floor(d / 5) * 5}-${Math.floor(d / 5) * 5 + 4} tiles away`);
     if (!home.has(site)) {
       add("road: the tile is on land the Hearthship's land does not reach (an island, or cut off by water)");

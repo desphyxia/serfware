@@ -69,7 +69,6 @@ function measure(g) {
   const R = F.resourceFields;
   const ri = (n) => R.indexOf(n);
   const mapStart = F.mapDay[0];
-  const mapEnd = F.mapDay[L];
   const inAi = (day, name) => {
     let v = 0;
     for (let s = 0; s < rivals; s++) v += F.resDay[day][s][ri(name)];
