@@ -273,7 +273,10 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
 - Why seats have no iron mine (`mining.ts` and `minewhy.ts` with `tools,ore,release,smith,forge`, 12 games, 36 seats, 60
   days, from the planner's `hadMine`): 20 built an iron mine, 23 a coal mine, 17 a smelter. Of the 16 without an iron mine, 8
   never remembered an iron sign (7 of them have 8 or fewer iron tiles inside the border) and 8 remembered signs but none of
-  the tiles near them (23 to 28 in the largest cases) could take a mine: no flag spot, too steep, or no road path. Those 8
+  the tiles near them (23 to 28 in the largest cases) could take a mine: no flag spot, a field, tree or hedge on the tile,
+  or no road path. Steepness is the smaller part: in three traced seats 0 to 2 of the 6 to 28 tiles tried were over the mine
+  slope limit (3.2), while a flag needs a neighbour under slope 2.2 and the neighbours were also blocked by trees, fields,
+  buildings and other flags. Those 8
   stay stuck: the remembered signs count as found, so no geologist goes out again, and the mine step retries the same tiles
   every ~10 thoughts for the rest of the game. Seen in small bal-001 seat 1 (49 iron tiles under its land) and tiny bal-002
   seat 1.

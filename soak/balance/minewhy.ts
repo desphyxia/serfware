@@ -154,8 +154,23 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
   const candidates = knownSigns.length ? planner.mineTiles({ world: w, eco }, knownSigns, MINE) : [];
   const candidateWhy = new Map<string, number>();
   for (const t of candidates) {
-    const key = why(t, seat).replace(/\(slope [0-9.]+\)/, "").replace(/\(\d+ tiles\)/g, "").replace(/\(road \d+ tiles\)/, "");
+    // "cannot build" is split by slope: above 3.2 a mine is too steep, below it something else (a feature, a neighbour) is in the way.
+    const key = why(t, seat).replace(/\(slope [0-9.]+\)/, land.slope(t) > 3.2 ? "[steep]" : "[not steep]").replace(/\(\d+ tiles\)/g, "").replace(/\(road \d+ tiles\)/, "");
     candidateWhy.set(key, (candidateWhy.get(key) ?? 0) + 1);
+  }
+  // The cause under "cannot build" (what stands on the tile: its feature and use) and under "no flag spot" (what blocks the flag on each neighbour).
+  const blockers = new Map<string, number>();
+  for (const t of candidates) {
+    const fl = land.bestFlagTile(t, seat);
+    if (fl < 0) {
+      for (const n of grid.neighborsOf(t)) {
+        const r = land.flagBlocker(n, seat);
+        if (r) blockers.set(`flag: ${r}`, (blockers.get(`flag: ${r}`) ?? 0) + 1);
+      }
+    } else if (!land.canBuildDef(t, fl, def, seat)) {
+      const k = `feature ${land.feature[t]} use ${land.use[t]} mountain ${land.isMountain(t)} slope>${land.slope(t) > 3.2 ? "3.2" : "ok"} gap ${def.slots ? "lantern" : "-"}`;
+      blockers.set(k, (blockers.get(k) ?? 0) + 1);
+    }
   }
   const rest = (m: Map<string, number>, k: string, th: number) => Math.max(0, (m.get(k) ?? 0) - th);
   console.log(
@@ -169,7 +184,7 @@ for (let d = 1; d <= to && eco.winner < 0; d++) {
       smelters: mine.filter((b) => b.def.id === "smelter").map((b) => (b.built ? "ok" : "site")),
       mines: mine.filter((b) => b.def.id === MINE).map((b) => (b.exhausted ? "x" : b.built ? "ok" : "site")),
       signTiles: tiles.length,
-      remembered: { signs: knownSigns.length, tried: candidates.length, why: Object.fromEntries(candidateWhy) },
+      remembered: { signs: knownSigns.length, tried: candidates.length, steeper: candidates.filter((t) => land.slope(t) > 3.2).length, why: Object.fromEntries(candidateWhy), blockers: Object.fromEntries(blockers) },
       reasons: Object.fromEntries(reasons),
       facts,
       withinTwo: Object.fromEntries(viaReach),
