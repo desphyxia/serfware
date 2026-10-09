@@ -56,9 +56,18 @@ while (w.tick < stop && eco.winner < 0 && reported < 3) {
           JSON.stringify({
             building: b.def.id, buildingTile: b.tile, slope: Number(land.slope(b.tile).toFixed(2)), degree: grid.degree(b.tile), territory: land.territory[b.tile],
             bestFlagTile: land.bestFlagTile(b.tile, f.owner),
-            neighbours: Array.from(grid.neighborsOf(b.tile)).map((n) => ({ n, land: land.isLand(n), slope: Number(land.slope(n).toFixed(2)), blocker: land.flagBlocker(n, f.owner), use: land.use[n], feature: land.feature[n] })),
+            neighbours: Array.from(grid.neighborsOf(b.tile)).map((n) => ({ n, land: land.isLand(n), lake: land.hydro?.lake[n], elevation: Number((land.planet.terrain.elevation[n] as number).toFixed(2)), slope: Number(land.slope(n).toFixed(2)), blocker: land.flagBlocker(n, f.owner), use: land.use[n], feature: land.feature[n] })),
           }),
         );
+      }
+      // Land each keep has (own land tiles in the claimed territory, land and flat land within 7 steps), for every player.
+      for (const k of eco.keeps) {
+        const kb = eco.buildings[k];
+        if (!kb) continue;
+        let own = 0;
+        for (let t = 0; t < land.territory.length; t++) if (land.territory[t] === kb.owner + 1 && land.isLand(t)) own++;
+        const near = land.ring(kb.tile, 7);
+        console.log(JSON.stringify({ player: kb.owner, keepTile: kb.tile, ownLandTiles: own, landWithin7: near.filter((n) => land.isLand(n)).length, flatWithin7: near.filter((n) => land.isLand(n) && land.slope(n) < 1.2).length }));
       }
       console.log(recent.join("\n"));
     }
