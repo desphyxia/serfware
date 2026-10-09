@@ -301,6 +301,27 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   Where iron is made, the toolsmith holds a full set of inputs and idles by the `tools` priorities.
 - The design question behind these numbers (ore and ingots in building costs) is issue #131.
 
+## Targets (agreed 2026-10-08)
+
+Set after the first report. All are measured on the 36-game tiny and small economy suite (3 temperaments × 3 levels × 2
+seeds, 60 days, mean over all AI rivals); medium maps get their own check later. The figures in the middle column are the
+baselines they replace.
+
+| Area | Baseline | Target |
+|---|---|---|
+| Growth | Buildings grow about 7% from day 20 to day 60 (48.2 to 51.7, pilot 6); they reach 90% of their final count by day 7 to 11 | Still growing at day 40: at least 25% more buildings from day 20 to day 60 |
+| Hunger | 14 to 49% of seat-days from day 30 have less food than the meal needs (per `players` cell; pooled) | 10% or less |
+| Frozen seats | 11 to 15% (3% with `release`) | 3% or less |
+| Tools | Woodcutter / farm / fisher without a tool on 37% / 28% / 18% of snapshots (pilot 6; 26% / 8% / 10% with the full stack) | 10% or less each |
+| Granite | 1 to 7% of the granite on the map is taken; rock is the scarce resource | Granite is 30% or more of the stone the AI uses |
+| Metal chain (smelter, iron mine) | Smelter in 3% of seats at the end (18% with the full stack); an iron mine in 20 of 36 seats | No target until #131 decides where iron is used |
+| War pacing | Not measured in this report | The `war` suite is run next; targets after its baseline |
+
+The granite share is read from units made per building type (granite mine against quarry) in the flow records. Met so far:
+frozen seats (3% in pilot 12) and, in pilot 15, tools for farms (8%) and fishers (10%) but not woodcutters (26%). Growth is
+far from its target (pilot 15 grows about 8% from day 20 to day 60); hunger was not measured for pilots 9 to 15 and the
+granite share has not been computed.
+
 ## Looking at the map
 
 Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
