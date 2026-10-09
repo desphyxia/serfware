@@ -1708,6 +1708,16 @@ export class Economy {
       s.carrying = -1;
       return;
     }
+    // Put down on the flag of the building it is bound for (the carrier was walking it in when the road went): the building takes it.
+    const dest = g.dest >= 0 ? (this.buildings[g.dest] as Building) : undefined;
+    if (dest?.alive && dest.flag === flagId) {
+      this.receive(dest, g.type);
+      g.alive = false;
+      g.carrier = -1;
+      s.carryGood = -1;
+      s.carrying = -1;
+      return;
+    }
     const flag = this.flags[flagId] as Flag;
     if (flag.alive && flag.goods.length < FLAG_CAPACITY) {
       g.flag = flagId;
@@ -1892,7 +1902,8 @@ export class Economy {
     const owner = (this.flags[g.flag] as Flag).owner;
     let bestClaim = 0;
     for (const b of this.buildings) {
-      if (!b.alive || b.owner !== owner || this.need(b, g.type) <= 0) continue;
+      // Not the building that stands on this very flag: a carrier only enters a building with a good it brings to the flag.
+      if (!b.alive || b.owner !== owner || b.flag === g.flag || this.need(b, g.type) <= 0) continue;
       const d = this.route(g.flag, b.flag).dist;
       if (d === Infinity) continue;
       const c = this.claim(b, g.type);
@@ -1976,6 +1987,17 @@ export class Economy {
     for (const g of this.goods) {
       if (!g.alive || g.carrier >= 0 || g.dest < 0 || g.flag < 0) continue;
       const d = this.buildings[g.dest] as Building;
+      // A good lying on the flag of the building it is bound for has no next hop and nobody to carry it in: the building takes it.
+      if (d.alive && d.flag === g.flag) {
+        const lying = (this.flags[g.flag] as Flag).goods;
+        const at = lying.indexOf(g.id);
+        if (at >= 0) {
+          lying.splice(at, 1);
+          this.receive(d, g.type);
+          g.alive = false;
+        }
+        continue;
+      }
       if (!d.def.storage || (this.flags[g.flag] as Flag).goods.indexOf(g.id) < 0) continue;
       let list = toStore.get(g.type);
       if (!list) toStore.set(g.type, (list = []));
@@ -2003,7 +2025,7 @@ export class Economy {
         let redirectD = Infinity;
         for (let i = 0; moving && i < moving.length; i++) {
           const g = moving[i] as Good;
-          if ((this.flags[g.flag] as Flag).owner !== b.owner) continue;
+          if ((this.flags[g.flag] as Flag).owner !== b.owner || g.flag === b.flag) continue;
           const d = this.route(g.flag, b.flag).dist;
           if (d < redirectD) {
             redirectD = d;
@@ -2013,7 +2035,7 @@ export class Economy {
         let src: Building | null = null;
         let bestD = Infinity;
         for (const s of this.buildings) {
-          if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || (s.stock[type] as number) <= 0) continue;
+          if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || s.flag === b.flag || (s.stock[type] as number) <= 0) continue;
           const sf = this.flags[s.flag] as Flag;
           if (sf.goods.length + sf.reserved >= FLAG_CAPACITY) continue;
           const d = this.route(s.flag, b.flag).dist;
