@@ -31,5 +31,9 @@
  * `forgeRoom`: the smelter, goldsmith, bowyer and stable are looked for within 9 steps of the Hearthship, as before, and,
  * when that ring has no room, within 9 steps of a few lit lanterns (a different few on each try). The 9 steps round the
  * Hearthship fill with the first buildings, and a seat with ore and no room for a smelter never makes iron.
+ * `surveyAgain` (needs `oreMines`): when three tries in a row to place a coal, iron, gold or granite mine on the remembered
+ * signs fail, those signs are forgotten (except any within reach of a mine that still works), so the geologists see the kind
+ * as lacking and survey again; not again for 120 thoughts. Remembered signs count as found, and a seat whose signs have no
+ * tile a mine can stand on (no flag spot, a field or tree, no road) otherwise retries them for the rest of the game.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false };

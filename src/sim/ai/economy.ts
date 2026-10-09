@@ -20,6 +20,12 @@ const GEOLOGIST_HAMMERS = 2;
 const MINE_REACH = 2;
 /** With `forgeRoom`: lit lanterns tried as the centre when the ring round the Hearthship has no room. */
 const FORGE_CENTRES = 3;
+/** With `surveyAgain`: failed tries to place a kind of mine, in a row, before its remembered signs are forgotten. */
+const SURVEY_FAILS = 3;
+/** With `surveyAgain`: thoughts (about 2 days) before the signs of a kind may be forgotten again. */
+const SURVEY_REST = 120;
+/** The geologist sign (deposit + 1) each kind of mine digs. */
+const SIGN_FOR: Record<string, number> = { coalmine: 2, ironmine: 3, goldmine: 4, granitemine: 5 };
 
 /**
  * The scripted AI's land use and settings: it sends geologists where mountains stand, opens mines on
@@ -40,6 +46,8 @@ export class EconPlanner {
   private surveys = 0;
   /** With `oreMines`: the kinds of mine that have stood finished (an exhausted one is pulled down, but its smelting goes on). */
   private readonly hadMine = new Set<string>();
+  /** With `surveyAgain`: failed tries to place a kind of mine (by sign) since the last success or the last forgetting. */
+  private readonly misses = new Map<number, number>();
 
   private can(key: string): boolean {
     return (this.rest.get(key) ?? 0) <= this.thoughts;
@@ -198,6 +206,26 @@ export class EconPlanner {
 
   /** With `oreMines`: the sign tiles seen so far, by sign (deposit + 1): a signpost stands for 6000 ticks, the mine comes later. */
   private readonly known = new Map<number, Set<number>>();
+
+  /**
+   * With `surveyAgain`: a try to place a mine on the remembered signs of its kind failed. After SURVEY_FAILS in a row the signs
+   * are forgotten (except those within reach of a mine that still works), so the geologists see the kind as lacking and
+   * survey again; not again for SURVEY_REST thoughts, so the same tiles are not tried in a tight loop.
+   */
+  private missed(ctx: AiContext, type: string): void {
+    const s = SIGN_FOR[type];
+    const set = s === undefined ? undefined : this.known.get(s);
+    if (s === undefined || !set?.size) return;
+    const n = (this.misses.get(s) ?? 0) + 1;
+    this.misses.set(s, n);
+    if (n < SURVEY_FAILS || !this.can(`forget${s}`)) return;
+    const land = ctx.world.land;
+    const dug = new Set<number>();
+    for (const b of ctx.eco.buildings) if (b.alive && b.owner === this.player && b.def.id === type && !b.exhausted) for (const t of [b.tile, ...land.ring(b.tile, MINE_REACH)]) dug.add(t);
+    for (const t of [...set]) if (!dug.has(t)) set.delete(t);
+    this.misses.delete(s);
+    this.wait(`forget${s}`, SURVEY_REST);
+  }
 
   /**
    * Land use: one order at most. Returns true if it placed something or gave an order, so the builder
@@ -364,7 +392,11 @@ export class EconPlanner {
           // A building that costs stone waits for some; granite mines and the like do not.
           if (!cond || !this.can(type) || !manned(type) || ((BUILDINGS[buildingType(type)]?.cost.stone ?? 0) > 0 && stone < 4)) continue;
           const placed = MINES.has(type) ? open(type, ore ? this.mineTiles(ctx, tiles, type) : tiles) : forge(type);
-          if (placed) return true;
+          if (placed) {
+            if (aiOptions.surveyAgain) this.misses.delete(SIGN_FOR[type] ?? 0);
+            return true;
+          }
+          if (aiOptions.surveyAgain && ore && tiles.length > 0) this.missed(ctx, type);
           this.wait(type, 10);
         }
         this.wait("mine", 2);

@@ -134,6 +134,9 @@ node scripts/balance-flows.mjs --out balance-pilot3
   against 10 of 18, the median first toolsmith on day 5 against day 10.
 - `forge`: the smelter, goldsmith, bowyer and stable are placed within 9 steps of the Hearthship as before and, when that
   ring has no room, within 9 steps of up to 3 lit lanterns (a different few on each try).
+- `survey` (needs `ore`): after 3 failed tries in a row to place a mine of a kind on its remembered signs, those signs are
+  forgotten (except any within reach of a mine that still works), so the geologists see the kind as lacking and survey
+  again; not again for 120 thoughts (about 2 days).
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -236,6 +239,7 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
 | 13 | quarry,stone,food,priority,smith | 42.4 / 48.9 / 51.6 / 52.3 | 116.0 | 37% / 15% / 14% | 22 / 7.3 / 1.6 | 2% |
 | 14 | + tools,ore,release,smith | 42.5 / 49.4 / 51.9 / 53.1 | 116.3 | 27% / 9% / 12% | 110 / 53 / 32 | 15% |
 | 15 | + forge | 42.5 / 49.3 / 51.9 / 53.3 | 116.8 | 26% / 8% / 10% | 109 / 64 / 34 | 18% |
+| 16 | + survey | 42.8 / 48.7 / 50.9 / 52.2 | 114.4 | 29% / 8% / 11% (pilot 15: 28% / 9% / 11% by the same count) | 101 / 52 / 30 | 18% |
 
 - `tools` alone changes little: the spare saws, cleavers and crooks are no longer made (0.24, 0.22, 0.16 per seat in pilot 6
   against 0.02, 0 and 0), scythes are made a little more, and the toolsmith still waits for iron on 90% of its snapshots.
@@ -280,6 +284,15 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   stay stuck: the remembered signs count as found, so no geologist goes out again, and the mine step retries the same tiles
   every ~10 thoughts for the rest of the game. Seen in small bal-001 seat 1 (49 iron tiles under its land) and tiny bal-002
   seat 1.
+- `survey` (pilot 16, on top of pilot 15): no gain. Same 12 games and 36 seats as above with the switch on: 20 built an iron
+  mine (20 without it), 5 are stuck on remembered signs (8), 11 never remembered an iron sign (8). The stuck case that
+  motivated it, small bal-001 seat 1, now builds one; a seat that built one before (small bal-006 seat 1, tiny bal-004 seat
+  3) now has none; the likely reason, not checked, is that a try can fail for passing reasons (a road blocked by a site) and
+  the switch then forgets signs a mine could have used. Seats trade places and the total does not move. Pilot 16 over 36 games: buildings
+  42.8 / 48.7 / 50.9 / 52.2 against 42.5 / 49.3 / 51.9 / 53.3, people 114.4 against 116.8, smelter seats 18% (18%), iron
+  made 30 per seat (34), frozen seats 4.6% (5.6%), toolsmith at the end 84% (83%): within the noise or a little lower. Not
+  tested: whether the geologists find new signs after the forgetting (only the outcome was counted), other thresholds than 3
+  tries and 120 thoughts, and the `players` suite.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its

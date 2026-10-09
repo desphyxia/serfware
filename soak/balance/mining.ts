@@ -17,6 +17,7 @@ aiOptions.oreMines = extra.includes("ore");
 aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
 aiOptions.forgeRoom = extra.includes("forge");
+aiOptions.surveyAgain = extra.includes("survey");
 const n = Number(rivals);
 type Planner = { hadMine: Set<string>; known: Map<number, Set<number>>; mineTiles: (ctx: unknown, signs: number[], type: string) => number[] };
 const brains: Record<number, { econ: Planner }> = {};

@@ -18,6 +18,7 @@ aiOptions.oreMines = extra.includes("ore");
 aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
 aiOptions.forgeRoom = extra.includes("forge");
+aiOptions.surveyAgain = extra.includes("survey");
 const n = Number(rivals);
 const seat = Number(seatArg);
 const kind = Number(kindArg);
