@@ -15,7 +15,7 @@ import { normaliseSeed, randomSeedWord } from "./sim/seedwords";
 
 declare global {
   interface Window {
-    __seedfall?: { ready: boolean; game?: Game; errors: () => number; lastError?: () => unknown; demo?: () => number; battle?: () => number; place?: (type: string) => boolean };
+    __seedfall?: { ready: boolean; game?: Game; errors: () => number; lastError?: () => unknown; demo?: () => number; battle?: () => number; place?: (type: string) => boolean; timings?: { init: number; shaders: number; firstFrame: number } };
   }
 }
 
