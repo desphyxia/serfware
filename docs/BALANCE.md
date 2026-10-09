@@ -315,7 +315,10 @@ baselines they replace.
 | Tools | Woodcutter / farm / fisher without a tool on 37% / 28% / 18% of snapshots (pilot 6; 26% / 8% / 10% with the full stack) | 10% or less each |
 | Granite | 1 to 7% of the granite on the map is taken; rock is the scarce resource | Granite is 30% or more of the stone the AI uses |
 | Metal chain (smelter, iron mine) | Smelter in 3% of seats at the end (18% with the full stack); an iron mine in 20 of 36 seats | No target until #131 decides where iron is used |
-| War pacing | Not measured in this report | The `war` suite is run next; targets after its baseline |
+| War: winners | 5 of 30 games end with a winner within 200 days (17%) | 80% or more of games |
+| War: timing | Every win is by day 9 to 60 | Winners decided between day 40 and day 150 |
+| War: activity | Wardens out attacking fall to about 0 from day 60; seats standing are flat at 68% from day 80 | Steady attacks to the end of the game |
+| War: weapons | Blades made by 6% of seats, bows by 12% | No target until #131 decides where iron is used |
 
 The granite share is read from units made per building type (granite mine against quarry) in the flow records. Met so far:
 frozen seats (3% in pilot 12) and, in pilot 15, tools for farms (8%) and fishers (10%) but not woodcutters (26%). Growth is
@@ -346,8 +349,10 @@ granite share has not been computed.
   `bestFlagTile` returned -1 and `settleAt` (`economy.ts`, `createFlag(flagTile, ...)`) made the flag anyway. `setupStart` picks
   the keep tile without checking that a flag can stand beside it (`landingProblem` checks that no tile within 2 is water, but
   `setupStart` does not call it). The other 2 games with this message were not traced.
-- No war targets are set. Wars here are decided in the first 60 days or not at all; whether that is the wanted pacing is a design
-  question.
+- War targets are in the table under "Targets" (set 2026-10-09): 80% or more of games with a winner, decided between day 40 and
+  day 150, with steady attacks to the end. None is met: 17% of games have a winner, all by day 60, and wardens stop attacking.
+  "Steady attacks" has no number yet; a reading to agree: some attack in at least 80% of the 10-day blocks while two or more
+  seats stand. The war suite is the 30-game one above (tiny and small, three Wardens, 200 days).
 
 ## Looking at the map
 
