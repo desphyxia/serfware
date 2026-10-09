@@ -211,6 +211,54 @@ export function demoBattle(w: World, p = 0, q = 1): number {
 }
 
 /**
+ * A lantern for the border could not be placed on any of `tiles` (frontier tiles): where a tree is what stands in the way
+ * (on the tile, on every spot for its flag, or across the road to it), put a woodcutter within reach of that tree.
+ * Skips a tree that a woodcutter of ours already reaches. Returns true when a woodcutter site was placed.
+ */
+export function clearForBorder(w: World, player: number, tiles: readonly number[]): boolean {
+  const eco = w.economy;
+  const land = w.land;
+  const grid = land.planet.grid;
+  const c = grid.center;
+  const lantern = BUILDINGS[buildingType("lantern")] as BuildingDef;
+  const flags = eco.flags.filter((f) => f.alive && f.owner === player);
+  if (!flags.length) return false;
+  const cutters = eco.buildings.filter((b) => b.alive && b.owner === player && b.def.id === "woodcutter");
+  const d2 = (a: number, b: number) => (c[a * 3]! - c[b * 3]!) ** 2 + (c[a * 3 + 1]! - c[b * 3 + 1]!) ** 2 + (c[a * 3 + 2]! - c[b * 3 + 2]!) ** 2;
+  const nearestFlags = (t: number, n: number) =>
+    flags
+      .map((f) => [d2(f.tile, t), f.tile] as const)
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+      .slice(0, n)
+      .map(([, ft]) => ft);
+  const open = (x: number) => land.roadable(x, player);
+  const throughTrees = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && land.feature[x] === Feature.Tree);
+  for (const t of tiles.slice(0, 12)) {
+    const ft = land.bestFlagTile(t, player);
+    let blocker = -1;
+    if (land.feature[t] === Feature.Tree) blocker = t;
+    else if (ft < 0) blocker = grid.neighborsOf(t).find((n) => land.feature[n] === Feature.Tree && land.territory[n] === player + 1) ?? -1;
+    else if (land.canBuildDef(t, ft, lantern, player)) {
+      const sources = nearestFlags(ft, 4);
+      if (sources.some((s) => land.findPath(s, ft, (x) => open(x) && x !== t, 1500))) continue;
+      let best: number[] | null = null;
+      for (const s of sources) {
+        const path = land.findPath(s, ft, (x) => throughTrees(x) && x !== t, 1500);
+        if (path && (!best || path.length < best.length)) best = path;
+      }
+      blocker = best?.find((x) => land.feature[x] === Feature.Tree) ?? -1;
+    }
+    if (blocker < 0) continue;
+    const reached = new Set(land.ring(blocker, 6));
+    if (cutters.some((b) => reached.has(b.tile))) continue;
+    // Close to the tree first; a woodcutter reaches 6 tiles, so anything within 5 will do.
+    const sites = land.ring(blocker, 5).filter((x) => land.territory[x] === player + 1).sort((a, b) => d2(a, blocker) - d2(b, blocker) || a - b);
+    if (placeOn(w, "woodcutter", sites, player, true, 40) >= 0) return true;
+  }
+  return false;
+}
+
+/**
  * A settlement boxed in by forest or rock: when ground that could be built on cannot be reached by
  * road, put a woodcutter (trees) or a quarry (rocks) where it can clear the first obstacle between
  * the road network and that ground. Returns what it did: a clearing site built, a forester taken down, or nothing.

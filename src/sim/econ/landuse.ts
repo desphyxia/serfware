@@ -118,6 +118,8 @@ export const FIELD_RIPE = 4;
 export const FIELD_GROWTH_TICKS = 450;
 /** A deposit with fewer loads than this gets a small signpost (about the poorest quarter; deposits hold 14 to 50). */
 export const SMALL_DEPOSIT = 20;
+/** Rings kept by `LandUse.ring` before the cache is emptied (a radius-6 ring is about 130 numbers). */
+const RING_CACHE_MAX = 60000;
 /** How long a geologist's signpost stands. */
 export const SIGN_TICKS = 6000;
 
@@ -717,7 +719,22 @@ export class LandUse {
   }
 
   /** Tiles within `radius` steps of `center`, nearest first (ties by tile index). */
-  ring(center: number, radius: number): number[] {
+  ring(center: number, radius: number): readonly number[] {
+    // The grid never changes, so a small ring is worked out once per (tile, radius) and shared: callers must not change it.
+    const key = center * 16 + radius;
+    const cached = radius < 16 ? this.rings.get(key) : undefined;
+    if (cached) return cached;
+    const out = this.ringTiles(center, radius);
+    if (radius < 16) {
+      if (this.rings.size > RING_CACHE_MAX) this.rings.clear();
+      this.rings.set(key, out);
+    }
+    return out;
+  }
+
+  private readonly rings = new Map<number, readonly number[]>();
+
+  private ringTiles(center: number, radius: number): number[] {
     const grid = this.planet.grid;
     const seen = new Set<number>([center]);
     let frontier = [center];

@@ -46,6 +46,10 @@ const BUILD_TICKS_PER_MATERIAL = 45;
 /** Ticks to dig away one unit of ground (see LandUse.levelWork). */
 const DIG_TICKS = 120;
 const SUPPLY_INTERVAL = 5;
+/** Good ids looked up once: `need` and `upkeepGood` run thousands of times a supply round. */
+const STONE_GOOD = goodId("stone");
+const SKYSTONE_GOOD = goodId("skystone");
+const PLANK_GOOD = goodId("plank");
 /** A ferry needs a boat, and a quay becomes a harbour for these goods. */
 const FERRY_COST = { plank: 3 };
 const HARBOUR_UPGRADE = { plank: 4, stone: 3 };
@@ -1786,8 +1790,8 @@ export class Economy {
       // Nothing is delivered until the ground is level.
       if (b.dig > 0) return 0;
       // Skystone builds like stone: a site short of stone takes either, counted together.
-      const stone = goodId("stone");
-      const sky = goodId("skystone");
+      const stone = STONE_GOOD;
+      const sky = SKYSTONE_GOOD;
       if (type === sky || type === stone) return (b.cost[stone] as number) - (b.delivered[stone] as number) - (b.pending[stone] as number) - (b.pending[sky] as number);
       return (b.cost[type] as number) - (b.delivered[type] as number) - (b.pending[type] as number);
     }
@@ -1808,7 +1812,7 @@ export class Economy {
 
   /** Good a building mends itself with: stone for stone-built ones, else plank. */
   upkeepGood(b: Building): number {
-    return (b.cost[goodId("stone")] as number) > (b.cost[goodId("plank")] as number) ? goodId("stone") : goodId("plank");
+    return (b.cost[STONE_GOOD] as number) > (b.cost[PLANK_GOOD] as number) ? STONE_GOOD : PLANK_GOOD;
   }
 
   /**
@@ -2003,6 +2007,8 @@ export class Economy {
       if (!list) toStore.set(g.type, (list = []));
       list.push(g);
     }
+    // Stores that can send anything: built storage buildings, in building order. Stock and flag room are checked per good.
+    const stores = order.filter((s) => s.def.storage && s.built);
     for (let type = 0; type < GOODS.length; type++) {
       const wanting = order.filter((b) => this.need(b, type) > 0);
       while (wanting.length) {
@@ -2034,8 +2040,8 @@ export class Economy {
         }
         let src: Building | null = null;
         let bestD = Infinity;
-        for (const s of this.buildings) {
-          if (!s.alive || !s.def.storage || !s.built || s.owner !== b.owner || s.flag === b.flag || (s.stock[type] as number) <= 0) continue;
+        for (const s of stores) {
+          if (s.owner !== b.owner || s.flag === b.flag || (s.stock[type] as number) <= 0) continue;
           const sf = this.flags[s.flag] as Flag;
           if (sf.goods.length + sf.reserved >= FLAG_CAPACITY) continue;
           const d = this.route(s.flag, b.flag).dist;
