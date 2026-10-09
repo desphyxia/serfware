@@ -342,7 +342,7 @@ granite share has not been computed.
 - Rule violations: 4 games, 601 (day, message) pairs: "flag # is not on its tile" 600 (3 games, first seen in
   `war|easy|tiny|bal-004`, day 1), "flag # holds # goods" once. The same message appeared in the first war run, so it predates
   the AI switches. Traced with `soak/balance/flagwhy.ts` in `war|easy|tiny|bal-004`: the flag is flag 0, the steward seat's
-  (player 0), with tile -1 from the start of the game. Its keep stands on tile 551, whose six neighbours are all water, so
+  (player 0), with tile -1 from the start of the game. Its keep stands on tile 551, whose six neighbours are all lake tiles (it has the most land of the four players: 218 own land tiles, 113 flat within 7 steps), so
   `bestFlagTile` returned -1 and `settleAt` (`economy.ts`, `createFlag(flagTile, ...)`) made the flag anyway. `setupStart` picks
   the keep tile without checking that a flag can stand beside it (`landingProblem` checks that no tile within 2 is water, but
   `setupStart` does not call it). The other 2 games with this message were not traced.
