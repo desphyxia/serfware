@@ -340,6 +340,9 @@ Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/
   smelters (worker, iron, plank, coal and ore held), the stores, the unfinished sites, the AI's thoughts and the ones
   stopped at the sites cap. Read-only.
 
+- `hash.ts <size> <seed> <days>`: plays three default-brain rivals and prints the world checksum at the end of days 1, 2, 4,
+  8, 16. Run on two builds, equal lines mean they play identically. With every AI switch off, this branch and `master` at
+  `03bbc33` gave equal lines in 6 games (tiny and small, 3 seeds, 16 days).
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
   claimed at the start.
