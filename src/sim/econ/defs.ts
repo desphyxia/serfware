@@ -97,6 +97,7 @@ export const COMBAT = content.combat as {
   peaceDays: number;
   wellsToWin: number;
   wellHoldDays: number;
+  prosperityGoods: number;
 };
 export const DEFAULT_DISTRIBUTION = content.distribution as Record<string, Record<string, number>>;
 export const DEFAULT_TOOL_PRIORITY = content.toolPriority as Record<string, number>;
