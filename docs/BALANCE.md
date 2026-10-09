@@ -414,6 +414,9 @@ the builder picks, and its limit of 60 tries, are not modelled). Six games, one 
 
 ### Result: goods stranded on the flag of the building they are bound for (`soak/balance/strand.ts`)
 
+Fixed since: this is issue #136, fixed by #137 (`03bbc33`). The figures below are from before the fix, so they describe the
+stranding, not the game as it is now; the sites results above were also measured before it.
+
 A good that lies on a flag with no carrier, bound for a building that stands on that same flag, is never moved. Traced in
 `economy.ts` (line numbers as on this branch; none of the functions below behaves differently from `origin/master`, whose diff
 of this file is the good-id constants in `need` and `upkeepGood` and a precomputed store list in `supply`):
