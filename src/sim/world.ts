@@ -3,6 +3,7 @@ import { atan2, TAU } from "./dmath";
 import { Economy, type Command, type CommandResult } from "./econ/economy";
 import { Feature, HILLS, LandUse, oreMixOf, type MapOptions } from "./econ/landuse";
 import { COMBAT } from "./econ/defs";
+import type { VictoryRule } from "./econ/victory";
 import { AiBuilder } from "./ai/builder";
 import { AiContext, type AiAction, type Brain, type BrainFactory } from "./ai/brain";
 import { answerOffer, rivalFor, type AiLevel, type Personality } from "./ai/personality";
@@ -28,7 +29,7 @@ export interface MatchRules {
   /** What losing a duel costs. */
   stakes?: "wounded" | "mortal";
   /** How the game is won: by the last settlement standing, by holding the Star Wells, or either. */
-  victory?: "both" | "conquest" | "wells";
+  victory?: VictoryRule;
 }
 
 export interface WorldOptions {
@@ -77,7 +78,7 @@ export interface WorldOptions {
   /** Makes the brain of each AI seat (default: the scripted AI). */
   brain?: BrainFactory;
   /** Victory rule (see MatchRules); peace and stakes have their own options above. */
-  victory?: "both" | "conquest" | "wells";
+  victory?: VictoryRule;
 }
 
 /**

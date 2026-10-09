@@ -27,6 +27,7 @@ import { MinHeap } from "./heap";
 import { Culture, DISCOVERIES, unlockedBy } from "./culture";
 import { Adversity, METEORITE } from "./adversity";
 import { Wanderers } from "./wanderers";
+import { WIN_TEXT, type VictoryRule, type WinReason } from "./victory";
 import { Diplomacy, DIPLOMACY_COMMANDS, type DiplomacyCommand } from "./diplomacy";
 import { CLIMATE_STEP, type Climate } from "../climate/climate";
 import { Ecology, WELL_REACH } from "./ecology";
@@ -356,8 +357,16 @@ export class Economy {
   /** Sounds of fighting for the game to play (not part of the state; the game empties it). */
   readonly combatEvents: { kind: "clash" | "volley"; tile: number }[] = [];
   /** How the game can be won (set by the host for a match). */
-  victory: "both" | "conquest" | "wells" = "both";
-  winReason = "";
+  victory: VictoryRule = "both";
+  winReason: WinReason | "" = "";
+  /** Tick the game was won, or -1. */
+  winTick = -1;
+  /** Per player: goods their buildings have produced (the Prosperity score). */
+  readonly made: number[] = [];
+  /** Per player: buildings taken from rivals. */
+  readonly captured: number[] = [];
+  /** Per player: whether the halfway word on Prosperity has been said. */
+  private readonly prosperityHalf: boolean[] = [];
   /** Per player: tick since they have held enough Star Wells, or -1. */
   readonly wellsSince: number[] = [];
   readonly dayTicks: number;
@@ -781,6 +790,8 @@ export class Economy {
     this.combatRng ??= rng.fork("combat");
     this.defeated[player] = false;
     this.wellsSince[player] = -1;
+    this.made[player] = 0;
+    this.captured[player] = 0;
     const r = rng.fork(`people-${player}`);
     if (founders) {
       for (const f of founders.people) {
@@ -2800,6 +2811,7 @@ export class Economy {
     flag.goods = [];
     flag.owner = owner;
     b.owner = owner;
+    this.captured[owner] = (this.captured[owner] ?? 0) + 1;
     b.palisade = false;
     b.camp = 0;
     b.stock.fill(0);
@@ -2864,17 +2876,61 @@ export class Economy {
     this.notify(victor, "Their people join your settlement.");
   }
 
-  /** Victory by conquest (last Hearthship standing) or by holding the Star Wells. */
+  /** Whether the match rules let a kind of victory count. */
+  private allows(kind: WinReason): boolean {
+    const v = this.victory;
+    if (v === "all") return true;
+    if (kind === "conquest") return v === "both" || v === "conquest";
+    if (kind === "wells") return v === "both" || v === "wells";
+    return v === kind;
+  }
+
+  /** Goods produced by a player's whole team (the Prosperity score). */
+  teamMade(p: number): number {
+    return this.team(p).reduce((n, q) => n + (this.made[q] ?? 0), 0);
+  }
+
+  /** Hamlets a player's whole team has won over (the Influence score). */
+  teamHamlets(p: number): number {
+    return this.wanderers.hamlets.filter((h) => h.joined >= 0 && this.allied(p, h.joined)).length;
+  }
+
+  /** Victory by conquest (last Hearthship standing), Star Wells, Prosperity or Influence. */
   private stepVictory(): void {
     // Colonies are not battlefields (yet): nobody wins a colony world.
     if (this.winner >= 0 || this.colony) return;
     const alive = this.keeps.map((_, p) => p).filter((p) => !this.defeated[p]);
     // The last settlement (or the last team) standing.
     if (this.keeps.length > 1 && alive.length >= 1 && alive.every((p) => this.allied(p, alive[0] as number)) && this.keeps.some((_, p) => !this.allied(p, alive[0] as number))) {
-      if (this.victory !== "wells") this.win(alive[0] as number, "conquest");
-      return;
+      if (this.allows("conquest")) {
+        this.win(alive[0] as number, "conquest");
+        return;
+      }
     }
     if (this.goal === "bloom") return;
+    if (this.allows("prosperity")) {
+      for (const p of alive) {
+        const n = this.teamMade(p);
+        if (n >= COMBAT.prosperityGoods) {
+          this.win(p, "prosperity");
+          return;
+        }
+        if (n * 2 >= COMBAT.prosperityGoods && !this.prosperityHalf[p]) {
+          this.prosperityHalf[p] = true;
+          this.notify(p, `Your people have made ${n} goods, halfway to the ${COMBAT.prosperityGoods} that bring Prosperity.`);
+        }
+      }
+    }
+    const hamlets = this.wanderers.hamlets.length;
+    if (this.allows("influence") && hamlets >= 2) {
+      for (const p of alive) {
+        if (this.teamHamlets(p) * 2 > hamlets) {
+          this.win(p, "influence");
+          return;
+        }
+      }
+    }
+    if (!this.allows("wells")) return;
     const grid = this.land.planet.grid;
     const held = new Array<number>(this.keeps.length).fill(0);
     for (let t = 0; t < grid.count; t++) {
@@ -2883,7 +2939,7 @@ export class Economy {
       if (o) held[o - 1] = (held[o - 1] as number) + 1;
     }
     for (const p of alive) {
-      if (this.victory !== "conquest" && (held[p] as number) >= COMBAT.wellsToWin) {
+      if ((held[p] as number) >= COMBAT.wellsToWin) {
         if ((this.wellsSince[p] ?? -1) < 0) {
           this.wellsSince[p] = this.tick;
           this.notify(p, `You hold ${held[p]} Star Wells. Keep them lit for a day to win.`);
@@ -2895,11 +2951,12 @@ export class Economy {
     }
   }
 
-  win(p: number, reason: "conquest" | "wells" | "bloom"): void {
+  win(p: number, reason: WinReason): void {
     if (this.winner >= 0) return;
     this.winner = p;
     this.winReason = reason;
-    const why = { wells: "The Star Wells sing for you. Victory!", conquest: "The last rival Hearthship has fallen. Victory!", bloom: "Your colony has bloomed first. Victory!" }[reason];
+    this.winTick = this.tick;
+    const why = WIN_TEXT[reason];
     for (let o = 0; o < this.keeps.length; o++) {
       if (this.keeps[o] === undefined) continue;
       this.notify(o, o === p ? why : this.allied(o, p) ? `${this.playerName(p)} has won, and your team with them. Victory!` : "Another settlement has won this world.");
@@ -3552,6 +3609,7 @@ export class Economy {
 
   private produce(b: Building, type: number): void {
     if (type < 0) return;
+    this.made[b.owner] = (this.made[b.owner] ?? 0) + 1;
     b.output++;
     b.outputTypes.push(type);
   }
@@ -4787,6 +4845,7 @@ export class Economy {
     let owned = 0;
     for (let t = 0; t < this.land.territory.length; t++) owned = (owned + (this.land.territory[t] as number) * (t % 97 + 1)) | 0;
     h.int(owned).int(this.winner);
+    for (const n of this.made) h.int(n);
     for (const b of this.buildings) if (b.alive) h.int(b.stranded).int(b.siege.length).int(b.owner).int(b.dig).int(b.mode).int(b.busyPrev).int(b.reach).int(b.def.ferry ?? 0).int(b.palisade ? 1 : 0).int(b.camp);
     for (const b of this.buildings) if (b.alive && b.def.storage) for (const m of b.goodMode) h.int(m);
     for (const u of this.rotateUntil) h.int(u ?? -1);
