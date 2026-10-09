@@ -709,6 +709,9 @@ export class Economy {
         spread +
         flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3 -
         (hillDist ? Math.min(40, Math.abs((hillDist[t] as number) - hillWant)) * 25 : 0);
+      // The keep's flag stands on a neighbouring tile: a keep ringed by water (an islet in a lake) would get none. Checked after
+      // the score so the random draws stay the same and every other start is chosen as before.
+      if (!grid.neighborsOf(t).some((n) => land.isLand(n) && land.slope(n) < 2.2)) continue;
       // The first roomy site found outranks every cramped one before it.
       if (flatLand >= MIN_FLAT && !roomy) {
         roomy = true;
