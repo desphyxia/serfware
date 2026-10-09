@@ -382,8 +382,8 @@ the probe is named; pilots 6 and 14 differ by a few points and say the same.
   samples on the own flag and all 200 plank samples were 6 days old or more. The supply loop re-aims a store-bound good lying
   on a flag to the nearest building that needs it, and that can be the building whose flag it lies on: 4 of 86 stone redirects
   to sites and 1 of 226 plank redirects did so, and so did 15 logs, 12 fish, 5 bread and others going to finished buildings.
-  That is the one path I found in the code that puts a good there; I did not trace a stranded good back to it, or count how
-  many sites were stranded. `release` only acts when a seat is at the sites cap, and the cap rarely holds (below).
+  There are more ways in than the redirect; they are traced in the next section. `release` only acts when a seat is at the
+  sites cap, and the cap rarely holds (below).
 - **Roads and carriers are not the general limit.** 82 to 94% of roads are under 25% loaded, 1% of flags are full, and sites
   that get their materials finish in a median of 0.2 to 0.5 days (houses 0.3 days when placed in days 0 to 29).
 - **Land near the centres is used up, and that is what stops the houses.** In 62 to 77% of seat-samples from day 10 the AI
@@ -407,10 +407,60 @@ by day 10; the ground inside it near the centres no longer takes a house (flag s
 houses, wells, farms, beacons and most other buildings need, stops being made when the rock in the border is gone. Planks,
 logs, builders, general transport and the sites cap are not what stops it after day 10. Stranded goods hold up some sites.
 
-Not verified: why stores with planks have no route to the site; whether the stranded goods come from the redirect, and how
-many sites they strand; and whether more ground, more rock or stone from further away lifts growth (no change was tried). The
+Not verified: why stores with planks have no route to the site; and whether more ground, more rock or stone from further away
+lifts growth (no change was tried). The
 probe's house search approximates `placeOn` (the keep and every lit lantern as centres, 400 tiles at most; the random lantern
 the builder picks, and its limit of 60 tries, are not modelled). Six games, one level and one switch stack.
+
+### Result: goods stranded on the flag of the building they are bound for (`soak/balance/strand.ts`)
+
+A good that lies on a flag with no carrier, bound for a building that stands on that same flag, is never moved. Traced in
+`economy.ts` (line numbers as on this branch; none of the functions below behaves differently from `origin/master`, whose diff
+of this file is the good-id constants in `need` and `upkeepGood` and a precomputed store list in `supply`):
+
+- A carrier only enters a building with a good it carries onto the building's flag (`stepCarrier`, case "carry", line 3232).
+  `chooseTransfer` moves a good only when `nextHop(g)` is the flag at the other end of the road (`if (hop !== to) continue`,
+  line 3392); for a good on its destination's flag `nextHopFrom` returns -2 (line 3342), which never equals a flag.
+  `returnGood` skips it the same way (line 3358). The only caller of `receive` (line 2164) is the carrier's "enter" step.
+  Meanwhile the building counts the good as `pending`, so `need` (line 1786, `upkeepNeed` line 1814) asks for no other one.
+- Three ways in, each traced with the call stack of one good (a replay of the game with accessors on that good):
+  1. `supply` re-aims a store-bound good lying on a flag to the nearest building that needs it (lines 2006 to 2038,
+     `g.dest = b.id` at 2034), nearest being distance 0 when that building's flag is the flag it lies on. Good 4824 (tiny
+     bal-003): a stone made by a quarry at tick 48580, bound for the keep, carried over flags 124, 44, 21 and 22 to flag 9,
+     put down at tick 48781; at tick 48805 `supply` changed its destination to house site #147, whose flag is 9. The site had
+     a builder, no dig, 0 of 1 stone delivered and 1 pending; the stone lay there unchanged at the end of each day to day 10
+     and was still there at day 60.
+  2. `assignDestination` (lines 1893 to 1914, `g.dest = best` at 1911) gives a freshly made good to a building that needs it,
+     the nearest by route, and a building asking for the good it makes itself is at distance 0. Good 17203 (small
+     bal-003): a plank sawn by sawmill #12 at tick 158742 was given to sawmill #12, which asks for one plank of upkeep once
+     its wear is 0.5 (`upkeepNeed`); the plank lay on the sawmill's own flag to the end of the game and the sawmill's upkeep
+     request counts as met.
+  3. `dropCarriedGoodAt` (line 1705; callers `splitRoad` 1582 and `dismissCarrier` 1630) puts what a carrier carries down at
+     the nearer end of the road when the road is split or the carrier dismissed, without asking whether that flag is the
+     destination's. Good 79 (small bal-003): a plank sent by supply at tick 4730 to house site #26 (flag 29, created at tick
+     4726); at tick 4966 an AI building placed a flag on the road it was carried over, and the carrier dropped it on flag 29.
+     It lay there for the 59.9 days the game lasted.
+- Not only store-bound goods: ways 2 and 3 involve goods whose destination was a building, not a store, when they got there.
+  In the six games (the switch stack `tools,ore,release,smith,forge`), 79 goods lay on their destination's flag for 1500
+  ticks or more: 50 through way 1, 21 planks of a sawmill through way 2, and 8 whose destination was already a building (one
+  traced to way 3, the other seven not traced; six of them, bound for the keep in tiny bal-001, lasted 0.6 to 5.9 days).
+- It happens with every AI switch off, too: in three tiny games (bal-001 to bal-003) 26 goods lay there (14 through way 1,
+  10 sawmill planks, 2 destination already a building), median 48.4 days, longest 59.1; two sites held one (stone) and
+  neither finished by day 60. The small games of that run were stopped.
+- How long, and what becomes of the sites (six games, switch stack): the 79 goods lay a median of 37.5 days (90th percentile
+  57.7, longest 59.9, i.e. to the end). Seven sites held one (three houses, a well, two coal mines, a woodcutter); none
+  finished. Four were demolished and their goods moved on: three after 4 to 4.1 days (a match for `release`'s 4 days, not
+  traced), one after 31.7 days; three were still open at the end after 55.7, 53.5 and 59.9 days. Goods stranded at the end of day 10, 20, 30,
+  40, 50 and 60, summed over the six games: 3, 3, 4, 4, 4 and 3 for sites, and 28, 31, 59, 60, 60 and 60 for finished buildings
+  (fish, logs, grain, bread, planks, ore and stone, the building's flag filling up with them).
+- Cause: no code path moves, or delivers, a good that is lying on its destination's flag, and four callers (`supply` redirect,
+  `assignDestination`, `dropCarriedGoodAt`, and the spawn at a store's flag, line 2044) can put one there. Sure of the
+  invariant and of the three traced ways (stack traces, and the same goods still there days or weeks later); not traced:
+  the six keep-bound goods, why `release` did not pull down the three open sites, the fourth way (line 2044, no case seen),
+  and the effect on growth, which I did not measure. A fix would be small (not changed here): leave out of
+  `assignDestination`, the redirect and the spawn any building whose flag is the good's flag, `receive` it at once when
+  `dropCarriedGoodAt` is about to put a good on its destination's flag, and let an idle carrier take a good whose next hop is -2
+  into the building.
 
 ## Looking at the map
 
@@ -439,6 +489,11 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
   supply loop re-aims onto a flag. One JSON line; `scripts/balance-sites-probe.mjs <files>` sums games into tables, and
   `scripts/balance-sites.mjs <dir> [--size s]` does the same questions from the flow records of a sweep. Read-only. Two or
   three at once; more die in V8.
+- `strand.ts <size> <seed> <rivals> <days> [good id]`: goods lying on the flag of the building they are bound for: the
+  redirects that put them there, how long each lay, how it got its destination, the sites that held one and whether they
+  finished (`scripts/balance-strand.mjs <files>` sums games). With a good id it replays the game and logs every write to
+  that good's fields with the call stack (`STRAND_BUILDING=<id>` does the same for a building's flag, built and builder).
+  `BALANCE_EXTRA=none` turns every AI switch off. Read-only; two at a time.
 - `slope.ts <size> <seed>`: the share of mountain tiles and of all land by slope against the limits 1.3, 2.2, 2.6 and 3.2.
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
