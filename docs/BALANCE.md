@@ -322,6 +322,29 @@ frozen seats (3% in pilot 12) and, in pilot 15, tools for farms (8%) and fishers
 far from its target (pilot 15 grows about 8% from day 20 to day 60); hunger was not measured for pilots 9 to 15 and the
 granite share has not been computed.
 
+### Result: war baseline (2026-10-09)
+
+`BALANCE_AI=quarry,stone,food,priority node scripts/balance-sweep.mjs war --seeds 5 --workers 12 --out balance-war1`: 30 games
+(3 levels × tiny and small × 5 seeds), three Wardens, up to 200 days, 114 minutes, 90 rival seats. The first war run
+(2026-10-04, 30 games) predates the flow probe and the AI switches and is not comparable seat for seat.
+
+- Games that end with a winner: 5 of 30 (days 9, 14, 22, 29 and 60); the other 25 run to the day limit. The first run had 6 of 30.
+- Fighting is early and then stops: the first attack on a rival is on a median day 5.7 (77% of games have one, 19 attacks and
+  10 captures per game, 1.1 falls of a rival per game). Seats still standing fall from 89% (days 0-9) to 68% by day 80 and
+  stay there; wardens out attacking are 0.12 per seat at most (days 10-19) and about 0 from day 60. Wardens per seat stay at
+  14 to 15, morale falls from 1 to 0.92.
+- No weapons: blades are made by 6% of seats (0.15 a seat-day at best, nothing after day 30), iron by 12% (3.9 a seat over
+  the whole game), iron ore by 13%, bows by 12%. What is given out as arms per seat over a game: bows 6.2, logs 4.0, planks 4.4,
+  stone 7.8, mounts 0.4.
+- The economy is as in the other suites: stone made falls from 10.2 a seat-day (days 0-9) to 0.6 or less from day 20 on; fish from
+  25.5 to about 1; of the 1,117 planks made per seat, 668 are neither used nor lost (left over), and blades, mounts and peat are
+  missing from the warehouses in 92 to 100% of snapshots (iron ore on easy).
+- Rule violations: 4 games, 601 (day, message) pairs: "flag # is not on its tile" 600 (3 games, first seen in
+  `war|easy|tiny|bal-004`, day 1), "flag # holds # goods" once. The same message appeared in the first war run, so it predates
+  the AI switches. Not investigated.
+- No war targets are set. Wars here are decided in the first 60 days or not at all; whether that is the wanted pacing is a design
+  question.
+
 ## Looking at the map
 
 Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
