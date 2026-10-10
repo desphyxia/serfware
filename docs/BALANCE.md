@@ -354,9 +354,120 @@ granite share has not been computed.
   "Steady attacks" has no number yet; a reading to agree: some attack in at least 80% of the 10-day blocks while two or more
   seats stand. The war suite is the 30-game one above (tiny and small, three Wardens, 200 days).
 
+### Result: what holds building sites up, and what limits growth (tiny and small maps)
+
+From the flow records of pilots 6, 14 and 15 (`node scripts/balance-sites.mjs balance-pilot15 [--size tiny|small]`) and a probe,
+`soak/balance/sites.ts`, run on six games (tiny and small, seeds bal-001 to bal-003, normal level, a builder, a trader and a
+warden, 60 days, `tools,ore,release,smith,forge`; summed by `scripts/balance-sites-probe.mjs`). Figures are pilot 15 unless
+the probe is named; pilots 6 and 14 differ by a few points and say the same.
+
+- **Sites wait for a material, mostly stone, after day 10.** Share of site snapshots waiting for a material by block of ten
+  days: 47, 80, 92, 92, 93 and 97%; for stone 13, 29, 39, 45, 45 and 47%; for planks 27, 37, 39, 36, 36 and 36%; for logs 7, 15,
+  14, 11, 12 and 14%. Sites without a builder are 35% of snapshots in days 0 to 9 and 15, 6, 7, 5 and 3% after (over the whole
+  game, 24% of house-site snapshots wait for want of a free adult). Pilot 6 has the same shape (stone 32 to 60% from day 10).
+- **Stone is out.** Stone made per seat and day: 8.5, 2.0, 0.6, 0.4, 0.4 and 0.1 by block. The median seat has 3 rock tiles
+  (18 units) inside its border in days 0 to 9 and 1 tile (5 units) from day 20. Seats with no stone in the warehouses at the
+  end of the day: 1, 10, 13, 20, 23 and 27%. In the probe, 97% of the site-samples where nothing had been sent for stone
+  (475 in days 20 to 59) were in a seat with no stone in any warehouse; the stone-starved sites are mostly houses (231
+  samples, one stone each), then butchers (134) and toolsmiths (129).
+- **Planks and logs are not short.** 840 planks made per seat, 143 used for building, 71 for upkeep and 71 as inputs; the
+  warehouses hold a mean of 89 planks in days 0 to 9 and 536 in days 50 to 59, and are out on 3 to 11% of seat-days. Logs go
+  to the sawmills (about 90% of seat-days have no log in stock), so the one-log flowerbeds starve (195 site-samples, 98% of a
+  flowerbed's snapshots wait for the log). Planks nothing was sent for, days 20 to 59 (113 site-samples): no route from any
+  store that holds them 69%, none in stock 29%. Why a store with planks has no route to the site was not traced.
+- **Goods can be stranded on a site's own flag.** In the probe, of the sites with a material on its way, 88% (stone, 371
+  samples) and 71% (planks, 282) had a good that had lain on one flag for over a day. Of the stone samples 99% (all of the
+  plank samples) had that good on the site's own flag (`nextHop` is -2), where nothing carries it in: a carrier only enters a
+  building with a good it brings to the flag, and `chooseTransfer` moves goods to a next flag only. 297 of the 325 stone
+  samples on the own flag and all 200 plank samples were 6 days old or more. The supply loop re-aims a store-bound good lying
+  on a flag to the nearest building that needs it, and that can be the building whose flag it lies on: 4 of 86 stone redirects
+  to sites and 1 of 226 plank redirects did so, and so did 15 logs, 12 fish, 5 bread and others going to finished buildings.
+  There are more ways in than the redirect; they are traced in the next section. `release` only acts when a seat is at the
+  sites cap, and the cap rarely holds (below).
+- **Roads and carriers are not the general limit.** 82 to 94% of roads are under 25% loaded, 1% of flags are full, and sites
+  that get their materials finish in a median of 0.2 to 0.5 days (houses 0.3 days when placed in days 0 to 29).
+- **Land near the centres is used up, and that is what stops the houses.** In 62 to 77% of seat-samples from day 10 the AI
+  wants a house (not housed, houses under people / 7) and has none open; the quota is met in 5 to 10% and planks are under
+  5 in 3 to 11%. Once a day, for such a seat, the probe looked for a tile within 9 steps of the keep or any lit lantern where
+  `placeOn` would put a house: a tile was found 15, 10, 17, 7, 4 and 4 times against none 41, 110, 121, 141, 143 and 128 times
+  by block (the search stopped at 400 tiles in 151 of the 684 "none" checks, so at least 78% of them looked at every tile).
+  Of the tiles examined in those seats, 66 to 70% had no spot for the flag, 24 to 26% could not be built on (in a separate
+  trace, 0 to 2 of 6 to 28 tiles were over the slope limit) and 6 to 8% had no road. For scale: room is 30 plus 6 a house, a
+  seat places 16.1 houses over the game and holds 118 to 120 people in days 30 to 59.
+- **The AI's own caps are not the limit after day 10.** Thoughts stopped at the sites cap: 19, 10, 9, 9, 8 and 7% (pilot 15,
+  with `release`); in the probe seats at the cap were 19, 5, 5, 3, 0 and 0% of samples. Buildings placed per seat per block:
+  46.1, 10.0, 4.1, 0.8, 1.8 and 0.8. The house want is on in most seat-samples and finds no place (above).
+- **Across seats** (108, pilot 15): buildings at the end go with territory (r 0.84 at the end, 0.82 at the start), rock inside the
+  border at the start (0.62) and stone made (0.64), and little with planks made (0.26) or logs made (0.27). Territory and
+  stone are not independent (a larger seat has both), so this does not say which one limits. By quarter of stone made the
+  buildings are 27.4, 45.1, 64.6 and 75.9.
+
+What this points to: on tiny and small maps growth is limited by ground and, for what is placed, by stone. The border is fixed
+by day 10; the ground inside it near the centres no longer takes a house (flag spots, features, roads); and stone, which
+houses, wells, farms, beacons and most other buildings need, stops being made when the rock in the border is gone. Planks,
+logs, builders, general transport and the sites cap are not what stops it after day 10. Stranded goods hold up some sites.
+
+Not verified: why stores with planks have no route to the site; and whether more ground, more rock or stone from further away
+lifts growth (no change was tried). The
+probe's house search approximates `placeOn` (the keep and every lit lantern as centres, 400 tiles at most; the random lantern
+the builder picks, and its limit of 60 tries, are not modelled). Six games, one level and one switch stack.
+
+### Result: goods stranded on the flag of the building they are bound for (`soak/balance/strand.ts`)
+
+Fixed since: this is issue #136, fixed by #137 (`03bbc33`). The figures below are from before the fix, so they describe the
+stranding, not the game as it is now; the sites results above were also measured before it.
+
+A good that lies on a flag with no carrier, bound for a building that stands on that same flag, is never moved. Traced in
+`economy.ts` (line numbers as on this branch; none of the functions below behaves differently from `origin/master`, whose diff
+of this file is the good-id constants in `need` and `upkeepGood` and a precomputed store list in `supply`):
+
+- A carrier only enters a building with a good it carries onto the building's flag (`stepCarrier`, case "carry", line 3232).
+  `chooseTransfer` moves a good only when `nextHop(g)` is the flag at the other end of the road (`if (hop !== to) continue`,
+  line 3392); for a good on its destination's flag `nextHopFrom` returns -2 (line 3342), which never equals a flag.
+  `returnGood` skips it the same way (line 3358). The only caller of `receive` (line 2164) is the carrier's "enter" step.
+  Meanwhile the building counts the good as `pending`, so `need` (line 1786, `upkeepNeed` line 1814) asks for no other one.
+- Three ways in, each traced with the call stack of one good (a replay of the game with accessors on that good):
+  1. `supply` re-aims a store-bound good lying on a flag to the nearest building that needs it (lines 2006 to 2038,
+     `g.dest = b.id` at 2034), nearest being distance 0 when that building's flag is the flag it lies on. Good 4824 (tiny
+     bal-003): a stone made by a quarry at tick 48580, bound for the keep, carried over flags 124, 44, 21 and 22 to flag 9,
+     put down at tick 48781; at tick 48805 `supply` changed its destination to house site #147, whose flag is 9. The site had
+     a builder, no dig, 0 of 1 stone delivered and 1 pending; the stone lay there unchanged at the end of each day to day 10
+     and was still there at day 60.
+  2. `assignDestination` (lines 1893 to 1914, `g.dest = best` at 1911) gives a freshly made good to a building that needs it,
+     the nearest by route, and a building asking for the good it makes itself is at distance 0. Good 17203 (small
+     bal-003): a plank sawn by sawmill #12 at tick 158742 was given to sawmill #12, which asks for one plank of upkeep once
+     its wear is 0.5 (`upkeepNeed`); the plank lay on the sawmill's own flag to the end of the game and the sawmill's upkeep
+     request counts as met.
+  3. `dropCarriedGoodAt` (line 1705; callers `splitRoad` 1582 and `dismissCarrier` 1630) puts what a carrier carries down at
+     the nearer end of the road when the road is split or the carrier dismissed, without asking whether that flag is the
+     destination's. Good 79 (small bal-003): a plank sent by supply at tick 4730 to house site #26 (flag 29, created at tick
+     4726); at tick 4966 an AI building placed a flag on the road it was carried over, and the carrier dropped it on flag 29.
+     It lay there for the 59.9 days the game lasted.
+- Not only store-bound goods: ways 2 and 3 involve goods whose destination was a building, not a store, when they got there.
+  In the six games (the switch stack `tools,ore,release,smith,forge`), 79 goods lay on their destination's flag for 1500
+  ticks or more: 50 through way 1, 21 planks of a sawmill through way 2, and 8 whose destination was already a building (one
+  traced to way 3, the other seven not traced; six of them, bound for the keep in tiny bal-001, lasted 0.6 to 5.9 days).
+- It happens with every AI switch off, too: in three tiny games (bal-001 to bal-003) 26 goods lay there (14 through way 1,
+  10 sawmill planks, 2 destination already a building), median 48.4 days, longest 59.1; two sites held one (stone) and
+  neither finished by day 60. The small games of that run were stopped.
+- How long, and what becomes of the sites (six games, switch stack): the 79 goods lay a median of 37.5 days (90th percentile
+  57.7, longest 59.9, i.e. to the end). Seven sites held one (three houses, a well, two coal mines, a woodcutter); none
+  finished. Four were demolished and their goods moved on: three after 4 to 4.1 days (a match for `release`'s 4 days, not
+  traced), one after 31.7 days; three were still open at the end after 55.7, 53.5 and 59.9 days. Goods stranded at the end of day 10, 20, 30,
+  40, 50 and 60, summed over the six games: 3, 3, 4, 4, 4 and 3 for sites, and 28, 31, 59, 60, 60 and 60 for finished buildings
+  (fish, logs, grain, bread, planks, ore and stone, the building's flag filling up with them).
+- Cause: no code path moves, or delivers, a good that is lying on its destination's flag, and four callers (`supply` redirect,
+  `assignDestination`, `dropCarriedGoodAt`, and the spawn at a store's flag, line 2044) can put one there. Sure of the
+  invariant and of the three traced ways (stack traces, and the same goods still there days or weeks later); not traced:
+  the six keep-bound goods, why `release` did not pull down the three open sites, the fourth way (line 2044, no case seen),
+  and the effect on growth, which I did not measure. A fix would be small (not changed here): leave out of
+  `assignDestination`, the redirect and the spawn any building whose flag is the good's flag, `receive` it at once when
+  `dropCarriedGoodAt` is about to put a good on its destination's flag, and let an idle carrier take a good whose next hop is -2
+  into the building.
+
 ## Looking at the map
 
-Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
+Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
 
 - `mining.ts <size> <seed> <rivals> <days>`: plays the pilot 6 AI and, at days 5, 10, 15, 20, 30, 40, 60 and 90, prints one
   JSON line per seat: the conditions the AI tests before it opens a mine (fed, toolsmith, picks, stone, sites), the geologist
@@ -375,6 +486,18 @@ Six small helpers in `soak/balance/` bundle and run like the job (`node scripts/
 - `hash.ts <size> <seed> <days>`: plays three default-brain rivals and prints the world checksum at the end of days 1, 2, 4,
   8, 16. Run on two builds, equal lines mean they play identically. With every AI switch off, this branch and `master` at
   `03bbc33` gave equal lines in 6 games (tiny and small, 3 seeds, 16 days).
+- `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
+  missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
+  lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the
+  supply loop re-aims onto a flag. One JSON line; `scripts/balance-sites-probe.mjs <files>` sums games into tables, and
+  `scripts/balance-sites.mjs <dir> [--size s]` does the same questions from the flow records of a sweep. Read-only. Two or
+  three at once; more die in V8.
+- `strand.ts <size> <seed> <rivals> <days> [good id]`: goods lying on the flag of the building they are bound for: the
+  redirects that put them there, how long each lay, how it got its destination, the sites that held one and whether they
+  finished (`scripts/balance-strand.mjs <files>` sums games). With a good id it replays the game and logs every write to
+  that good's fields with the call stack (`STRAND_BUILDING=<id>` does the same for a building's flag, built and builder).
+  `BALANCE_EXTRA=none` turns every AI switch off. Read-only; two at a time.
+- `slope.ts <size> <seed>`: the share of mountain tiles and of all land by slope against the limits 1.3, 2.2, 2.6 and 3.2.
 - `rockmap.ts <seed> <size>`: rock tiles and units within 8, 14, 20 and 30 tiles of each keep at the start.
 - `landmap.ts <size> <seed>...`: the land each seat's landmass holds, the keeps on it (player 0's included), and the land
   claimed at the start.
