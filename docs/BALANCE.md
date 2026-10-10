@@ -137,6 +137,9 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `survey` (needs `ore`): after 3 failed tries in a row to place a mine of a kind on its remembered signs, those signs are
   forgotten (except any within reach of a mine that still works), so the geologists see the kind as lacking and survey
   again; not again for 120 thoughts (about 2 days).
+- `granite` (needs `ore`): granite mines are wanted whether or not the stores are short of stone, one plus one for every 30
+  buildings and at most three, and the geologists look for a granite sign while that quota has none. Before, one granite mine
+  was wanted only while the stores held under 8 stone, and relieveStone placed one or two when stone ran short.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -293,6 +296,42 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   made 30 per seat (34), frozen seats 4.6% (5.6%), toolsmith at the end 84% (83%): within the noise or a little lower. Not
   tested: whether the geologists find new signs after the forgetting (only the outcome was counted), other thresholds than 3
   tries and 120 thoughts, and the `players` suite.
+- `granite` (pilots 17 and 18): more stone, no measurable growth. Pilot 17 is the pilot 15 stack plus `granite`; pilot 18 is the
+  pilot 15 stack alone, both run on `master` after #137 (the stranded-goods fix), which pilot 15 predates. Same aggregation
+  for all three (means over all rival seats; day n is the n-th daily sample, so d10 here is not the d10 of the table above):
+
+  | Pilot | Buildings d10 / d20 / d40 / end | People end | Stone from granite mines / quarries per seat | Stone made per seat-day, days 0-9 / 10-19 / 20-29 |
+  |---|---|---|---|---|
+  | 15 (stack, before #137) | 43.8 / 49.9 / 51.9 / 53.3 | 116.8 | 54.7 / 65.1 | 8.5 / 1.96 / 0.56 |
+  | 18 (stack, after #137) | 44.8 / 51.8 / 54.4 / 55.4 | 122.7 | 60.8 / 66.4 | 8.7 / 2.65 / 0.89 |
+  | 17 (stack + `granite`, after #137) | 45.0 / 52.0 / 54.8 / 55.9 | 122.9 | 73.6 / 66.1 | 9.8 / 2.5 / 0.85 |
+
+  Pilot 17 against 15 looks like a gain (+2.6 buildings, +6.1 people) but pilot 18, without `granite`, has nearly all of it
+  (+2.1, +5.9): it comes from what changed in `master` between the pilots (#137 most likely; #140, #134 and #135 also landed,
+  and which of them counts was not isolated). `granite` itself adds 13 stone a seat over 60 days (+10% of the stone made, 127
+  to 140) and 0.5 buildings, 0.2 people: within the noise, not tested for it. Stone made per seat-day still falls to about
+  0.1 to 0.5 from day 30 on, and granite mines standing at the end are 0.15 to 0.16 a seat in all three (exhausted mines are
+  pulled down, so this does not count what was built). Not measured: the share of sites waiting for stone, hunger.
+- Why so few granite mines at the end (`mining.ts` with `tools,ore,release,smith,forge,granite`, 12 games, 36 seats, 60 days, from
+  the planner's `hadMine`): 18 seats built a granite mine, 5 remembered a sign but built none, 13 never remembered one; the
+  low count at the end is exhausted mines being pulled down, not mines never built. The 18 seats with a mine have 33 granite
+  tiles (654 loads) under their land on day 5, 26 tiles (493 loads) on day 60, so their mines dug about 160 loads and left three
+  quarters in the ground, and they hold 184 stone in the warehouses on day 60. The other 18 seats have 12 tiles (236 loads)
+  and dig nothing (3 loads), and hold 20 stone. Of those 18, 9 saw no granite sign at any check day and 4 saw only signs the AI
+  ignores (small deposits); 7 of the 13 with no remembered sign have 5 or fewer granite tiles. So more granite mines would not
+  help the seats that already have one (stone is not short there on day 60), and the seats that are short of stone mostly have
+  little granite inside the border. Means of 18 and 18 seats from one probe; not compared with the switch off, not checked
+  why the first mine's reach leaves most of the granite, and day-60 stone in the warehouses is one snapshot.
+- Would pushing the border toward mountain ground find granite (`soak/balance/borderrock.ts`, same 12 games and switches, days
+  5, 10, 20, 40 and 60; 36 seats, 16 with 15 or fewer granite tiles inside the border on day 5 and 20 with more): no, because
+  there is no free ground to push into. Territory is the same on day 5 as on day 60 (poor seats 200.6 and 202.2 tiles, rich
+  seats 410.9 and 411.4; no seat's grew after day 10), and the free granite on the Hearthship's land within 20 land steps of
+  the border is 0.1 tiles a poor seat and 0.2 a rich one (31 of the 36 seats have none within 20 steps). Free mountain ground
+  within 20 steps is 0.6 to 0.7 tiles. In 4 of the games (12 seats, days 5 and 10, the same on both days) the free land of any
+  kind within 20 steps of the border was 0 for 5 seats and 23 tiles or fewer for the other 7. The map is already divided between the seats on
+  day 5, so where a border grows is not what leaves a seat short of granite: how much granite lies inside the start territory
+  is. Granite inside the border falls a little (poor 7.1 to 6.4 tiles, rich 34.7 to 28.9) as mines dig it. Not measured:
+  before day 5, or how large the start territory is on each map size.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
@@ -313,7 +352,7 @@ baselines they replace.
 | Hunger | 14 to 49% of seat-days from day 30 have less food than the meal needs (per `players` cell; pooled) | 10% or less |
 | Frozen seats | 11 to 15% (3% with `release`) | 3% or less |
 | Tools | Woodcutter / farm / fisher without a tool on 37% / 28% / 18% of snapshots (pilot 6; 26% / 8% / 10% with the full stack) | 10% or less each |
-| Granite | 1 to 7% of the granite on the map is taken; rock is the scarce resource | Granite is 30% or more of the stone the AI uses |
+| Granite | Granite mines make 29% (pilot 6) to 46% (pilot 15) of the stone made per seat over 60 days; the 1 to 7% in the `players` run is the share of the granite on the map that is taken | Granite is 30% or more of the stone the AI uses (met by pilot 15; the stone is the limit, see the `granite` result) |
 | Metal chain (smelter, iron mine) | Smelter in 3% of seats at the end (18% with the full stack); an iron mine in 20 of 36 seats | No target until #131 decides where iron is used |
 | War: winners | 5 of 30 games end with a winner within 200 days (17%) | 80% or more of games |
 | War: timing | Every win is by day 9 to 60 | Winners decided between day 40 and day 150 |

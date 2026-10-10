@@ -82,6 +82,7 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.toolsmithAnyway = ai.includes("smith");
   aiOptions.forgeRoom = ai.includes("forge");
   aiOptions.surveyAgain = ai.includes("survey");
+  aiOptions.graniteFirst = ai.includes("granite");
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,

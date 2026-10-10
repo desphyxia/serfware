@@ -16,6 +16,7 @@ aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
 aiOptions.forgeRoom = extra.includes("forge");
 aiOptions.surveyAgain = extra.includes("survey");
+aiOptions.graniteFirst = extra.includes("granite");
 const n = Number(rivals);
 const w = new World(seed, {
   size,
