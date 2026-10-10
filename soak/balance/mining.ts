@@ -87,6 +87,8 @@ for (let d = 1; d <= Number(days) && eco.winner < 0; d++) {
         had: [...(brains[p]?.econ.hadMine ?? [])],
         ironKnown: remembered(p, 3),
         ironTried: tried(p, 3, "ironmine"),
+        graniteKnown: remembered(p, 5),
+        graniteTried: tried(p, 5, "granitemine"),
       }),
     );
   }

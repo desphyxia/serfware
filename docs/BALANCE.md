@@ -311,8 +311,17 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   and which of them counts was not isolated). `granite` itself adds 13 stone a seat over 60 days (+10% of the stone made, 127
   to 140) and 0.5 buildings, 0.2 people: within the noise, not tested for it. Stone made per seat-day still falls to about
   0.1 to 0.5 from day 30 on, and granite mines standing at the end are 0.15 to 0.16 a seat in all three (exhausted mines are
-  pulled down, so this does not count what was built). Not measured: the share of sites waiting for stone, hunger, how many
-  granite mines were built.
+  pulled down, so this does not count what was built). Not measured: the share of sites waiting for stone, hunger.
+- Why so few granite mines at the end (`mining.ts` with `tools,ore,release,smith,forge,granite`, 12 games, 36 seats, 60 days, from
+  the planner's `hadMine`): 18 seats built a granite mine, 5 remembered a sign but built none, 13 never remembered one; the
+  low count at the end is exhausted mines being pulled down, not mines never built. The 18 seats with a mine have 33 granite
+  tiles (654 loads) under their land on day 5, 26 tiles (493 loads) on day 60, so their mines dug about 160 loads and left three
+  quarters in the ground, and they hold 184 stone in the warehouses on day 60. The other 18 seats have 12 tiles (236 loads)
+  and dig nothing (3 loads), and hold 20 stone. Of those 18, 9 saw no granite sign at any check day and 4 saw only signs the AI
+  ignores (small deposits); 7 of the 13 with no remembered sign have 5 or fewer granite tiles. So more granite mines would not
+  help the seats that already have one (stone is not short there on day 60), and the seats that are short of stone mostly have
+  little granite inside the border. Means of 18 and 18 seats from one probe; not compared with the switch off, not checked
+  why the first mine's reach leaves most of the granite, and day-60 stone in the warehouses is one snapshot.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
