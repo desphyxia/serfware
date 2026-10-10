@@ -76,7 +76,7 @@ export function creativeOf(world: World): Creative | undefined {
 export function creativeOptions(creative: Creative | undefined): WorldOptions {
   if (!creative) return {};
   if (creative.custom) registerScenario(creative.custom);
-  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }), ...(creative.map && { map: creative.map }), ...(creative.rules?.peaceDays !== undefined && { peaceDays: creative.rules.peaceDays }), ...(creative.rules?.stakes && { stakes: creative.rules.stakes }), ...(creative.rules?.victory && { victory: creative.rules.victory }) };
+  return { ...(creative.mods && { mods: creative.mods }), ...(creative.paint && { paint: creative.paint }), ...(creative.map && { map: creative.map }), ...(creative.rules?.peaceDays !== undefined && { peaceDays: creative.rules.peaceDays }), ...(creative.rules?.stakes && { stakes: creative.rules.stakes }), ...(creative.rules?.victory && { victory: creative.rules.victory }), ...(creative.rules?.armedWardens && { armedWardens: true }) };
 }
 
 export interface SessionInfo {

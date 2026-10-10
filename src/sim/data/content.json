@@ -169,6 +169,11 @@
     {
       "id": "relic",
       "name": "Relic"
+    },
+    {
+      "id": "shield",
+      "name": "Shield",
+      "arms": true
     }
   ],
   "buildings": [
@@ -1075,7 +1080,7 @@
       "id": "weaponsmith",
       "name": "Weaponsmith",
       "category": "metal",
-      "description": "Forges blades from iron and coal. A warden with a blade fights much harder.",
+      "description": "Forges blades, and shields where wardens need them, from iron and coal. A warden with a blade fights much harder.",
       "cost": {
         "plank": 2,
         "stone": 3
@@ -1089,7 +1094,7 @@
       "inputStock": 3,
       "workTicks": 110,
       "restTicks": 10,
-      "produces": "blade",
+      "produces": "arms",
       "forge": true
     },
     {
@@ -1192,6 +1197,10 @@
       "cleaver": 1,
       "crook": 1,
       "tongs": 2
+    },
+    "armedStock": {
+      "blade": 8,
+      "shield": 8
     },
     "territoryRadius": 9,
     "garrison": {

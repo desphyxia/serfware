@@ -764,6 +764,9 @@ export function goodGeometry(id: string): THREE.BufferGeometry {
     case "blade":
       parts = [[kit.box(0.03, 0.012, 0.3, 0, 0.02, 0), "#dde3ea"], [kit.box(0.09, 0.02, 0.02, 0, 0.02, -0.12), "#c9a24a"], [kit.box(0.03, 0.012, 0.3, 0.05, 0.035, 0.01, 0.1), "#dde3ea"]];
       break;
+    case "shield":
+      parts = [[new THREE.CylinderGeometry(0.11, 0.11, 0.02, 12).translate(0, 0.02, 0), "#9aa1ab"], [new THREE.CylinderGeometry(0.035, 0.035, 0.03, 8).translate(0, 0.035, 0), "#c9a24a"]];
+      break;
     case "bow":
       parts = [[new THREE.TorusGeometry(0.14, 0.012, 4, 12, Math.PI).rotateX(Math.PI / 2).translate(0, 0.02, 0), "#8a5a2b"], [kit.box(0.28, 0.006, 0.006, 0, 0.02, 0), "#e8e0d0"]];
       break;

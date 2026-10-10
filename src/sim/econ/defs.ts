@@ -8,7 +8,7 @@ export interface GoodDef {
   /** Interchangeable group, e.g. bread, fish and meat are all "food". */
   group?: string;
   tool?: boolean;
-  /** Carried by wardens: blade, bow, mount. */
+  /** Carried by wardens: blade, shield, bow, mount. */
   arms?: boolean;
 }
 
@@ -87,7 +87,7 @@ export interface BuildingDef {
 
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];
 export const BUILDINGS: readonly BuildingDef[] = content.buildings as BuildingDef[];
-export const START = content.start as { settlers: number; stock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number } };
+export const START = content.start as { settlers: number; stock: Record<string, number>; armedStock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number } };
 export const COMBAT = content.combat as {
   ranks: string[];
   reach: number;

@@ -5,7 +5,7 @@ import { Region } from "../biomes/regions";
 import { sunHeight } from "../biomes/sun";
 import { Biome } from "../planet/terrain";
 import { mix32, Rng } from "../rng";
-import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
+import { ARM_BLADE, ARM_BOW, ARM_MOUNT, ARM_SHIELD, fullName, glowSpeed, glowValue, note, randomFamily, randomFirst, skillSpeed, title, tradeName, type GlowParts, type Person } from "./people";
 import {
   BUILDINGS,
   buildingType,
@@ -328,6 +328,12 @@ export interface Founder {
   stride: number;
 }
 
+/** Pairs of blades and shields the weaponsmith keeps in the stores, beyond what vacant lantern places need (armed-wardens rule). */
+const ARMS_RESERVE = 6;
+
+/** Does a person carry both a blade and a shield (what the armed-wardens rule asks of a warden)? */
+const isArmed = (p: Person): boolean => (p.arms & (ARM_BLADE | ARM_SHIELD)) === (ARM_BLADE | ARM_SHIELD);
+
 export class Economy {
   readonly flags: Flag[] = [];
   readonly roads: Road[] = [];
@@ -391,6 +397,11 @@ export class Economy {
   readonly teams: number[] = [];
   /** How this world is won: the last settlement standing or Star Wells ("conquest"), or the first colony to bloom ("bloom"). */
   goal: "conquest" | "bloom" = "conquest";
+  /**
+   * The armed-wardens rule (a match rule, set before the starts are made): a person becomes a warden only with a blade and
+   * a shield, taken from the stores, so a lantern building with no armed warden to send stays dark. Off: arms are bonuses.
+   */
+  armedWardens = false;
   /** Per player: the settlement's name, if it has one. */
   readonly names: string[] = [];
   /** A colony world (settled from a Hearthship voyage, not a starting world). */
@@ -819,6 +830,7 @@ export class Economy {
       }
       keep.residents = START.settlers;
       keep.stock = goodsArray(START.stock);
+      if (this.armedWardens) for (const [g, n] of Object.entries(START.armedStock)) keep.stock[goodId(g)]! += n;
     }
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
@@ -2182,6 +2194,7 @@ export class Economy {
     if (!b.built) return null;
     if (b.def.tool && b.worker < 0 && !this.hasTool(b.owner, goodId(b.def.tool))) return `Needs a worker with a ${GOODS[goodId(b.def.tool)]?.name.toLowerCase()}. Make one at a toolsmith.`;
     if (b.exhausted) return "Nothing left to dig here.";
+    if (this.armedWardens && b.def.slots && !b.garrison.length && !this.hasArms(b.owner)) return "Waiting for arms: a warden needs a blade and a shield. Make them at a weaponsmith.";
     if (b.def.inputs && b.worker >= 0) {
       const missing = Object.keys(b.def.inputs).filter((k) => goodsFor(k).every((g) => (b.stock[g] as number) === 0));
       if (missing.length && b.food <= 0) return `Waiting for ${missing.map((k) => GOODS[GOOD_INDEX.get(k) ?? -1]?.name.toLowerCase() ?? k).join(" and ")}.`;
@@ -2209,13 +2222,14 @@ export class Economy {
    * Choose who takes a job at `flagId`: a free adult of the flag's owner, preferring skill in the
    * trade, then who lives closest. They set out from their house, or from the Hearthship.
    */
-  private pickPerson(flagId: number, trade: string): { origin: Building; person: Person } | null {
+  private pickPerson(flagId: number, trade: string, eligible?: (p: Person) => boolean): { origin: Building; person: Person } | null {
     const owner = (this.flags[flagId] as Flag).owner;
     const keep = this.buildings[this.keeps[owner] ?? -1];
     let best: { origin: Building; person: Person } | null = null;
     let bestScore = -Infinity;
     for (const p of this.people) {
       if (!p.alive || p.owner !== owner || p.stage !== "adult" || p.settler >= 0 || p.woundedUntil > this.tick) continue;
+      if (eligible && !eligible(p)) continue;
       const house = p.house >= 0 ? this.buildings[p.house] : undefined;
       const origin = house && house.alive && house.built ? house : keep;
       if (!origin) continue;
@@ -2230,6 +2244,31 @@ export class Economy {
       }
     }
     return best;
+  }
+
+  /**
+   * Choose who takes a vacant place at a lantern building. With the armed-wardens rule: an adult who already carries a blade
+   * and a shield (best rank first), else any adult if the stores hold a blade and a shield to give them, else nobody, and the
+   * building stays dark until the weaponsmith has made some.
+   */
+  private pickWarden(b: Building): { origin: Building; person: Person } | null {
+    if (!this.armedWardens) return this.pickPerson(b.flag, "warden");
+    const armed = this.pickPerson(b.flag, "warden", isArmed);
+    if (armed) return armed;
+    return this.hasArms(b.owner) ? this.pickPerson(b.flag, "warden") : null;
+  }
+
+  /** Are a blade and a shield in the player's stores? */
+  hasArms(owner: number): boolean {
+    return this.hasTool(owner, goodId("blade")) && this.hasTool(owner, goodId("shield"));
+  }
+
+  /** Give a person who is about to take the watch a blade and a shield from the stores (nothing if they carry both already). */
+  private armWarden(person: Person): void {
+    if (isArmed(person)) return;
+    if (!this.takeGoods(person.owner, { blade: 1, shield: 1 })) return;
+    person.arms |= ARM_BLADE | ARM_SHIELD;
+    note(person, "Was given a blade and a shield.");
   }
 
   /** Tile path along roads from one flag to another. */
@@ -2382,10 +2421,11 @@ export class Economy {
       } else if (b.built && b.def.slots) {
         const want = this.garrisonWant(b);
         if (b.garrison.length < want) {
-          const pick = this.pickPerson(b.flag, "warden");
+          const pick = this.pickWarden(b);
           if (!pick) continue;
           const p = this.roadPath(pick.origin.flag, b.flag);
           if (!p) continue;
+          if (this.armedWardens) this.armWarden(pick.person);
           const s = this.spawnSettler("warden", pick.origin, [...p, b.tile], pick.person);
           note(this.people[pick.person.id] as Person, `Took up the watch at a ${b.def.name.toLowerCase()}.`);
           s.building = b.id;
@@ -2405,7 +2445,7 @@ export class Economy {
               weakRank = rank;
             }
           }
-          const pick = weakest >= 0 ? this.pickPerson(b.flag, "warden") : null;
+          const pick = weakest >= 0 ? this.pickPerson(b.flag, "warden", this.armedWardens ? isArmed : undefined) : null;
           if (pick && pick.person.rank > weakRank) {
             this.sendHome(this.settlers[weakest] as Settler);
           }
@@ -2480,7 +2520,8 @@ export class Economy {
   /** Arms a lantern building asks for: one of each kind per warden who lacks it. */
   private armsNeed(b: Building, type: number): number {
     const bit = type === goodId("blade") ? ARM_BLADE : type === goodId("bow") ? ARM_BOW : type === goodId("mount") ? ARM_MOUNT : 0;
-    if (!bit || !b.built || this.priority(b, type) <= 0) return 0;
+    // With the armed-wardens rule a warden's blade and shield come from the stores when it is chosen, not from the building.
+    if (!bit || !b.built || (this.armedWardens && bit === ARM_BLADE) || this.priority(b, type) <= 0) return 0;
     let lacking = 0;
     for (const id of b.garrison) {
       const p = this.people[(this.settlers[id] as Settler).person];
@@ -3648,7 +3689,23 @@ export class Economy {
   private producedType(b: Building): number {
     const p = b.def.produces;
     if (!p) return -1;
-    return p === "tool" ? this.chooseTool(b.owner) : goodId(p);
+    return p === "tool" ? this.chooseTool(b.owner) : p === "arms" ? this.chooseArms(b.owner) : goodId(p);
+  }
+
+  /**
+   * Weaponsmith: blades, and with the armed-wardens rule shields too, whichever the stores hold fewer of (blades on a tie).
+   * With the rule on it stops (-1) once the stores hold a reserve of ARMS_RESERVE pairs plus one for every vacant place at a
+   * lantern building, so the iron is not spent on arms nobody will carry.
+   */
+  private chooseArms(owner: number): number {
+    const blade = goodId("blade");
+    if (!this.armedWardens) return blade;
+    const stock = this.storageTotals(owner);
+    const shield = goodId("shield");
+    const fewer = (stock[shield] as number) < (stock[blade] as number) ? shield : blade;
+    let vacant = 0;
+    for (const b of this.buildings) if (b.alive && b.built && b.owner === owner && b.def.slots) vacant += Math.max(0, this.garrisonWant(b) - b.garrison.length);
+    return (stock[fewer] as number) >= ARMS_RESERVE + vacant ? -1 : fewer;
   }
 
   /** Mines: the richest matching deposit within reach, or -1. */

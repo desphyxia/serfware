@@ -302,12 +302,16 @@ export class AiBuilder implements Brain {
     return gone;
   }
 
+  /** The armed-wardens rule, as seen at the last thought (it is fixed for a match). */
+  private armed = false;
+
   allows(cmd: WorldCommand): boolean {
-    return temperAllows(this.personality, cmd as { t: string; type?: string });
+    return temperAllows(this.personality, cmd as { t: string; type?: string }, this.armed);
   }
 
   think(ctx: AiContext): void {
     const w = ctx.world;
+    this.armed = w.economy.armedWardens;
     const eco = w.economy;
     const pl = this.player;
     if (!this.started) {
@@ -430,7 +434,7 @@ export class AiBuilder implements Brain {
     // Temperament: Builders make their town pleasant; Wardens arm.
     want(this.personality === "builder" && count("flowerbed") < Math.floor(mine.length / 10), near("flowerbed"));
     want(this.personality === "builder" && count("bench") < Math.floor(mine.length / 14), near("bench"));
-    want(this.personality === "warden" && count("toolsmith") > 0 && count("weaponsmith") < 1, near("weaponsmith"));
+    want((this.personality === "warden" || this.armed) && count("toolsmith") > 0 && count("weaponsmith") < 1, near("weaponsmith"));
     // Idle hands and no room to grow: more woodcutters and quarries clear the forest and rocks that box a
     // settlement in, and give those hands work.
     want(idle >= 6 && count("woodcutter") < 2 + Math.floor(idle / 8), near("woodcutter", Feature.Tree));
