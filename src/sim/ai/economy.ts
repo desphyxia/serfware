@@ -24,6 +24,9 @@ const FORGE_CENTRES = 3;
 const SURVEY_FAILS = 3;
 /** With `surveyAgain`: thoughts (about 2 days) before the signs of a kind may be forgotten again. */
 const SURVEY_REST = 120;
+/** With `graniteFirst`: one more granite mine for every this many finished buildings, and at most this many at once. */
+const GRANITE_PER_BUILT = 30;
+const GRANITE_MAX = 3;
 /** The geologist sign (deposit + 1) each kind of mine digs. */
 const SIGN_FOR: Record<string, number> = { coalmine: 2, ironmine: 3, goldmine: 4, granitemine: 5 };
 
@@ -311,6 +314,9 @@ export class EconPlanner {
       return false;
     };
 
+    // Granite mines wanted: one while stone is short; with `graniteFirst` 1 + one per 30 buildings (at most 3) whatever the stock.
+    const graniteWanted = aiOptions.graniteFirst && ore ? have("granitemine") < Math.min(GRANITE_MAX, 1 + Math.floor(built.length / GRANITE_PER_BUILT)) : stone < 8 && have("granitemine") < 1;
+
     // Geologists, once a toolsmith has made a hammer, until the signs show where ore lies.
     const geologists = (): boolean => {
       const usable = [2, 3, 4, 5].some((s) => sign(s).length > 0);
@@ -319,7 +325,7 @@ export class EconPlanner {
         [have("coalmine") < quota, 2],
         [have("ironmine") < quota, 3],
         [count("smelter") > 0 && have("goldmine") < 1 && this.personality !== "warden", 4],
-        [stone < 8 && have("granitemine") < 1, 5],
+        [graniteWanted, 5],
       ];
       const lacking = ore ? wants.some(([need, s]) => need && sign(s).length === 0) : !usable;
       const hammers = stock[goodId("hammer")] ?? 0;
@@ -382,7 +388,7 @@ export class EconPlanner {
           [have("coalmine") < quota, "coalmine", coal],
           [have("ironmine") < quota, "ironmine", iron],
           [count("smelter") < 1 && mined("coalmine") && mined("ironmine"), "smelter", []],
-          [have("granitemine") < 1 && stone < 8, "granitemine", granite],
+          [graniteWanted, "granitemine", granite],
           [have("goldmine") < 1 && count("smelter") > 0 && this.personality !== "warden", "goldmine", gold],
           [count("goldsmith") < 1 && mined("goldmine") && count("smelter") > 0, "goldsmith", []],
           [count("bowyer") < 1 && this.personality === "warden" && count("weaponsmith") > 0, "bowyer", []],

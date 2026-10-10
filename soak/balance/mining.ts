@@ -18,6 +18,7 @@ aiOptions.releaseStalled = extra.includes("release");
 aiOptions.toolsmithAnyway = extra.includes("smith");
 aiOptions.forgeRoom = extra.includes("forge");
 aiOptions.surveyAgain = extra.includes("survey");
+aiOptions.graniteFirst = extra.includes("granite");
 const n = Number(rivals);
 type Planner = { hadMine: Set<string>; known: Map<number, Set<number>>; mineTiles: (ctx: unknown, signs: number[], type: string) => number[] };
 const brains: Record<number, { econ: Planner }> = {};
@@ -81,7 +82,7 @@ for (let d = 1; d <= Number(days) && eco.winner < 0; d++) {
         toolsmith: count("toolsmith"), pick: stock[goodId("pick")] ?? 0, hammer: stock[goodId("hammer")] ?? 0, stone: stock[goodId("stone")] ?? 0, iron: stock[goodId("iron")] ?? 0,
         coalSign: sign(2), ironSign: sign(3), goldSign: sign(4), graniteSign: sign(5),
         coalUnder: under(Deposit.Coal), ironUnder: under(Deposit.Iron), goldUnder: under(Deposit.Gold), graniteUnder: under(Deposit.Granite),
-        coalmine: miners("coalmine"), ironmine: miners("ironmine"), smelter: count("smelter"),
+        coalmine: miners("coalmine"), ironmine: miners("ironmine"), granitemine: miners("granitemine"), smelter: count("smelter"),
         // What the planner holds (needs `ore`): the mines it has ever seen built, the iron signs it remembers and the tiles it would try for a mine on them.
         had: [...(brains[p]?.econ.hadMine ?? [])],
         ironKnown: remembered(p, 3),

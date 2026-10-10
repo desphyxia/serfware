@@ -35,5 +35,9 @@
  * signs fail, those signs are forgotten (except any within reach of a mine that still works), so the geologists see the kind
  * as lacking and survey again; not again for 120 thoughts. Remembered signs count as found, and a seat whose signs have no
  * tile a mine can stand on (no flag spot, a field or tree, no road) otherwise retries them for the rest of the game.
+ * `graniteFirst` (needs `oreMines`, for the signs it remembers and the tiles it tries): granite mines are wanted whether or
+ * not stone is short, 1 + one for every 30 buildings, at most 3 at once (an exhausted mine does not count), and the
+ * geologists look for a granite sign while that quota has none. Before, one granite mine was wanted only while the stores held
+ * under 8 stone (and `relieveStone` placed up to two when stone ran bare), so a seat that had stone for a day built none.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false };
