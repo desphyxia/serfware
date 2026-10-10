@@ -322,6 +322,16 @@ Mean over all rivals, from `economy.jsonl` (not the same aggregation as the tabl
   help the seats that already have one (stone is not short there on day 60), and the seats that are short of stone mostly have
   little granite inside the border. Means of 18 and 18 seats from one probe; not compared with the switch off, not checked
   why the first mine's reach leaves most of the granite, and day-60 stone in the warehouses is one snapshot.
+- Would pushing the border toward mountain ground find granite (`soak/balance/borderrock.ts`, same 12 games and switches, days
+  5, 10, 20, 40 and 60; 36 seats, 16 with 15 or fewer granite tiles inside the border on day 5 and 20 with more): no, because
+  there is no free ground to push into. Territory is the same on day 5 as on day 60 (poor seats 200.6 and 202.2 tiles, rich
+  seats 410.9 and 411.4; no seat's grew after day 10), and the free granite on the Hearthship's land within 20 land steps of
+  the border is 0.1 tiles a poor seat and 0.2 a rich one (31 of the 36 seats have none within 20 steps). Free mountain ground
+  within 20 steps is 0.6 to 0.7 tiles. In 4 of the games (12 seats, days 5 and 10, the same on both days) the free land of any
+  kind within 20 steps of the border was 0 for 5 seats and 23 tiles or fewer for the other 7. The map is already divided between the seats on
+  day 5, so where a border grows is not what leaves a seat short of granite: how much granite lies inside the start territory
+  is. Granite inside the border falls a little (poor 7.1 to 6.4 tiles, rich 34.7 to 28.9) as mines dig it. Not measured:
+  before day 5, or how large the start territory is on each map size.
 - Why the toolsmith waits (`soak/balance/toolsmith.ts`, 6 games, 1,080 seat-days with `tools,ore`): no toolsmith stood on
   54% of seat-days and only 9 of 18 seats ever got one (the builder wants one only while a quarry stands, and quarries are
   pulled down when the rock runs out: 14 of 18 seats had none at day 60). Where one stands it waits for iron on 48% of its
