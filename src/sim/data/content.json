@@ -1213,6 +1213,7 @@
     "woundedDays": 1,
     "peaceDays": 1,
     "wellsToWin": 7,
-    "wellHoldDays": 1
+    "wellHoldDays": 1,
+    "prosperityGoods": 600
   }
 }

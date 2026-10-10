@@ -59,6 +59,8 @@ import { InfoPanel, StockBar, type Selection } from "./ui/infoPanel";
 import { h } from "./ui/dom";
 import { Hud } from "./ui/hud";
 import { ReportPanel } from "./ui/reportPanel";
+import { WIN_BANNER, type WinReason } from "./sim/econ/victory";
+import { SummaryPanel } from "./ui/summaryPanel";
 import { SettingsPanel } from "./ui/settingsPanel";
 import { bootScreen } from "./ui/bootScreen";
 
@@ -105,6 +107,7 @@ export class Game {
   private readonly debug: DebugPanel;
   private readonly settingsPanel: SettingsPanel;
   private readonly report: ReportPanel;
+  private readonly summary: SummaryPanel;
   private readonly inspector: HTMLElement;
   private readonly buildBar: BuildBar;
   /** Pictures for the build menu, made the first time they are asked for. */
@@ -239,6 +242,11 @@ export class Game {
       difficulty: () => this.difficulty,
     }, this.keys);
     this.report = new ReportPanel();
+    this.summary = new SummaryPanel(
+      () => this.session.world.economy,
+      () => this.session.player,
+      () => (this.summary.hide(), this.menu.show()),
+    );
     this.debug = new DebugPanel({
       fps: () => this.fps,
       frameTimes: () => this.frameTimes,
@@ -459,6 +467,7 @@ export class Game {
       this.systemMap.root,
       this.almanac.root,
       this.diplomacy.root,
+      this.summary.root,
       this.photoPanel.root,
       this.lettersPanel.root,
       this.captions.root,
@@ -584,7 +593,7 @@ export class Game {
     const eco = this.world.economy;
     if (eco.defeated[this.session.player] && eco.winner < 0) return "Your Hearthship has fallen. Your people carry on elsewhere.";
     if (eco.winner < 0) return null;
-    if (eco.winner === this.session.player) return eco.winReason === "wells" ? "Victory: the Star Wells sing for you." : "Victory: the last rival Hearthship has fallen.";
+    if (eco.winner === this.session.player) return WIN_BANNER[eco.winReason as WinReason];
     return "Another settlement has won this world.";
   }
 
@@ -1624,9 +1633,11 @@ export class Game {
   }
 
   async start(): Promise<void> {
+    const tStart = performance.now();
     bootScreen.set(0.25, "Starting the graphics");
     await this.gfx.init();
-    log.info(`Renderer: ${this.gfx.backend}`);
+    const tInit = performance.now();
+    log.info(`Renderer: ${this.gfx.backend} in ${(tInit - tStart).toFixed(0)} ms`);
     bootScreen.set(0.3, "Preparing shaders");
     const t0 = performance.now();
     try {
@@ -1635,8 +1646,10 @@ export class Game {
       // Not fatal: the shaders then build on the first frame instead.
       log.warn(`Shader precompile failed: ${(err as Error).message}`);
     }
-    log.info(`Shaders ready in ${(performance.now() - t0).toFixed(0)} ms`);
+    const tShaders = performance.now() - t0;
+    log.info(`Shaders ready in ${tShaders.toFixed(0)} ms`);
     bootScreen.set(0.97, "Starting");
+    const tReady = performance.now();
     this.resize();
     window.setTimeout(() => this.sampleMemory(), 1000);
     const frame = (now: number) => {
@@ -1647,6 +1660,9 @@ export class Game {
         if (!this.shown) {
           this.shown = true;
           bootScreen.hide();
+          const sf = window.__seedfall;
+          if (sf) sf.timings = { init: Math.round(tInit - tStart), shaders: Math.round(tShaders), firstFrame: Math.round(performance.now() - tReady) };
+          log.info(`First frame ${sf?.timings?.firstFrame} ms after start-up`);
         }
       } catch (err) {
         crash.capture({ kind: "error", message: (err as Error).message, stack: (err as Error).stack });
@@ -2281,6 +2297,7 @@ export class Game {
     this.platform.update(dt / 1000);
     this.pollPad(dt);
     this.tickCounter.ticks += steps;
+    this.summary.update();
     this.hud.setBanner(this.session.status() ?? this.victoryText() ?? this.surveyText());
     if (this.session.info.mode === "solo") {
       this.autosaveTimer -= dt;

@@ -9,6 +9,7 @@ import { campaignPage } from "./campaign";
 import { createPage, library, type CreateHost } from "./creative";
 import { ALL_SCENARIOS } from "../sim/scenario/campaign";
 import type { MatchRules } from "../sim/world";
+import type { VictoryRule } from "../sim/econ/victory";
 
 export interface SaveMeta {
   id: string;
@@ -210,12 +211,12 @@ export class GameMenu extends Panel {
     // Rules for a match: how long the peace lasts, what a lost duel costs, how the game is won.
     const peace = h("select", { id: "mp-peace" }, ...[["", "Usual (1 day)"], ["0", "None"], ["2", "2 days"], ["5", "5 days"], ["10", "10 days"]].map(([v, l]) => h("option", { value: v }, l))) as HTMLSelectElement;
     const stakes = h("select", { id: "mp-stakes" }, h("option", { value: "" }, "Usual (wounded)"), h("option", { value: "wounded" }, "Wounded"), h("option", { value: "mortal" }, "Mortal")) as HTMLSelectElement;
-    const victory = h("select", { id: "mp-victory" }, h("option", { value: "" }, "Either way"), h("option", { value: "conquest" }, "Last settlement standing"), h("option", { value: "wells" }, "Hold the Star Wells")) as HTMLSelectElement;
+    const victory = h("select", { id: "mp-victory" }, h("option", { value: "" }, "Conquest or Star Wells"), h("option", { value: "conquest" }, "Last settlement standing"), h("option", { value: "wells" }, "Hold the Star Wells"), h("option", { value: "prosperity" }, "Prosperity (a production target)"), h("option", { value: "influence" }, "Influence (win over the hamlets)"), h("option", { value: "all" }, "Any of them")) as HTMLSelectElement;
     this.mpRules = () => {
       const r: MatchRules = {};
       if (peace.value !== "") r.peaceDays = Number(peace.value);
       if (stakes.value) r.stakes = stakes.value as "wounded" | "mortal";
-      if (victory.value) r.victory = victory.value as "conquest" | "wells";
+      if (victory.value) r.victory = victory.value as VictoryRule;
       return Object.keys(r).length ? r : undefined;
     };
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });

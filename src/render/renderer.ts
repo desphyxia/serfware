@@ -144,15 +144,36 @@ export class GameRenderer {
   async init(): Promise<void> {
     shimIdentitySwizzle();
     await this.renderer.init();
+    // Small instanced meshes keep their matrices in a uniform buffer whose id and length are
+    // written into the shader, so every instance chunk compiled a program of its own (about 200 at
+    // start-up, which is what a cold first load spends its time on). Large ones read them as vertex
+    // attributes, and all chunks of one material then share a single program.
+    const caps = (this.renderer as unknown as { backend?: { capabilities?: { getUniformBufferLimit?: () => number } } }).backend?.capabilities;
+    if (caps?.getUniformBufferLimit) caps.getUniformBufferLimit = () => 0;
     this.ready = true;
     this.apply(this.settings);
   }
 
   /** Build the shaders for everything in the scene now, reporting progress, so the first frame does not stall. */
   async precompile(onProgress: (fraction: number) => void): Promise<void> {
-    await this.renderer.compileAsync(this.scene, this.camera, null, (e: ProgressEvent) => {
-      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
-    });
+    // The scene is drawn into the post-processing pass's own target with its own outputs, which
+    // makes different shader and pipeline variants from the canvas ones: compile those, or the
+    // first frame builds every material all over again, synchronously.
+    const sp = this.scenePass;
+    const target = this.renderer.getRenderTarget();
+    const mrt = this.renderer.getMRT();
+    if (sp) {
+      this.renderer.setRenderTarget(sp.renderTarget);
+      this.renderer.setMRT(sp.getMRT());
+    }
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera, null, (e: ProgressEvent) => {
+        if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+      });
+    } finally {
+      this.renderer.setRenderTarget(target);
+      this.renderer.setMRT(mrt);
+    }
   }
 
   get backend(): string {

@@ -1175,3 +1175,35 @@ i.sw-triangle {
   border-radius: 4px;
   font-size: calc(14px * var(--ui-scale) * var(--text-scale));
 }
+
+.panel.summary {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  top: 12vh;
+}
+.summary-table {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) auto repeat(6, auto);
+  gap: 4px 12px;
+  margin: 10px 0 14px;
+  overflow-x: auto;
+}
+.summary-table .th {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+.summary-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.summary-table .me {
+  font-weight: 600;
+}
+.summary-table .tag.won,
+.summary-table .tag.ally {
+  color: #e8c76a;
+}
+.summary-table .tag.fallen {
+  color: #e58a6c;
+}
