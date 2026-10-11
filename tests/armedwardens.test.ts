@@ -3,6 +3,7 @@ import { goodId } from "../src/sim/econ/defs";
 import { ARM_BLADE, ARM_SHIELD } from "../src/sim/econ/people";
 import { frontierTiles, placeOn } from "../src/sim/econ/planner";
 import { temperAllows } from "../src/sim/ai/personality";
+import { creativeOf, creativeOptions } from "../src/net/session";
 import { World } from "../src/sim/world";
 
 const blade = goodId("blade");
@@ -95,6 +96,27 @@ describe("the armed-wardens rule", () => {
     expect(choose()).toBe(-1);
     keep.stock[shield] = 5;
     expect(choose()).toBe(shield);
+  });
+
+  it("travels with a save or a multiplayer start, and reaches a colony world", () => {
+    const w = new World("armed-wardens", { size: "tiny", players: 1, armedWardens: true });
+    const again = new World("armed-wardens", { size: "tiny", players: 1, ...creativeOptions(creativeOf(w)) });
+    expect(again.economy.armedWardens).toBe(true);
+    expect(again.economy.buildings[again.economy.keeps[0]!]!.stock[blade]).toBe(8);
+    const plain = new World("armed-wardens", { size: "tiny", players: 1 });
+    expect(creativeOf(plain)).toBeUndefined();
+    const colony = w.colonize(w.system.planets.find((p) => p.surface && p.index !== w.system.home)!.index);
+    expect(colony.armedWardens).toBe(true);
+  });
+
+  it("tells a dark lantern why: no arms, or no free adult", () => {
+    const { w, keep, lantern } = lanternWorld(true, { blade: 0, shield: 0 });
+    run(w, 3000);
+    expect(w.economy.waitingFor(lantern)).toMatch(/arms/);
+    keep.stock[blade] = 1;
+    keep.stock[shield] = 1;
+    for (const p of w.economy.people) if (p.alive && p.stage === "adult" && p.settler < 0) p.woundedUntil = Infinity;
+    expect(w.economy.waitingFor(lantern)).toMatch(/free adult/);
   });
 
   it("lets every temperament build the weaponsmith, and only that", () => {

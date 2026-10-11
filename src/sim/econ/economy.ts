@@ -2194,7 +2194,9 @@ export class Economy {
     if (!b.built) return null;
     if (b.def.tool && b.worker < 0 && !this.hasTool(b.owner, goodId(b.def.tool))) return `Needs a worker with a ${GOODS[goodId(b.def.tool)]?.name.toLowerCase()}. Make one at a toolsmith.`;
     if (b.exhausted) return "Nothing left to dig here.";
-    if (this.armedWardens && b.def.slots && !b.garrison.length && !this.hasArms(b.owner)) return "Waiting for arms: a warden needs a blade and a shield. Make them at a weaponsmith.";
+    if (this.armedWardens && b.def.slots && !b.garrison.length && !this.pickWarden(b)) {
+      return this.hasArms(b.owner) ? "Waiting for a free adult to take the watch. Build houses, or free someone from work." : "Waiting for arms: a warden needs a blade and a shield. Make them at a weaponsmith.";
+    }
     if (b.def.inputs && b.worker >= 0) {
       const missing = Object.keys(b.def.inputs).filter((k) => goodsFor(k).every((g) => (b.stock[g] as number) === 0));
       if (missing.length && b.food <= 0) return `Waiting for ${missing.map((k) => GOODS[GOOD_INDEX.get(k) ?? -1]?.name.toLowerCase() ?? k).join(" and ")}.`;
