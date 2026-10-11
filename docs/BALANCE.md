@@ -534,8 +534,26 @@ Means per seat at day 60:
   wardens in them. The details panel now says "Waiting for a free adult" in that case, and "Waiting for arms" in the other.
 - 26 of 36 seats built a weaponsmith with the rule on (the run without the cap; 9, 9 and 8 for the builder, trader and warden seats); 7 with the rule
   off, all of them warden seats.
-- What this does not show: war. The games have `peaceDays` 999. Arms only gate who may hold a lantern building, not combat
-  strength, so a war run is the next measurement.
+- The games above have `peaceDays` 999, so they do not show war.
+
+War: `BALANCE_AI=quarry,stone,food,priority,armed node scripts/balance-sweep.mjs war --seeds 2 --workers 4 --out balance-war-armed`,
+12 games (3 levels × tiny and small × seeds `bal-001` and `bal-002`, three Wardens, 200 days, 83 minutes), against the same 12
+games in the `balance-war1` baseline (rule off, same switches except `armed`):
+
+| | Rule off (baseline) | Rule on |
+|---|---|---|
+| Games that end with a winner | 1 (day 14) | 0 |
+| Captures, all 12 games | 113 | 32 |
+| Rivals fallen, all 12 games | 19 | 12 |
+| Attacks on days 0-19 / 20-39 / 40-59 / 60-79 / 80-99 / 100+ | 153 / 4 / 3 / 5 / 2 / 2 | 44 / 5 / 0 / 0 / 2 / 0 |
+| First attack, median day (11 of 12 games have one with the rule on) | 5.4 | 5.7 |
+| Rule violations | 1 | 0 |
+
+- Fighting is early and then stops with the rule off, and the same with it on, only smaller: about a third of the early
+  attacks and captures. The war targets (winners decided by day 40 to 150; steady attacks to the end) are met by neither.
+- Not explained by this run: why there are fewer early attacks (an attack takes wardens that hold the lanterns; seats start
+  with 8 pairs). The wardens per seat and the lantern buildings left dark in these games were not read out. Two seeds per cell,
+  so the games are too few to call the 113 against 32 more than a large difference.
 
 ## Looking at the map
 
