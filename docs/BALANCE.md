@@ -149,6 +149,12 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `cand`: the border lanterns are tried on the frontier tiles where a lantern fits, not on the first 40 of the list. Issue #150.
 - `wood`: while planks and logs are both under 4 in the stores, one more woodcutter (a forester for every three) at a time, 30
   thoughts apart, up to `2 + finished buildings / 12`; the order may go past the sites cap. Issue #150.
+- `rail`: from 15 finished buildings the voyage planner keeps a site for the launch rail and the AI's placements keep off it
+  until the rail is placed there (`reserveRail`). Issue #147.
+- `block` (or `BALANCE_BLOCK_WEIGHT=<w>`; needs `turn`): a flag side costs `w` (1 for `block`) for each free tile beside its
+  flag that it would take out of use (`turnBlockWeight`). Issue #148.
+- `rings`: a carrier may put a good on a full flag when the full flags make a ring, one good over the capacity at most
+  (`transportOptions.breakRings`, a transport rule, not an AI switch; the soak invariant then allows 9 goods on a flag). Issue #149.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -594,6 +600,7 @@ the AI did and why it could not do more, bundled like the other helpers. All are
 - `jamwhy.ts <size> <seed> <seat> <days> [turn] [wide]` (#148, #149): every 10 days, the flags of one seat holding the most goods,
   what stands on them, where each good is bound and the route length. `railwhy.ts <size> <seed> <days>` (#147): the questions the
   voyage planner asks before a launch rail, one by one, then a rail placed the way it places it (this one places a building).
+- `ringwhy.ts <size> <seed> <seat> <days> [turn] [wide] [rings] [w=<weight>]` (#149): every 10 days, the full flags of one seat that no good can leave (each good bound for another flag in the set, no good coming back to swap), their goods by next hop, and a cycle through them; `rings` plays `transportOptions.breakRings` and prints how many times it fired.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
 
 #### Result: border candidates and wood by need (#150, medium and large, 3 seeds each, 80 days, no war)
@@ -616,6 +623,58 @@ Standard stack with `turn` and `wide` as the base; 6 games a variant, 3 per size
   short because woodcutters were added only when adults stood idle, and a builder at its sites cap with sites waiting for planks
   did nothing at all.
 - Not measured: `cand` and `wood` on tiny and small maps.
+
+#### Result: rings of full flags, the blocking-tile penalty and the reserved rail site (#147, #148, #149)
+
+Standard stack plus `turn` and `wide` as the base, no war, 3 seeds a size; differences under about 15% are noise.
+
+**A ring of full flags is a deadlock (#149).** `ringwhy.ts` takes the full flags of a seat and keeps those where no good can move
+(each good's next hop is a flag in the same set, and no good comes back for a swap). In the jam of #149 (small `bal-002`, seat 2,
+`turn` with partner weight 0.5) that left 28 flags deadlocked at day 50 and 26 at day 60, with a cycle of four full flags (pasture,
+beacon, apiary, hunter) and chains queueing behind it. With `rings` the same game fired the rule 37 times between day 10 and day 20
+and never again, and had 9 goods on flags at day 20 against 121.
+
+80-day games, `rings` against the base (the cap of one good over the capacity, rerun on small and medium):
+
+| Per seat, day 60 | tiny | small | medium |
+|---|---|---|---|
+| Buildings | 45.1 → 45.1 | 54.1 → 55.1 (+2%) | 91.3 → 97.6 (+7%) |
+| People | 97.4 → 97.4 | 117 → 118 | 176 → 187 (+6%) |
+| Goods stuck on flags | 0.78 → 0.78 | 1.09 → 1.9 | 30.6 → 2.7 (-91%) |
+| Goods lying on flags | 1.49 → 1.49 | 5.46 → 11.6 | 40.1 → 11 (-73%) |
+| Full flags | 0 → 0 | 0.22 → 0.81 | 4.4 → 0.96 (-78%) |
+| Stalled seat-days | 86% → 86% | 73% → 71% | 47% → 44% |
+
+The first version let a flag take any number over its capacity; one reached 30 goods in a small game. With the cap, no flag went past 9.
+`base` itself shows 9-good flags on some days (medium `bal-001`, `bal-002`) and, in medium `bal-003`, "flag is not on its tile" on every
+day; something other than this rule over-fills flags now and then, not traced.
+
+**The blocking-tile penalty (`block`, weight 1) is worse.** On small, goods lying on flags at day 60 went from 5.5 to 27.9 and goods
+stuck from 1.1 to 25.5; launch-rail seats fell on small (44% to 22%) and medium (67% to 33%) and probes fell by half or more on small and medium (tiny sent more: 0.33 to 1.33). Buildings
+were within noise (small 54.1 → 57.3, medium 91.3 → 90.7). Not understood; my guess is that the penalty pushes flags onto
+existing hubs, which fill. It stays off.
+
+**The reserved rail site (`rail`)**, 200-day games, tiny and small, 3 seeds each (9 seats a size), base against `rail`:
+
+| | tiny | small |
+|---|---|---|
+| Seats with a launch rail | 11% → 33% | 33% → 44% |
+| Probes sent per game | 0.33 → 3 | 5.33 → 4 |
+| Hearthships sent | 0 → 0 | 0 → 0 |
+| Buildings d200 | 45.8 → 44.7 | 60.8 → 62.1 |
+| People d200 | 91.9 → 96.9 | 122 → 129 |
+| Land held d200 | 252 → 254 | 340 → 359 |
+| Goods stuck on flags d60 | 0.78 → 0.89 | 1.09 → 5.48 |
+| Stalled seat-days | 92% → 90% | 82% → 84% |
+
+- Two more tiny seats and one more small seat build a rail (of 9 each), so the reservation helps a little; with 3 games a size that is
+  1 to 3 seats.
+- No game sends a Hearthship in either run: the AI founds a colony from 70 people and 14 idle adults (`VoyagePlanner.found`), and these
+  seats have 92 and 122 people at day 200 with few idle. So the rail alone does not bring colonies; that threshold is the AI's own limit
+  and was left as it is.
+- Goods stuck on small rose at day 60 (1.09 → 5.48) without `rings`; one seat's jam is likely, not looked at.
+- Together (`rings,block,rail`) on medium: buildings 91.3 → 90.9, land held 780 → 721, launch-rail seats 67% → 44%; the loss follows
+  `block`, which alone cut rails to 33%.
 
 ## Looking at the map
 
