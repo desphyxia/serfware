@@ -1,9 +1,12 @@
-import { goodId } from "../econ/defs";
-import { placeConnected } from "../econ/planner";
+import { BUILDINGS, buildingType, goodId, type BuildingDef } from "../econ/defs";
+import { flagSides, placeConnected, placeOn, releaseSite, reservedSite, reserveSite } from "../econ/planner";
+import { aiOptions } from "./options";
 import { MIN_FOUNDERS } from "../system/voyages";
 import type { AiContext } from "./brain";
 
 const SETTLERS = 12;
+/** With `reserveRail`, the finished buildings at which a seat keeps a site for its launch rail. */
+const RESERVE_FROM = 15;
 /**
  * Goods a Hearthship takes besides its founders (mass 3 each): materials, the tools the first trades need (a colony
  * with no hammer builds nothing), and some bread. The stores must hold them first.
@@ -57,9 +60,28 @@ export class VoyagePlanner {
     // The launch rail comes first.
     const rail = voyages.railOf(pl, home);
     if (!rail) {
+      const finished = mine.filter((b) => b.built).length;
+      // A large building needs level, clear ground, which a full town no longer has: keep a site from 15 buildings on.
+      if (aiOptions.reserveRail) {
+        if (mine.some((b) => b.def.rail)) releaseSite(w, pl);
+        else if (finished >= RESERVE_FROM) {
+          const kept = reservedSite(w, pl);
+          const fits = kept >= 0 && flagSides(w, kept, BUILDINGS[buildingType("launchrail")] as BuildingDef, pl).length > 0;
+          if (!fits && this.can("site")) {
+            releaseSite(w, pl);
+            reserveSite(w, "launchrail", pl);
+            this.wait("site", 30);
+          }
+        }
+      }
       if (mine.some((b) => b.def.rail || !b.built) || !this.can("rail")) return false;
-      if (mine.filter((b) => b.built).length < 30 || !have("iron", 6) || !have("plank", 8) || !have("stone", 10)) return false;
+      if (finished < 30 || !have("iron", 6) || !have("plank", 8) || !have("stone", 10)) return false;
       this.wait("rail", 15);
+      const site = reservedSite(w, pl);
+      if (site >= 0) {
+        releaseSite(w, pl);
+        if (placeOn(w, "launchrail", [site], pl, true) >= 0) return true;
+      }
       return placeConnected(w, "launchrail", { minDist: 2, maxDist: 9, player: pl, splitRoads: true });
     }
 
