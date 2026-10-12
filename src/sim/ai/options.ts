@@ -39,5 +39,19 @@
  * not stone is short, 1 + one for every 30 buildings, at most 3 at once (an exhausted mine does not count), and the
  * geologists look for a granite sign while that quota has none. Before, one granite mine was wanted only while the stores held
  * under 8 stone (and `relieveStone` placed up to two when stone ran bare), so a seat that had stone for a day built none.
+ * `turnBuildings`: a building is placed with the best of its flag sides, as a player turns it with the mouse wheel, instead of
+ * the flattest one: every side it can have is planned (the new road to the network, the distance to the buildings it trades
+ * with, the height step) and the cheapest taken, the default side winning ties (planner.ts `placeOn`). A large building also
+ * fits on tiles where only another side leaves its other neighbours clear.
+ * `widePlacement`: when the 9 steps round the Hearthship (or the lantern a building is tried round) hold no spot for a building,
+ * the search goes on round up to three lit lanterns and then over the seat's own land out to 16 steps from the Hearthship
+ * (planner.ts `placeConnected`), so a launch rail, a smelter or a farm is no longer lost to a full ring. The first search is
+ * unchanged.
+ * `borderCandidates`: the border lanterns are tried on the frontier tiles where a lantern fits (a flag side it can stand on),
+ * not on the first 40 of the list sorted by unclaimed land lit, which on a wooded or hilly border are mostly tiles a tree or a
+ * slope rules out while usable tiles lie further down (#150).
+ * `woodByNeed`: while the stores hold under WOOD_SHORT planks and under WOOD_SHORT logs, the builder adds a woodcutter (a forester
+ * for every three), one at a time, a pause of WOOD_GAP thoughts between orders, up to a number that grows with the finished
+ * buildings; the woodcutters were otherwise added only when 6 adults stood idle, so wood grew with unemployment, not demand (#150).
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false };
