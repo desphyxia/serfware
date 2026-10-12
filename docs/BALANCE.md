@@ -140,6 +140,15 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `granite` (needs `ore`): granite mines are wanted whether or not the stores are short of stone, one plus one for every 30
   buildings and at most three, and the geologists look for a granite sign while that quota has none. Before, one granite mine
   was wanted only while the stores held under 8 stone, and relieveStone placed one or two when stone ran short.
+- `armed`: plays the armed-wardens rule (`armedWardens`, a match option; see the results below), not an `aiOptions` switch.
+- `turn`: a building takes the best of its flag sides, as a player turns it with the mouse wheel, not the flattest one: every
+  side is planned (the new road to the network, the distance to the buildings it trades with, the height step) and the
+  cheapest is taken (`BALANCE_TURN_WEIGHT` sets the weight on the distance, default 2). Issue #148.
+- `wide`: when the 9 steps round the keep (or the lantern a building is tried round) hold no spot, the search goes on round up
+  to three lit lanterns and then over the seat's own land out to 16 steps from the keep. Issue #147.
+- `cand`: the border lanterns are tried on the frontier tiles where a lantern fits, not on the first 40 of the list. Issue #150.
+- `wood`: while planks and logs are both under 4 in the stores, one more woodcutter (a forester for every three) at a time, 30
+  thoughts apart, up to `2 + finished buildings / 12`; the order may go past the sites cap. Issue #150.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -554,6 +563,59 @@ games in the `balance-war1` baseline (rule off, same switches except `armed`):
 - Not explained by this run: why there are fewer early attacks (an attack takes wardens that hold the lanterns; seats start
   with 8 pairs). The wardens per seat and the lantern buildings left dark in these games were not read out. Two seeds per cell,
   so the games are too few to call the 113 against 32 more than a large difference.
+
+### The standard assessment (`assess`, `scripts/balance-assess.mjs`)
+
+One suite for a change to the game or the AI: every world size (`--sizes tiny,small,medium,large,huge`), a mixed table of
+temperaments (builder, trader, warden in turn), a short peace (`--peace`, 999 for no war), and `--days` long. The report turns
+the games into one markdown file by size: growth and people, food and hunger, logistics (roads, flags, goods lying and stuck on
+flags), materials and mining, land, war, the armed-wardens rule, colonisation, terraforming, growth stalls (a seat is stalled
+on a day when its finished buildings are no more than 10 days before; what the first cause five days into the stall was, and
+which conditions are commoner on stalled days than on growing ones), and what holds workplaces and building sites up. Give it
+two run directories to read them side by side.
+
+```sh
+STACK=quarry,stone,food,priority,tools,ore,release,smith,forge,granite,turn,wide
+BALANCE_AI=$STACK     node scripts/balance-sweep.mjs assess --seeds 3 --sizes medium,large --days 80 --peace 999 --workers 3 --out base
+BALANCE_AI=$STACK,wood node scripts/balance-sweep.mjs assess --seeds 3 --sizes medium,large --days 80 --peace 999 --workers 3 --out wood
+node scripts/balance-assess.mjs base wood --names base,wood --out report.md
+```
+
+Probes that play the assess game (the full AI stack, no war, three rivals; `turn` and `wide` as trailing arguments) and say what
+the AI did and why it could not do more, bundled like the other helpers. All are read-only except `railwhy`:
+
+- `stallwhy.ts <size> <seed> <days> [turn] [wide]`: per seat and 10-day window, the builder's thoughts by where they stopped
+  (site cap, no planks, no idle hands, the wants list), how many had an empty list or tried and failed, and what was placed
+  (`aiTrace` in `builder.ts`).
+- `tilewhy.ts <size> <seed> <days> [turn] [wide]`: at the end, every tile of each seat's land and why a house or a farm cannot
+  stand there (the reason the build tool would give), or whether a road can join it; also the land by use and feature.
+- `whyexpand.ts <size> <seed> <days> [turn] [wide]`: per seat, the stores and people, the frontier tiles a lantern would be tried
+  on (all, and the first 40 the builder looks at) with the reason each turns a lantern down, and the rock left in and round the border.
+- `jamwhy.ts <size> <seed> <seat> <days> [turn] [wide]` (#148, #149): every 10 days, the flags of one seat holding the most goods,
+  what stands on them, where each good is bound and the route length. `railwhy.ts <size> <seed> <days>` (#147): the questions the
+  voyage planner asks before a launch rail, one by one, then a rail placed the way it places it (this one places a building).
+- `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
+
+#### Result: border candidates and wood by need (#150, medium and large, 3 seeds each, 80 days, no war)
+
+Standard stack with `turn` and `wide` as the base; 6 games a variant, 3 per size, so differences under about 15% are noise.
+
+| Buildings per seat, day 60 | base | `cand` | `wood` | `cand,wood` |
+|---|---|---|---|---|
+| medium | 91.3 | 89.9 (-2%) | 91.9 (+1%) | 90.7 (-1%) |
+| large | 107 | 113 (+6%) | 121 (+13%) | 125 (+18%) |
+
+- Large, `cand,wood` against base: people d60 209 / 235, land held d60 1336 / 1413, logs made days 0-59 557 / 819, planks
+  512 / 662, stalled seat-days 41% / 33%, buildings when a stall starts 96 / 117, goods stuck on flags d60 32.5 / 7.3.
+  `wood` alone raised logs by 51% and buildings by 13% but goods stuck on flags went from 32.5 to 47.3.
+- Medium: no change in wood made or in buildings; stalled seat-days 47% base against 50% to 54% with the switches.
+- Workplaces with no worker on large, day 60: 3.6 base, 5.0 with `cand,wood` (probably the extra woodcutters and foresters; not checked).
+- Not explained: iron ore on large fell 33% with `cand,wood`; rule violations in medium were in every game of every variant.
+- Why games stall (#150, from `stallwhy`, `tilewhy` and `whyexpand`): on tiny and small maps the land is full from about day 20
+  (every want fails, pockets of land no road reaches); on medium to huge, `expand` tried 40 mostly wooded frontier tiles, wood ran
+  short because woodcutters were added only when adults stood idle, and a builder at its sites cap with sites waiting for planks
+  did nothing at all.
+- Not measured: `cand` and `wood` on tiny and small maps.
 
 ## Looking at the map
 
