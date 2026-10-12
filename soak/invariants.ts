@@ -1,3 +1,4 @@
+import { transportOptions } from "../src/sim/econ/economy";
 import { Use } from "../src/sim/econ/landuse";
 import type { World } from "../src/sim/world";
 
@@ -24,7 +25,8 @@ export function invariants(w: World): string[] {
   for (const f of eco.flags) {
     if (!f.alive) continue;
     if (land.use[f.tile] !== Use.Flag || land.ref[f.tile] !== f.id) bad(`flag ${f.id} is not on its tile`);
-    if (f.goods.length > 8) bad(`flag ${f.id} holds ${f.goods.length} goods`);
+    // With transportOptions.breakRings a flag may hold one good over its capacity while a ring of full flags turns.
+    if (f.goods.length > 8 + (transportOptions.breakRings ? 1 : 0)) bad(`flag ${f.id} holds ${f.goods.length} goods`);
     for (const g of f.goods) if (!eco.goods[g]?.alive) bad(`flag ${f.id} lists a good ${g} that is gone`);
     for (const r of f.roads) if (!eco.roads[r]?.alive) bad(`flag ${f.id} lists a road ${r} that is gone`);
   }
