@@ -2,7 +2,11 @@
 // game to balance-out/<suite>.jsonl. Resumable: games already in the file are skipped, so you can stop it
 // (Ctrl-C) and start it again. Usage:
 //   node scripts/balance-sweep.mjs [suite ...] [--seeds 30] [--days N] [--workers N] [--out balance-out]
-// Suites: economy, war, ore, players (default: economy, war, ore). See docs/BALANCE.md.
+//        [--sizes tiny,small,...] [--levels easy,normal,hard] [--rivals N] [--peace DAYS]   (the  suite;
+//        --peace 999 plays it with no war at all, for the economy, colonisation and terraforming)
+//        [--bundle path]   where the game job is bundled (give each sweep running at the same time its own path)
+// Suites: economy, war, ore, players, assess (default: economy, war, ore). See docs/BALANCE.md.
+// BALANCE_AI="...,armed" plays the armed-wardens match rule in every game.
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -17,6 +21,11 @@ const SEEDS = Number(opt("seeds", 30));
 const DAYS = opt("days", undefined);
 const WORKERS = Number(opt("workers", Math.max(1, cpus().length - 1)));
 const OUT = opt("out", "balance-out");
+const SIZES = opt("sizes", "tiny,small,medium,large,huge").split(",");
+const ASSESS_LEVELS = opt("levels", "normal").split(",");
+const RIVALS = Number(opt("rivals", 3));
+const PEACE = Number(opt("peace", 10));
+const BUNDLE = opt("bundle", "artifacts/balance-job.mjs");
 const wanted = args.filter((a) => !a.startsWith("--"));
 
 const seeds = Array.from({ length: SEEDS }, (_, i) => `bal-${String(i + 1).padStart(3, "0")}`);
@@ -68,6 +77,19 @@ const SUITES = {
       }),
       (t) => PLAYER_CELLS.has(`${t.size}-${t.players}`),
     ),
+  // The standard assessment: every size, a mixed table of temperaments (builder, trader, warden in turn), a short peace and a
+  // long game, so that economy, land, war, colonisation and terraforming all show in the same record. Compare two runs (for
+  // example with and without a match rule) with .
+  assess: () =>
+    cross({ size: SIZES, level: ASSESS_LEVELS }, seeds, (t, seed) => ({
+      personalities: Array.from({ length: RIVALS }, (_, i) => TEMPERS[i % TEMPERS.length]),
+      level: t.level,
+      size: t.size,
+      difficulty: "honest",
+      days: Number(DAYS ?? 200),
+      peaceDays: PEACE,
+      seed,
+    })),
   // Ore mixes: the same economy on the map settings the game offers.
   ore: () =>
     cross({ mix: ORE_PRESETS }, seeds, (t, seed) => ({
@@ -112,7 +134,6 @@ const suites = wanted.length ? wanted : ["economy", "war", "ore"];
 for (const s of suites) if (!SUITES[s]) throw new Error(`unknown suite ${s}; known: ${Object.keys(SUITES).join(", ")}`);
 
 mkdirSync(OUT, { recursive: true });
-const BUNDLE = "artifacts/balance-job.mjs";
 execFileSync(process.execPath, ["scripts/bundle-job.mjs", BUNDLE, "soak/balance/job.ts"], { stdio: "ignore" });
 
 const jobs = [];
@@ -126,7 +147,7 @@ for (const suite of suites) {
 // mean game times from the 2-seed economy pilot (traders 14 min, builders 13, wardens 9; small worlds 13 min, tiny 11);
 // games of a suite without these tags keep their order. The order changes no result, only when each game runs.
 // Medium worlds and more rivals are guesses (a quarter of a game is fixed, the rest grows with the rivals), not measured.
-const cost = ({ spec }) => spec.days * ({ trader: 1.5, builder: 1.35, warden: 1 }[spec.tags.temper] ?? 1) * ({ medium: 2.5, small: 1.2, tiny: 1 }[spec.size] ?? 1) * (0.25 + 0.25 * spec.personalities.length);
+const cost = ({ spec }) => spec.days * ({ trader: 1.5, builder: 1.35, warden: 1 }[spec.tags.temper] ?? 1) * ({ huge: 4.5, large: 2.5, medium: 2.5, small: 1.2, tiny: 1 }[spec.size] ?? 1) * (0.25 + 0.25 * spec.personalities.length);
 jobs.sort((a, b) => cost(b) - cost(a));
 console.log(`${jobs.length} games to play on ${WORKERS} workers`);
 

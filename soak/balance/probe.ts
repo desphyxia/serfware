@@ -3,7 +3,7 @@ import { Feature, Use, fellable } from "../../src/sim/econ/landuse";
 import { frontierTiles } from "../../src/sim/econ/planner";
 import { aiStats, aiWhy } from "../../src/sim/ai/builder";
 import type { World } from "../../src/sim/world";
-import type { Person } from "../../src/sim/econ/people";
+import { ARM_BLADE, ARM_SHIELD, type Person } from "../../src/sim/econ/people";
 import { BUILDINGS, GOODS, goodId, goodsArray, goodsFor } from "../../src/sim/econ/defs";
 
 /**
@@ -77,7 +77,42 @@ export const SEAT_DAY_FIELDS = [
   "aiChoseLamphouse", // ... a lamp house
   "aiPlaceFailed", // calls with frontier tiles that placed nothing
   "aiBorderCuts", // woodcutters built to clear the way for the border (`clear`)
+  "dark", // finished lantern buildings that are not lit (the armed-wardens rule leaves them dark while arms are short)
+  "blades", // blades in the warehouses
+  "shields", // shields in the warehouses
+  "armedWardens", // living people who carry a blade and a shield
+  // From here, means of the snapshots taken during the day, per seat: what holds growth up (SNAP below).
+  "sites", // building sites standing
+  "sitesDig", // ... being dug
+  "sitesBuilding", // ... with a builder at work
+  "sitesNoHammer", // ... with materials on site and no builder: no hammer in any warehouse
+  "sitesNoPerson", // ... ... no adult free for the job
+  "sitesNoRoute", // ... ... a builder could be had but no road from a home to the site
+  "sitesWaitPlank", // ... waiting for planks (in transit or not yet sent)
+  "sitesWaitStone",
+  "sitesWaitLog",
+  "sitesWaitOther", // ... waiting for another material
+  "sitesFinishing",
+  "wpWorking", // finished workplaces working
+  "wpNoWorker", // ... without a worker (a missing tool is not the cause)
+  "wpNoTool", // ... without a worker for want of a tool
+  "wpInput", // ... short of an input
+  "wpNoTarget", // ... a gatherer whose search found nothing, or no walkable route
+  "wpStranded", // ... cut off from the road network
+  "wpExhausted", // ... nothing left to dig
+  "wpBlocked", // ... output waiting on a full flag
+  "wpOther",
+  "flags", // flags standing
+  "fullFlags", // ... at capacity
+  "stuckGoods", // goods waiting on flags for 6 game hours or more
+  "builders", // builders out on a job
+  "carriers", // carriers out on roads
+  "roads", // roads standing
+  "roadTiles", // tiles of road standing (a road of n tiles counts n)
+  "goodsOnFlags", // goods lying on flags
 ] as const;
+/** The per-seat snapshot counters behind the last SEAT_DAY_FIELDS (same order, from "sites"). */
+const SNAP = SEAT_DAY_FIELDS.slice(SEAT_DAY_FIELDS.indexOf("sites"));
 
 /**
  * What lies on the ground, counted over the whole map and again inside each rival's border (ProbeData.mapDay, resDay).
@@ -200,6 +235,8 @@ const FOOD = goodsFor("food");
 const HAMMER = goodId("hammer");
 const PLANK = goodId("plank");
 const STONE = goodId("stone");
+const BLADE = goodId("blade");
+const SHIELD = goodId("shield");
 
 const zeros = (n: number): number[] => new Array<number>(n).fill(0);
 const grid = (rows: number, cols: number): number[][] => Array.from({ length: rows }, () => zeros(cols));
@@ -267,7 +304,7 @@ export class Probe {
   private day = 0;
   private acc: Day;
   /** Per rival, today's snapshot sums of idle adults, workplaces and workplaces with no worker, and the snapshot count. */
-  private labour: { idle: number; jobs: number; unfilled: number; n: number }[] = [];
+  private labour: { idle: number; jobs: number; unfilled: number; n: number; snap: number[] }[] = [];
   private duel: { def: number; att: number } | null = null;
   /** Building id -> [tick of its worker's last job search, 1 if it found a target]. */
   private readonly searched = new Map<number, [number, number]>();
@@ -695,7 +732,7 @@ export class Probe {
   beginDay(day: number): void {
     this.day = day;
     this.acc = this.newDay();
-    this.labour = Array.from({ length: this.rivals }, () => ({ idle: 0, jobs: 0, unfilled: 0, n: 0 }));
+    this.labour = Array.from({ length: this.rivals }, () => ({ idle: 0, jobs: 0, unfilled: 0, n: 0, snap: zeros(SNAP.length) }));
   }
 
   /** A state snapshot, `slot` 1..SAMPLES_PER_DAY within the game day. */
@@ -714,6 +751,10 @@ export class Probe {
     const idleNow: number[] = [];
     const jobsNow = zeros(this.rivals);
     const unfilledNow = zeros(this.rivals);
+    const snapNow = Array.from({ length: this.rivals }, () => zeros(SNAP.length));
+    const sn = (r: number, name: string): void => {
+      (snapNow[r] as number[])[SNAP.indexOf(name as (typeof SNAP)[number])]!++;
+    };
     for (let r = 0; r < this.rivals; r++) {
       standing[r] = !eco.defeated[r + 1];
       noHammer[r] = !eco.hasTool(r + 1, HAMMER);
@@ -729,9 +770,31 @@ export class Probe {
       else if (r >= 0 && b.built) this.register(b, r, 0, 0);
       if (r < 0 || !standing[r]) continue;
       if (!b.built) {
-        bump(sites, `${b.def.id}|${this.classifySite(b, noHammer[r] as boolean, noPerson[r] as boolean)}`);
+        const why = this.classifySite(b, noHammer[r] as boolean, noPerson[r] as boolean);
+        bump(sites, `${b.def.id}|${why}`);
+        sn(r, "sites");
+        if (why === "dig") sn(r, "sitesDig");
+        else if (why === "building") sn(r, "sitesBuilding");
+        else if (why === "no_builder:no_hammer") sn(r, "sitesNoHammer");
+        else if (why === "no_builder:no_person") sn(r, "sitesNoPerson");
+        else if (why.startsWith("no_builder")) sn(r, "sitesNoRoute");
+        else if (why === "finishing") sn(r, "sitesFinishing");
+        else if (why.endsWith(":plank")) sn(r, "sitesWaitPlank");
+        else if (why.endsWith(":stone")) sn(r, "sitesWaitStone");
+        else if (why.endsWith(":log")) sn(r, "sitesWaitLog");
+        else sn(r, "sitesWaitOther");
       } else if (b.def.job && !b.def.storage) {
-        bump(idle, `${b.def.id}|${this.classify(b)}`);
+        const why = this.classify(b);
+        bump(idle, `${b.def.id}|${why}`);
+        if (why === "working") sn(r, "wpWorking");
+        else if (why === "no_worker") sn(r, "wpNoWorker");
+        else if (why === "no_tool") sn(r, "wpNoTool");
+        else if (why.startsWith("input:")) sn(r, "wpInput");
+        else if (why === "no_target" || why === "no_path") sn(r, "wpNoTarget");
+        else if (why === "stranded") sn(r, "wpStranded");
+        else if (why === "exhausted") sn(r, "wpExhausted");
+        else if (why === "output_blocked") sn(r, "wpBlocked");
+        else sn(r, "wpOther");
         jobsNow[r]!++;
         if (b.worker < 0 && !b.exhausted && b.stranded < 0) unfilledNow[r]!++;
         if (slot === 1 && this.day >= 1 && b.busyPrev >= 0) {
@@ -752,32 +815,65 @@ export class Probe {
       this.data.rockDay[this.day] = rock;
     }
 
+    for (const road of eco.roads) {
+      if (!road.alive) continue;
+      const r = this.rival(road.owner);
+      if (r < 0 || !standing[r]) continue;
+      sn(r, "roads");
+      (snapNow[r] as number[])[SNAP.indexOf("roadTiles")]! += road.tiles.length;
+    }
     for (const f of eco.flags) {
       if (!f.alive) continue;
       const r = this.rival(f.owner);
       if (r < 0 || !standing[r]) continue;
       log.flags++;
-      if (f.goods.length + f.reserved >= FLAG_CAPACITY) log.fullFlags++;
+      sn(r, "flags");
+      if (f.goods.length + f.reserved >= FLAG_CAPACITY) {
+        log.fullFlags++;
+        sn(r, "fullFlags");
+      }
       for (const id of f.goods) {
         const g = eco.goods[id];
         if (!g || !g.alive) continue;
         log.goods++;
+        sn(r, "goodsOnFlags");
         if (g.dest < 0) log.noDest++;
         const age = (eco.tick - g.since) / hour;
         let band = 0;
         while (band < AGE_BANDS_HOURS.length && age >= (AGE_BANDS_HOURS[band] as number)) band++;
         log.age[band]!++;
-        if (age >= STUCK_HOURS) log.stuck[g.type]!++;
+        if (age >= STUCK_HOURS) {
+          log.stuck[g.type]!++;
+          sn(r, "stuckGoods");
+        }
       }
     }
     for (let r = 0; r < this.rivals; r++) {
       if (!standing[r]) continue;
       log.samples++;
-      const l = this.labour[r] as { idle: number; jobs: number; unfilled: number; n: number };
+      const l = this.labour[r] as { idle: number; jobs: number; unfilled: number; n: number; snap: number[] };
       l.idle += idleNow[r] as number;
       l.jobs += jobsNow[r] as number;
       l.unfilled += unfilledNow[r] as number;
       l.n++;
+      const now = snapNow[r] as number[];
+      for (let i = 0; i < now.length; i++) l.snap[i]! += now[i] as number;
+    }
+    // Builders and carriers out on a job, per seat.
+    const builders = zeros(this.rivals);
+    const carriers = zeros(this.rivals);
+    for (const st of eco.settlers) {
+      if (!st.alive) continue;
+      const r = this.rival(st.owner);
+      if (r < 0 || !standing[r]) continue;
+      if (st.role === "builder") builders[r]!++;
+      else if (st.role === "carrier") carriers[r]!++;
+    }
+    for (let r = 0; r < this.rivals; r++) {
+      if (!standing[r]) continue;
+      const l = this.labour[r] as { snap: number[] };
+      l.snap[SNAP.indexOf("builders")]! += builders[r] as number;
+      l.snap[SNAP.indexOf("carriers")]! += carriers[r] as number;
     }
 
     if (slot === 1 && this.day >= 1) {
@@ -870,8 +966,15 @@ export class Probe {
       const owner = r + 1;
       const standing = !eco.defeated[owner];
       let lit = 0;
-      for (const b of eco.buildings) if (b.alive && b.built && b.owner === owner && b.lit) lit++;
-      const l = this.labour[r] as { idle: number; jobs: number; unfilled: number; n: number };
+      let dark = 0;
+      for (const b of eco.buildings) {
+        if (!b.alive || !b.built || b.owner !== owner) continue;
+        if (b.lit) lit++;
+        else if (b.def.slots && !eco.keeps.includes(b.id)) dark++;
+      }
+      let armed = 0;
+      for (const p of eco.people) if (p.alive && p.owner === owner && (p.arms & (ARM_BLADE | ARM_SHIELD)) === (ARM_BLADE | ARM_SHIELD)) armed++;
+      const l = this.labour[r] as { idle: number; jobs: number; unfilled: number; n: number; snap: number[] };
       const mean = (sum: number): number => (l.n ? Math.round((sum / l.n) * 10) / 10 : 0);
       let wardens = 0;
       let attackers = 0;
@@ -915,6 +1018,11 @@ export class Probe {
         territory,
         frontier,
         ...Array.from({ length: 11 }, (_, i) => ai[i] ?? 0),
+        dark,
+        totals[BLADE] as number,
+        totals[SHIELD] as number,
+        armed,
+        ...l.snap.map(mean),
       ]);
     }
     d.seatDay.push(row);

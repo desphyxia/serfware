@@ -7,6 +7,8 @@ import type { GridSize } from "../../src/sim/planet/grid";
 import { World } from "../../src/sim/world";
 import { invariants } from "../invariants";
 import { Probe, SAMPLES_PER_DAY, type ProbeData } from "./probe";
+import { SystemProbe, type SystemData } from "./system";
+import { VoyagePlanner } from "../../src/sim/ai/voyage";
 
 /** One balance game as plain data, so it can be handed to another process. */
 export interface GameSpec {
@@ -63,6 +65,12 @@ export interface GameRecord {
   ai?: string[];
   /** Production, idle reasons, build timeline, logistics, people and war record (see probe.ts). Absent in older records, or when BALANCE_PROBE=0. */
   flow?: ProbeData;
+  /** Voyages, colonies and terraforming (see system.ts). Absent when BALANCE_PROBE=0. */
+  system?: SystemData;
+  /** BALANCE_FOUND="population,idle" changed when the AI founds a colony (VoyagePlanner.found); absent when it did not. */
+  found?: { population: number; idle: number };
+  /** The match rules the game was played under (BALANCE_AI "armed" plays armedWardens); absent when none. */
+  rules?: { armedWardens?: boolean };
 }
 
 /** Play a game to its end or its day limit, sampling every rival seat once a day. */
@@ -83,6 +91,14 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.forgeRoom = ai.includes("forge");
   aiOptions.surveyAgain = ai.includes("survey");
   aiOptions.graniteFirst = ai.includes("granite");
+  aiOptions.turnBuildings = ai.includes("turn");
+  aiOptions.widePlacement = ai.includes("wide");
+  aiOptions.borderCandidates = ai.includes("cand");
+  aiOptions.woodByNeed = ai.includes("wood");
+  if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);
+  const foundEnv = (process.env.BALANCE_FOUND ?? "").split(",").map(Number);
+  if (foundEnv.length === 2 && foundEnv.every(Number.isFinite)) VoyagePlanner.found = { population: foundEnv[0] as number, idle: foundEnv[1] as number };
+  const found = foundEnv.length === 2 && foundEnv.every(Number.isFinite) ? { ...VoyagePlanner.found } : undefined;
   const w = new World(spec.seed, {
     size: spec.size,
     rivals: spec.personalities.length,
@@ -113,6 +129,7 @@ export function playGame(spec: GameSpec): GameRecord {
   let endDay = -1;
   // The probe only reads and wraps (see probe.ts); BALANCE_PROBE=0 plays the game without it.
   const probe = process.env.BALANCE_PROBE === "0" ? null : new Probe(eco, seats.length, w.tick);
+  const system = probe ? new SystemProbe(w) : null;
   for (let d = 0; d < spec.days && eco.winner < 0; d++) {
     probe?.beginDay(d);
     const start = w.tick;
@@ -136,6 +153,7 @@ export function playGame(spec: GameSpec): GameRecord {
       }),
     );
     probe?.endDay();
+    system?.day(d);
     for (const msg of invariants(w)) {
       const line = `day ${d + 1}: ${msg}`;
       if (broken.has(line)) continue;
@@ -165,5 +183,8 @@ export function playGame(spec: GameSpec): GameRecord {
     wallMs: Date.now() - t0,
     ...(ai.length && { ai }),
     ...(probe && { flow: probe.data }),
+    ...(system && { system: system.data }),
+    ...(ai.includes("armed") && { rules: { armedWardens: true } }),
+    ...(found && { found }),
   };
 }
