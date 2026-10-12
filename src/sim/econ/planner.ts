@@ -1,10 +1,20 @@
 import type { World } from "../world";
-import { BUILDINGS, buildingType, GOOD_INDEX, type BuildingDef } from "./defs";
+import { BUILDINGS, buildingType, GOOD_INDEX, goodsFor, type BuildingDef } from "./defs";
+import { aiOptions } from "../ai/options";
 import { Feature, Use } from "./landuse";
+
+/** With `widePlacement`: lit lanterns tried as centres after the first search finds nothing, and how far from the Hearthship the last try reaches. */
+const WIDE_CENTRES = 3;
+const WIDE_REACH = 16;
 
 /**
  * Simple site planner: finds a spot for a building near the keep and connects it with a road.
  * Used by the debug "starter chain" action and later by the AI builder.
+ *
+ * With `aiOptions.widePlacement`, when the ring round the centre (the keep unless `center` is given) holds no spot, the search
+ * goes on: first within the same reach of up to WIDE_CENTRES of the lit lanterns (a different few every quarter day), then
+ * anywhere in the player's own land out to WIDE_REACH steps from the keep, nearest first. The first search is unchanged, so a
+ * building that had room is placed exactly where it was.
  */
 export function placeConnected(
   w: World,
@@ -16,24 +26,41 @@ export function placeConnected(
   const player = opts.player ?? 0;
   const keep = eco.buildings[eco.keeps[player] ?? -1];
   if (!keep) return false;
-  const center = opts.center ?? keep.tile;
   const minDist = opts.minDist ?? 2;
-  const inner = new Set(land.ring(center, minDist - 1));
   const reach = (t: number) => {
     let n = 0;
     for (const x of land.ring(t, 6)) if (land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
     return n;
   };
-  const candidates = land.ring(center, opts.maxDist ?? 8).filter((t) => !inner.has(t) && (opts.near === undefined || !opts.need || reach(t) >= opts.need));
   const score = (t: number) => {
     if (opts.near === undefined) return 0;
     let n = 0;
     for (const x of land.ring(t, 4)) if (land.feature[x] === opts.near) n++;
     return -n;
   };
-  // Prefer good spots close to home: each ring step away costs about one tree's worth.
-  const ranked = candidates.map((t, i) => [Math.max(score(t), -6) + i / 6, t] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  return placeOn(w, type, ranked.map(([, t]) => t), player, opts.splitRoads ?? false) >= 0;
+  /** The tiles of a ring round `center`, best first: close to it, and (with `near`) with plenty of that feature about. */
+  const rank = (center: number, maxDist: number, ownOnly: boolean): number[] => {
+    const inner = new Set(land.ring(center, minDist - 1));
+    const candidates = land.ring(center, maxDist).filter((t) => !inner.has(t) && (!ownOnly || land.territory[t] === player + 1) && (opts.near === undefined || !opts.need || reach(t) >= opts.need));
+    // Prefer good spots close to home: each ring step away costs about one tree's worth.
+    return candidates
+      .map((t, i) => [Math.max(score(t), -6) + i / 6, t] as const)
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+      .map(([, t]) => t);
+  };
+  const splitRoads = opts.splitRoads ?? false;
+  const maxDist = opts.maxDist ?? 8;
+  if (placeOn(w, type, rank(opts.center ?? keep.tile, maxDist, false), player, splitRoads) >= 0) return true;
+  if (!aiOptions.widePlacement) return false;
+  const lanterns = eco.buildings
+    .filter((b) => b.alive && b.built && b.owner === player && b.lit && b.def.slots)
+    .map((b) => b.tile)
+    .sort((a, b) => a - b);
+  const first = Math.floor((w.tick / eco.dayTicks) * 4);
+  for (let i = 0; i < Math.min(WIDE_CENTRES, lanterns.length); i++) {
+    if (placeOn(w, type, rank(lanterns[(first + i) % lanterns.length] as number, maxDist, true), player, splitRoads) >= 0) return true;
+  }
+  return placeOn(w, type, rank(keep.tile, Math.max(maxDist, WIDE_REACH), true), player, splitRoads) >= 0;
 }
 
 /** The tiles joined to `start` by land and bridges. */
@@ -52,57 +79,176 @@ export function landmassOf(w: World, start: number): Set<number> {
   return seen;
 }
 
+/** Most partner buildings a side is scored against (the nearest ones). */
+const PARTNERS = 2;
+
+/** Does a producer's output feed a consumer's input key (a good id, or a group such as "food")? */
+function feeds(producer: BuildingDef, consumer: BuildingDef): boolean {
+  if (!producer.produces || !consumer.inputs || !GOOD_INDEX.has(producer.produces)) return false;
+  const good = GOOD_INDEX.get(producer.produces) as number;
+  return Object.keys(consumer.inputs).some((key) => goodsFor(key).includes(good));
+}
+
+/** Flag tiles of the player's buildings a building of `def` trades with: those that feed it or take what it makes, and the stores. */
+function partnerFlags(w: World, def: BuildingDef, player: number): number[] {
+  const out: number[] = [];
+  for (const b of w.economy.buildings) {
+    if (!b.alive || b.owner !== player) continue;
+    if (feeds(b.def, def) || feeds(def, b.def) || (b.def.storage && !!def.produces)) out.push((w.economy.flags[b.flag] as { tile: number }).tile);
+  }
+  return out;
+}
+
+/** Straight-line distance between two tiles in tile spacings (about the steps a settler walks). */
+function stepsBetween(w: World, a: number, b: number): number {
+  const grid = w.land.planet.grid;
+  const c = grid.center;
+  const d = (x: number, y: number) => {
+    const dx = (c[x * 3] as number) - (c[y * 3] as number);
+    const dy = (c[x * 3 + 1] as number) - (c[y * 3 + 1] as number);
+    const dz = (c[x * 3 + 2] as number) - (c[y * 3 + 2] as number);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  };
+  const unit = d(a, grid.neighborsOf(a)[0] as number) || 1;
+  return d(a, b) / unit;
+}
+
+/**
+ * The sides a building of `def` on tile `t` can have its flag on: the default one (`bestFlagTile`) first, then every other
+ * neighbour a flag can stand on (or a free flag of ours already there) from which the building can be built. The side
+ * changes what fits too: a large building needs its other neighbours clear, and its flag side is the one exception.
+ */
+export function flagSides(w: World, t: number, def: BuildingDef, player: number): number[] {
+  const land = w.land;
+  const first = land.bestFlagTile(t, player);
+  const out: number[] = [];
+  if (first >= 0 && land.canBuildDef(t, first, def, player)) out.push(first);
+  for (const n of land.planet.grid.neighborsOf(t)) {
+    if (n === first) continue;
+    if (land.use[n] === Use.Flag) {
+      if (land.territory[n] !== player + 1 || land.flagServes?.(n)) continue;
+    } else if (!land.canPlaceFlag(n, player)) continue;
+    if (land.canBuildDef(t, n, def, player)) out.push(n);
+  }
+  return out;
+}
+
+/** What it takes to put a building on tile `t` with its flag on `flagTile`: the road that joins it, and the score of that side (lower is better). */
+export interface SidePlan {
+  flagTile: number;
+  /** A flag already stands there; it may carry roads already. */
+  existing: ReturnType<World["economy"]["flagAt"]>;
+  /** The new road from the nearest flag that joins the network, or null. */
+  road: number[] | null;
+  cost: number;
+}
+
+/**
+ * Plan one side: join its flag to one of the nearest flags (by straight-line distance) that a road can reach, as `placeOn` has
+ * always done. The score is the new road's length (none when the flag already carries a road), plus, with `turnBuildings`,
+ *  times the distance to the nearest PARTNERS buildings it trades with, plus a hair for the height step.
+ */
+function planSide(w: World, def: BuildingDef, t: number, flagTile: number, player: number, home: () => Set<number>, partners: number[] | null): SidePlan | null {
+  const eco = w.economy;
+  const land = w.land;
+  const c = land.planet.grid.center;
+  const existing = eco.flagAt(flagTile);
+  if (existing && existing.building >= 0) return null;
+  // Only flags that join the Hearthship's network: a road to a cut-off island leaves the site unreachable.
+  const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
+  const mine = eco.flags.filter((f) => f.alive && f.owner === player && f.tile !== flagTile);
+  const joined = keepFlag < 0 ? mine : mine.filter((f) => eco.route(keepFlag, f.id).dist < Infinity || !home().has(f.tile));
+  const near = (joined.length ? joined : mine)
+    .map((f) => {
+      const dx = (c[f.tile * 3] as number) - (c[flagTile * 3] as number);
+      const dy = (c[f.tile * 3 + 1] as number) - (c[flagTile * 3 + 1] as number);
+      const dz = (c[f.tile * 3 + 2] as number) - (c[flagTile * 3 + 2] as number);
+      return [dx * dx + dy * dy + dz * dz, f.tile] as const;
+    })
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+    .slice(0, 6);
+  let road: number[] | null = null;
+  for (const [, ft] of near) {
+    const path = land.findPath(ft, flagTile, (x) => land.roadable(x, player) && x !== t, 1500);
+    if (!path || path.length < 3 || eco.checkRoad(path, player)) continue;
+    if (!road || path.length < road.length) road = path;
+  }
+  if (!road && !existing) return null;
+  let cost = 0;
+  if (partners) {
+    cost = existing && existing.roads.length > 0 ? 0 : road ? road.length - 1 : 30;
+    const steps = partners.map((pt) => stepsBetween(w, flagTile, pt)).sort((a, b) => a - b);
+    for (let i = 0; i < Math.min(PARTNERS, steps.length); i++) cost += (aiOptions.turnPartnerWeight * (steps[i] as number)) / Math.min(PARTNERS, steps.length);
+    cost += Math.abs((land.planet.terrain.elevation[flagTile] as number) - (land.planet.terrain.elevation[t] as number)) * 0.1;
+  }
+  return { flagTile, existing, road, cost };
+}
+
 /**
  * Try candidate tiles in order: build `type` on the first that fits and connect its flag to the
  * nearest reachable flag of the player. Returns the tile used, or -1.
+ *
+ * With `aiOptions.turnBuildings` the flag side is chosen too (a player turns it with the mouse wheel): every side the
+ * building can have is planned and the cheapest taken (see `planSide`), the default side winning ties. Without it the
+ * side is always `bestFlagTile`'s.
  */
 export function placeOn(w: World, type: string, tiles: readonly number[], player: number, splitRoads = false, maxTries = 60): number {
   const eco = w.economy;
   const land = w.land;
   const def = BUILDINGS[buildingType(type)] as BuildingDef;
-  const grid = land.planet.grid;
-  const c = grid.center;
+  const turn = aiOptions.turnBuildings;
   let tries = 0;
   // The land the Hearthship stands on (found when first needed): a flag there that no road joins to it is a dead end.
   let landmass: Set<number> | undefined;
   const home = () => (landmass ??= landmassOf(w, eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0));
+  const partners = turn ? partnerFlags(w, def, player) : null;
   for (const t of tiles) {
-    const flagTile = land.bestFlagTile(t, player);
-    if (flagTile < 0 || !land.canBuildDef(t, flagTile, def, player)) continue;
-    const existing = eco.flagAt(flagTile);
-    if (existing && existing.building >= 0) continue;
-    if (++tries > maxTries) break;
-    // Connect to one of the nearest flags (by straight-line distance) that a road can reach.
-    // Only flags that join the Hearthship's network: a road to a cut-off island leaves the site unreachable.
-    const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
-    const mine = eco.flags.filter((f) => f.alive && f.owner === player && f.tile !== flagTile);
-    const joined = keepFlag < 0 ? mine : mine.filter((f) => eco.route(keepFlag, f.id).dist < Infinity || !home().has(f.tile));
-    const near = (joined.length ? joined : mine)
-      .map((f) => {
-        const dx = (c[f.tile * 3] as number) - (c[flagTile * 3] as number);
-        const dy = (c[f.tile * 3 + 1] as number) - (c[flagTile * 3 + 1] as number);
-        const dz = (c[f.tile * 3 + 2] as number) - (c[flagTile * 3 + 2] as number);
-        return [dx * dx + dy * dy + dz * dz, f.tile] as const;
-      })
-      .sort((a, b) => a[0] - b[0] || a[1] - b[1])
-      .slice(0, 6);
-    let best: number[] | null = null;
-    for (const [, ft] of near) {
-      const path = land.findPath(ft, flagTile, (x) => land.roadable(x, player) && x !== t, 1500);
-      if (!path || path.length < 3 || eco.checkRoad(path, player)) continue;
-      if (!best || path.length < best.length) best = path;
+    let sides: number[];
+    if (turn) sides = flagSides(w, t, def, player);
+    else {
+      const flagTile = land.bestFlagTile(t, player);
+      sides = flagTile < 0 || !land.canBuildDef(t, flagTile, def, player) ? [] : [flagTile];
     }
-    if (!best && !existing) continue;
+    if (!sides.length) continue;
+    const first = eco.flagAt(sides[0] as number);
+    if (!turn && first && first.building >= 0) continue;
+    if (++tries > maxTries) break;
+    let best: SidePlan | null = null;
+    for (const side of sides) {
+      const plan = planSide(w, def, t, side, player, home, partners);
+      if (plan && (!best || plan.cost < best.cost)) best = plan;
+    }
+    if (!best) continue;
+    const { flagTile, existing, road } = best;
     if (!w.command({ t: "build", type, tile: t, flagTile, player }).ok) continue;
-    if (best && !(existing && existing.roads.length > 0)) {
-      if (w.command({ t: "road", tiles: best, player }).ok && splitRoads) {
+    if (road && !(existing && existing.roads.length > 0)) {
+      if (w.command({ t: "road", tiles: road, player }).ok && splitRoads) {
         // More flags on long roads mean more carriers and fewer queues.
-        if (best.length > 8) for (let i = 4; i < best.length - 3; i += 4) w.command({ t: "flag", tile: best[i] as number, player });
+        if (road.length > 8) for (let i = 4; i < road.length - 3; i += 4) w.command({ t: "flag", tile: road[i] as number, player });
       }
     }
     return t;
   }
   return -1;
+}
+
+/** The side `placeOn` would choose for `def` on tile `t` with `turnBuildings` on, with its score and the default side's (for tests and probes). */
+export function chooseSide(w: World, def: BuildingDef, t: number, player: number): { flagTile: number; cost: number; defaultSide: number; defaultCost: number } | null {
+  const eco = w.economy;
+  let landmass: Set<number> | undefined;
+  const home = () => (landmass ??= landmassOf(w, eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0));
+  const partners = partnerFlags(w, def, player);
+  const sides = flagSides(w, t, def, player);
+  let best: SidePlan | null = null;
+  let first: SidePlan | null = null;
+  sides.forEach((side, i) => {
+    const plan = planSide(w, def, t, side, player, home, partners);
+    if (i === 0) first = plan;
+    if (plan && (!best || plan.cost < best.cost)) best = plan;
+  });
+  const b = best as SidePlan | null;
+  const f = first as SidePlan | null;
+  return b ? { flagTile: b.flagTile, cost: b.cost, defaultSide: sides[0] as number, defaultCost: f ? f.cost : Infinity } : null;
 }
 
 /** Own tiles near the border ranked by how much unclaimed land a lantern there would light. */

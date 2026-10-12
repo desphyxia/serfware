@@ -1,6 +1,6 @@
-import { BUILDINGS, GOODS, TOOLS } from "../econ/defs";
+import { BUILDINGS, buildingType, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { clearForBorder, clearForest, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
+import { clearForBorder, clearForest, flagSides, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
 import { goodId, goodsFor } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
@@ -30,12 +30,35 @@ const SPARE_TOOLS = new Set(["hammer", "axe", "pick", "scythe", "rod"]);
  * house, tries with frontier tiles that placed nothing, woodcutters built to clear the way (`borderClear`).
  */
 export const aiStats: number[][] = [];
+/**
+ * A read-only record of the wants each thought listed, rested, failed and placed, kept only while `aiTrace.on` (a harness sets it;
+ * see soak/balance/stallwhy.ts). It changes no decision.
+ */
+export interface TraceRow {
+  pl: number;
+  tick: number;
+  stage: string;
+  listed: string;
+  rested: string;
+  failed: string;
+  placed: string;
+  tries: number;
+}
+export const aiTrace: TraceRow[] & { on?: boolean } = [];
 /** Per player, running: what stood in the way in a sample of the border tries that placed nothing (see `diagnoseBorder`). */
 export const aiWhy: Record<string, number>[] = [];
 const tally = (player: number, i: number): void => {
   const row = (aiStats[player] ??= Array.from({ length: 11 }, () => 0));
   row[i] = (row[i] as number) + 1;
 };
+/** With `woodByNeed`: planks (and logs) in the stores under which wood is short, finished buildings from which it is looked at, thoughts between two orders, and one woodcutter more for every this many finished buildings. */
+const WOOD_SHORT = 4;
+const WOOD_FROM = 12;
+const WOOD_GAP = 30;
+const WOOD_PER_BUILT = 12;
+/** With `borderCandidates`: frontier tiles looked at for a lantern, and the ones that fit that are tried. */
+const BORDER_SCAN = 400;
+const BORDER_TRY = 40;
 /** With `borderReach`: free tiles of the Hearthship's land a frontier tile must have within 5 steps. */
 const BORDER_FREE = 6;
 /** With `borderClear`: woodcutters built to clear the way for the border, and thoughts (about a day: 7500 ticks / 120) between two. */
@@ -103,6 +126,8 @@ export class AiBuilder implements Brain {
   /** Foresters taken down in a row without the way opening. */
   private cuts = 0;
   private thoughts = 0;
+  /** With `woodByNeed`: the thought a woodcutter or forester was last ordered for want of wood. */
+  private woodAt = -WOOD_GAP;
   /** Wishes that found no site lately, and the thought they may be tried again. */
   private readonly resting = new Map<string, number>();
   /** With `releaseStalled`: per unfinished site, the goods delivered and used so far and the tick that changed. */
@@ -351,6 +376,10 @@ export class AiBuilder implements Brain {
     const unfinished = aiOptions.releaseStalled ? mine.filter((b) => !b.built) : [];
     if (aiOptions.releaseStalled) this.watchSites(w, unfinished);
     if (sites >= Math.round(this.tuning.sites) || (sites >= 1 && plank < 2)) {
+      // Sites waiting for planks hold the builder here, and it is the wood that is short: the one order that may go past the cap.
+      const woodNow = this.woodOrder(w, mine, stock);
+      if (woodNow && woodNow()) return;
+      if (aiTrace.on) aiTrace.push({ pl, tick: w.tick, stage: sites >= Math.round(this.tuning.sites) ? "cap" : "noplank", listed: "", rested: "", failed: "", placed: "", tries: 0 });
       tally(pl, 1);
       if (aiOptions.releaseStalled) this.releaseStalled(w, unfinished);
       return;
@@ -368,10 +397,20 @@ export class AiBuilder implements Brain {
     const grow = () => ({ key: "expand", fn: () => this.expand(w, plank, stone) });
     // Try the wishes in order; one that finds no site steps aside for a while, so a cramped spot
     // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.
+    let stage = "wants";
     const attempt = (list: typeof wants, tries: number) => {
+      const rec: TraceRow | null = aiTrace.on ? { pl, tick: w.tick, stage, listed: list.map((x) => x.key).join(","), rested: "", failed: "", placed: "", tries } : null;
+      if (rec) aiTrace.push(rec);
       for (const x of list) {
-        if ((this.resting.get(x.key) ?? 0) > this.thoughts || (this.shun.get(x.key) ?? 0) > w.tick) continue;
-        if (x.fn()) return true;
+        if ((this.resting.get(x.key) ?? 0) > this.thoughts || (this.shun.get(x.key) ?? 0) > w.tick) {
+          if (rec) rec.rested += (rec.rested ? "," : "") + x.key;
+          continue;
+        }
+        if (x.fn()) {
+          if (rec) rec.placed = x.key;
+          return true;
+        }
+        if (rec) rec.failed += (rec.failed ? "," : "") + x.key;
         this.resting.set(x.key, this.thoughts + 6);
         if (--tries <= 0) return false;
       }
@@ -382,6 +421,7 @@ export class AiBuilder implements Brain {
     want(!housed && idle < 2 && plank >= 4 && count("house") < 2 + Math.floor(people / 6), near("house"));
     if (idle < 1) {
       tally(pl, 2);
+      stage = "noidle";
       attempt(wants, wants.length);
       return;
     }
@@ -398,6 +438,8 @@ export class AiBuilder implements Brain {
     want(count("quarry") < 1, near("quarry", Feature.Rock));
     want(count("sawmill") < 1, near("sawmill"));
     want(count("forester") < 1, near("forester", Feature.Tree));
+    const woodOrder = this.woodOrder(w, mine, stock);
+    if (woodOrder) wants.push({ key: "wood", fn: woodOrder });
     want(lanterns < 1 + Math.floor(mine.length / 5), grow());
     want(!housed && count("house") < Math.floor(people / 7) && plank >= 5, near("house"));
     // Beyond the shore: a boatyard to chart the sea, quays, and footholds on free land across the water.
@@ -455,6 +497,30 @@ export class AiBuilder implements Brain {
     }
   }
 
+  /**
+   * With `woodByNeed`: when planks and logs are both short, an order to place one more woodcutter (or a forester for every three),
+   * or null. One at a time (none while one stands unfinished), WOOD_GAP thoughts apart, up to a number that grows with the
+   * finished buildings, and only when the tool for it is in the stores.
+   */
+  private woodOrder(w: World, mine: readonly { built: boolean; def: { id: string } }[], stock: readonly number[]): (() => boolean) | null {
+    if (!aiOptions.woodByNeed) return null;
+    const finished = mine.filter((b) => b.built).length;
+    if (finished < WOOD_FROM || w.economy.population(this.player).idle < 1 || (stock[goodId("plank")] ?? 0) >= WOOD_SHORT || (stock[goodId("log")] ?? 0) >= WOOD_SHORT || this.thoughts - this.woodAt < WOOD_GAP) return null;
+    if (mine.some((b) => !b.built && (b.def.id === "woodcutter" || b.def.id === "forester"))) return null;
+    const cutters = mine.filter((b) => b.def.id === "woodcutter").length;
+    const planters = mine.filter((b) => b.def.id === "forester").length;
+    const cap = 2 + Math.floor(finished / WOOD_PER_BUILT);
+    const type = planters * 3 < cutters && planters < Math.ceil(cap / 3) ? "forester" : cutters < cap ? "woodcutter" : "";
+    const tool = type ? BUILDINGS[buildingType(type)]?.tool : undefined;
+    // The tool is in the stores, or a toolsmith stands to make it (the site then makes the toolsmith's priority follow).
+    if (!type || (tool && (stock[goodId(tool)] ?? 0) < 1 && !mine.some((b) => b.built && b.def.id === "toolsmith"))) return null;
+    return () => {
+      const ok = placeConnected(w, type, { minDist: 2, maxDist: 9, near: Feature.Tree, need: 3, player: this.player, center: this.center(w), splitRoads: true });
+      if (ok) this.woodAt = this.thoughts;
+      return ok;
+    };
+  }
+
   /** Diplomacy: offer what this temperament wants, and get its prisoners home. */
   private talk(w: World): void {
     const eco = w.economy;
@@ -503,11 +569,22 @@ export class AiBuilder implements Brain {
     if (this.rockLow(w) && this.expansions++ % 2 === 0) tiles = this.towardRock(w, tiles);
     tally(pl, 4);
     if (!tiles.length) tally(pl, 5);
-    let placed = placeOn(w, type, tiles.slice(0, 40), pl, true, 12) >= 0;
+    // With `borderCandidates`: the tiles a lantern fits on, from the first BORDER_SCAN of the list; the whole list still serves `borderClear` and the probe.
+    const frontier = tiles;
+    if (aiOptions.borderCandidates) {
+      const def = BUILDINGS[buildingType(type)];
+      const fit: number[] = [];
+      for (const t of frontier.slice(0, BORDER_SCAN)) {
+        if (def && flagSides(w, t, def, pl).length) fit.push(t);
+        if (fit.length >= BORDER_TRY) break;
+      }
+      tiles = fit;
+    }
+    let placed = placeOn(w, type, tiles.slice(0, BORDER_TRY), pl, true, 12) >= 0;
     if (placed) tally(pl, 6);
-    else if (tiles.length) {
+    else if (frontier.length) {
       tally(pl, 9);
-      if (aiOptions.borderClear && this.borderCuts < BORDER_CUTS && this.thoughts - this.cutAt >= BORDER_CUT_GAP && clearForBorder(w, pl, tiles)) {
+      if (aiOptions.borderClear && this.borderCuts < BORDER_CUTS && this.thoughts - this.cutAt >= BORDER_CUT_GAP && clearForBorder(w, pl, frontier)) {
         this.borderCuts++;
         this.cutAt = this.thoughts;
         tally(pl, 10);
@@ -517,7 +594,7 @@ export class AiBuilder implements Brain {
       if (this.failedTries++ % 8 === 0) {
         const sum = (aiWhy[pl] ??= {});
         sum["tries diagnosed"] = (sum["tries diagnosed"] ?? 0) + 1;
-        diagnoseBorder(w, pl, type, tiles.slice(0, 40), (reason) => (sum[reason] = (sum[reason] ?? 0) + 1));
+        diagnoseBorder(w, pl, type, frontier.slice(0, 40), (reason) => (sum[reason] = (sum[reason] ?? 0) + 1));
       }
     }
     if (type === "beacon") tally(pl, 7);
