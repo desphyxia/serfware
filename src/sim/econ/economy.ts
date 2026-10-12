@@ -41,6 +41,18 @@ import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE
  */
 
 export const FLAG_CAPACITY = 8;
+/**
+ * Transport rules the balance sweeps can try, off by default so every game and save plays as before (#149).
+ * `breakRings`: a carrier may put a good on a full flag when the full flags make a ring, each holding a good bound for the
+ * next, which nothing else can move (swaps only help two flags facing each other). The flag takes one good over its
+ * capacity for as long as the good that left behind it makes room again, so the ring turns one step at a time.
+ */
+export const transportOptions = { breakRings: false };
+/** A good must have waited this long on its flag (ticks, a fraction of a day) before the ring is looked for, and the ring is searched this often. */
+const RING_WAIT_DAY_PART = 8;
+const RING_EVERY = 16;
+/** Longest ring looked for, in flags. */
+const RING_DEPTH = 12;
 const TICKS_PER_TILE_ROAD = 11;
 const TICKS_PER_TILE_OFFROAD = 16;
 const BUILD_TICKS_PER_MATERIAL = 45;
@@ -3296,7 +3308,12 @@ export class Economy {
           const toFlag = fromFlag === road.a ? road.b : road.a;
           const into = this.nextHopFrom(g, toFlag) === -2 || (this.buildings[g.dest]?.flag ?? -1) === toFlag;
           const tf = this.flags[toFlag] as Flag;
-          if (!into && tf.goods.length + tf.reserved >= FLAG_CAPACITY) {
+          if (!into && tf.goods.length + tf.reserved >= FLAG_CAPACITY && this.ringGoods.has(good)) {
+            // A ring of full flags: this good goes on over the capacity, its place behind it is the one that lets the next move.
+            tf.reserved++;
+            s.target = toFlag;
+            this.ringBreaks++;
+          } else if (!into && tf.goods.length + tf.reserved >= FLAG_CAPACITY) {
             // A swap: promise the good that comes back, which frees the place this one takes.
             const back = this.returnGood(road, toFlag, -1);
             if (back >= 0) (this.goods[back] as Good).carrier = s.id;
@@ -3494,7 +3511,43 @@ export class Economy {
     return i >= 0 ? i : list.length + type;
   }
 
+  /** Goods `chooseTransfer` would move onto a full flag only because it is part of a ring of full flags (see `transportOptions`). */
+  private readonly ringGoods = new Set<number>();
+  /** Goods put on a full flag to turn a ring so far (zero unless `transportOptions.breakRings` is on). */
+  ringBreaks = 0;
+
+  /**
+   * Does the good `g`, waiting on the full flag `from` for the full flag `to`, belong to a ring: from `to` on, every flag is
+   * full and holds a good bound for the next, and the last one's good is bound for `from`? Searched only for a good that has
+   * waited a while, and only now and then, because a jam asks again every tick.
+   */
+  private inRing(g: Good, from: number, to: number): boolean {
+    if (this.tick - g.since < this.dayTicks / RING_WAIT_DAY_PART || (this.tick + from) % RING_EVERY !== 0) return false;
+    if ((this.flags[from] as Flag).goods.length < FLAG_CAPACITY) return false;
+    const seen = new Set<number>([from, to]);
+    const walk = (at: number, depth: number): boolean => {
+      const flag = this.flags[at] as Flag;
+      if (flag.goods.length + flag.reserved < FLAG_CAPACITY || depth > RING_DEPTH) return false;
+      const hops = new Set<number>();
+      for (const gid of flag.goods) {
+        const x = this.goods[gid] as Good;
+        if (x.carrier >= 0 || x.dest < 0) continue;
+        const h = this.nextHop(x);
+        if (h >= 0) hops.add(h);
+      }
+      if (hops.has(from)) return true;
+      for (const h of [...hops].sort((a, b) => a - b)) {
+        if (seen.has(h)) continue;
+        seen.add(h);
+        if (walk(h, depth + 1)) return true;
+      }
+      return false;
+    };
+    return walk(to, 1);
+  }
+
   private chooseTransfer(road: Road): [number, number] | null {
+    this.ringGoods.clear();
     const options: [number, number][] = [];
     // Transport priority, with waiting: each hour a good waits moves it RANK_PER_HOUR places up,
     // so goods low in the order still move when the roads are busy.
@@ -3519,7 +3572,11 @@ export class Economy {
         const intoBuilding = dest.flag === to;
         // A full flag can still take a good if one there goes back the other way: the carrier
         // swaps them (as in Serf City), so two full flags never block each other.
-        if (!intoBuilding && target.goods.length + target.reserved >= FLAG_CAPACITY && this.returnGood(road, to, -1) < 0) continue;
+        if (!intoBuilding && target.goods.length + target.reserved >= FLAG_CAPACITY && this.returnGood(road, to, -1) < 0) {
+          // One good over the capacity at most: a flag that already took its extra one (or has one promised) takes no more.
+          if (!transportOptions.breakRings || target.goods.length + target.reserved > FLAG_CAPACITY || !this.inRing(g, from, to)) continue;
+          this.ringGoods.add(gid);
+        }
         // At each end the good highest in the transport priority goes first (older on ties).
         const prev = options.findIndex((o) => o[0] === from);
         if (prev < 0) options.push([from, gid]);
