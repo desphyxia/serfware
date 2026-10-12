@@ -30,6 +30,8 @@ export interface MatchRules {
   stakes?: "wounded" | "mortal";
   /** How the game is won: by the last settlement standing, by holding the Star Wells, or either. */
   victory?: VictoryRule;
+  /** A warden needs a blade and a shield (taken from the stores) to light or garrison a lantern building. */
+  armedWardens?: boolean;
 }
 
 export interface WorldOptions {
@@ -79,6 +81,8 @@ export interface WorldOptions {
   brain?: BrainFactory;
   /** Victory rule (see MatchRules); peace and stakes have their own options above. */
   victory?: VictoryRule;
+  /** The armed-wardens rule (see MatchRules): off unless set. */
+  armedWardens?: boolean;
 }
 
 /**
@@ -164,6 +168,7 @@ export class World implements WorldHost {
     this.players = this.humans + this.rivals;
     if (opts.teams) for (let p = 0; p < this.players; p++) this.economy.teams[p] = opts.teams[p] ?? p + 100;
     this.economy.goal = opts.goal ?? "conquest";
+    this.economy.armedWardens = !!opts.armedWardens;
     const fair = (opts.fairStarts ?? true) && this.players > 1;
     if (!bare) for (let p = 0; p < this.players; p++) this.economy.setupStart(this.rng.fork(`start-${p}`), p, fair && p > 0 ? this.economy.startScores[0] : undefined);
     if (!bare && !opts.barren) this.economy.guaranteeOre();
@@ -203,7 +208,7 @@ export class World implements WorldHost {
     this.economy.onTerraform = (b) => b.def.terra && this.atmosphere.work(b.def.terra, b.tile);
     this.economy.stakes = opts.stakes ?? "wounded";
     this.economy.victory = opts.victory ?? "both";
-    this.rules = opts.stakes || opts.victory || opts.peaceDays !== undefined ? { ...(opts.peaceDays !== undefined && { peaceDays: opts.peaceDays }), ...(opts.stakes && { stakes: opts.stakes }), ...(opts.victory && { victory: opts.victory }) } : undefined;
+    this.rules = opts.stakes || opts.victory || opts.armedWardens || opts.peaceDays !== undefined ? { ...(opts.peaceDays !== undefined && { peaceDays: opts.peaceDays }), ...(opts.stakes && { stakes: opts.stakes }), ...(opts.victory && { victory: opts.victory }), ...(opts.armedWardens && { armedWardens: true }) } : undefined;
     this.economy.adversity.difficulty = opts.difficulty ?? "honest";
     this.economy.peaceUntil = this.tick + Math.round((opts.peaceDays ?? COMBAT.peaceDays) * ticksPerDay(this.planet.params.dayLengthHours));
     const def = opts.scenario ? scenarioById(opts.scenario) : undefined;
@@ -331,7 +336,7 @@ export class World implements WorldHost {
     const p = this.system.planets[planet];
     if (!p) throw new Error(`No planet ${planet}`);
     // Every seat has a place on a colony world, rivals included; an AI seat gets a brain of its own there.
-    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.players, startTick: this.tick, mods: this.mods, brain: this.brainFactory });
+    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.players, startTick: this.tick, mods: this.mods, brain: this.brainFactory, armedWardens: this.economy.armedWardens });
     this.colonies[planet] = w;
     w.economy.teams.push(...this.economy.teams);
     w.economy.names.push(...this.economy.names);

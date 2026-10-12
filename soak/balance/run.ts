@@ -68,7 +68,7 @@ export interface GameRecord {
 /** Play a game to its end or its day limit, sampling every rival seat once a day. */
 export function playGame(spec: GameSpec): GameRecord {
   const t0 = Date.now();
-  // Experimental AI behaviours (see aiOptions in builder.ts): BALANCE_AI="quarry" turns one on; a record says which.
+  // Experimental AI behaviours (see aiOptions in builder.ts): BALANCE_AI="quarry" turns one on; a record says which. "armed" plays the armed-wardens match rule.
   const ai = (process.env.BALANCE_AI ?? "").split(",").filter(Boolean);
   aiOptions.relocateQuarries = ai.includes("quarry");
   aiOptions.stoneFallback = ai.includes("stone");
@@ -94,6 +94,7 @@ export function playGame(spec: GameSpec): GameRecord {
     map: spec.map ?? (spec.orePreset && spec.orePreset !== "balanced" ? { ore: { ...ORE_PRESETS[spec.orePreset]!.mix } } : undefined),
     fairStarts: spec.fairStarts,
     teams: spec.teams,
+    armedWardens: ai.includes("armed"),
     brain: (seat) => new AiBuilder(seat.player, seat.rng, seat.personality, seat.level),
   });
   w.command({ t: "steward", of: 0, on: true });

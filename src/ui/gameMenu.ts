@@ -212,11 +212,13 @@ export class GameMenu extends Panel {
     const peace = h("select", { id: "mp-peace" }, ...[["", "Usual (1 day)"], ["0", "None"], ["2", "2 days"], ["5", "5 days"], ["10", "10 days"]].map(([v, l]) => h("option", { value: v }, l))) as HTMLSelectElement;
     const stakes = h("select", { id: "mp-stakes" }, h("option", { value: "" }, "Usual (wounded)"), h("option", { value: "wounded" }, "Wounded"), h("option", { value: "mortal" }, "Mortal")) as HTMLSelectElement;
     const victory = h("select", { id: "mp-victory" }, h("option", { value: "" }, "Conquest or Star Wells"), h("option", { value: "conquest" }, "Last settlement standing"), h("option", { value: "wells" }, "Hold the Star Wells"), h("option", { value: "prosperity" }, "Prosperity (a production target)"), h("option", { value: "influence" }, "Influence (win over the hamlets)"), h("option", { value: "all" }, "Any of them")) as HTMLSelectElement;
+    const armed = h("input", { type: "checkbox", id: "mp-armed" }) as HTMLInputElement;
     this.mpRules = () => {
       const r: MatchRules = {};
       if (peace.value !== "") r.peaceDays = Number(peace.value);
       if (stakes.value) r.stakes = stakes.value as "wounded" | "mortal";
       if (victory.value) r.victory = victory.value as VictoryRule;
+      if (armed.checked) r.armedWardens = true;
       return Object.keys(r).length ? r : undefined;
     };
     const opts = () => ({ name: name.value.trim(), server: server.value.trim(), room: room.value.trim(), spectate: watch.checked });
@@ -240,6 +242,7 @@ export class GameMenu extends Panel {
       h("div", { class: "row" }, h("label", { for: "mp-peace" }, "Peace"), peace, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-stakes" }, "Duels"), stakes, h("span")),
       h("div", { class: "row" }, h("label", { for: "mp-victory" }, "Victory"), victory, h("span")),
+      h("div", { class: "row" }, h("label", { for: "mp-armed" }, "Armed wardens"), armed, h("span", { class: "hint" }, "A warden needs a blade and a shield")),
       h("div", { class: "row" }, h("label", { for: "mp-watch" }, "Join to watch"), watch, h("span")),
       h("p", { class: "hint" }, "A player who drops out is kept by a steward (the AI) until they join again with the same name. Anyone joining a game in progress watches."),
       h(

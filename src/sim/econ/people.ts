@@ -43,6 +43,8 @@ export interface Person {
 export const ARM_BLADE = 1;
 export const ARM_BOW = 2;
 export const ARM_MOUNT = 4;
+/** A shield. With the armed-wardens rule a warden must carry a blade and a shield. */
+export const ARM_SHIELD = 8;
 
 const FIRST = [
   "Ada", "Arlo", "Bea", "Bram", "Cleo", "Dara", "Eben", "Edda", "Elin", "Fenn", "Gus", "Hana", "Ilse", "Ivo", "Jun", "Kai",

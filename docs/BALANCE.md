@@ -361,8 +361,8 @@ baselines they replace.
 
 The granite share is read from units made per building type (granite mine against quarry) in the flow records. Met so far:
 frozen seats (3% in pilot 12) and, in pilot 15, tools for farms (8%) and fishers (10%) but not woodcutters (26%). Growth is
-far from its target (pilot 15 grows about 8% from day 20 to day 60); hunger was not measured for pilots 9 to 15 and the
-granite share has not been computed.
+far from its target (pilot 15 grows about 8% from day 20 to day 60); hunger was not measured for pilots 9 to 15. The granite
+share is in the `granite` bullets above (pilot 17: 73.6 stone per seat from granite mines against 66.1 from quarries).
 
 ### Result: war baseline (2026-10-09)
 
@@ -503,6 +503,57 @@ of this file is the good-id constants in `need` and `upkeepGood` and a precomput
   `assignDestination`, the redirect and the spawn any building whose flag is the good's flag, `receive` it at once when
   `dropCarriedGoodAt` is about to put a good on its destination's flag, and let an idle carrier take a good whose next hop is -2
   into the building.
+
+### Result: the armed-wardens rule (`soak/balance/mix.ts`, issue #146)
+
+The rule is a match option, off by default and fixed at game start (`armedWardens`): a lantern building (lantern, lamphouse,
+beacon) is lit only by a warden who carries a blade and a shield. The weaponsmith makes shields as well as blades (1 iron and
+1 fuel each), whichever the stores hold fewer of, and stops at 6 pairs plus one per vacant lantern place; a seat starts with
+8 blades and 8 shields; Builder and Trader seats may build the weaponsmith.
+
+`mix.ts` prints, per seat at days 5, 10, 20, 40 and 60, the buildings per kind, wardens, lantern buildings lit and dark, land
+tiles held and the blades, shields and iron in the stores. `ARMED=1` plays the rule. Tiny and small maps, `bal-001` to
+`bal-006`, 3 rivals (builder, trader, warden), 60 days, `BALANCE_EXTRA=tools,ore,release,smith,forge,granite`: 12 games, 36 seats.
+Means per seat at day 60:
+
+| | Rule off | On, no cap on arms | On, with the cap |
+|---|---|---|---|
+| Buildings | 52.8 | 52.8 | 52.7 |
+| Land tiles held | 318 | 318 | 319 |
+| Wardens | 8.5 | 7.1 | 7.5 |
+| Lantern buildings dark | 0.0 | 0.4 | 0.4 |
+| Blades / shields in the stores | 6 / 0 | 23 / 23 | 5 / 6 |
+| Iron in the stores | 85 | 12 | 96 |
+
+- With the rule off, the game is the one on master (52.6 buildings per seat before this change).
+- Without a cap the weaponsmith spent the iron: seats with one held about 30 pairs for about 7 wardens, and iron fell from 85
+  to 12. With the cap, iron and buildings are as with the rule off. Land at day 5 is 312 against 317 tiles (0.6 lantern buildings
+  dark per seat at day 5, 0.8 at day 10), and equal from day 40.
+- Dark lantern buildings at day 60: 7 of 36 seats. Six have no iron supply (no smelter and no ore), so no new arms. The
+  seventh (small `bal-006`, seat 3) has arms in the stores and no free adult: 15 houses against 27 with the rule off, and 16
+  wardens in them. The details panel now says "Waiting for a free adult" in that case, and "Waiting for arms" in the other.
+- 26 of 36 seats built a weaponsmith with the rule on (the run without the cap; 9, 9 and 8 for the builder, trader and warden seats); 7 with the rule
+  off, all of them warden seats.
+- The games above have `peaceDays` 999, so they do not show war.
+
+War: `BALANCE_AI=quarry,stone,food,priority,armed node scripts/balance-sweep.mjs war --seeds 2 --workers 4 --out balance-war-armed`,
+12 games (3 levels × tiny and small × seeds `bal-001` and `bal-002`, three Wardens, 200 days, 83 minutes), against the same 12
+games in the `balance-war1` baseline (rule off, same switches except `armed`):
+
+| | Rule off (baseline) | Rule on |
+|---|---|---|
+| Games that end with a winner | 1 (day 14) | 0 |
+| Captures, all 12 games | 113 | 32 |
+| Rivals fallen, all 12 games | 19 | 12 |
+| Attacks on days 0-19 / 20-39 / 40-59 / 60-79 / 80-99 / 100+ | 153 / 4 / 3 / 5 / 2 / 2 | 44 / 5 / 0 / 0 / 2 / 0 |
+| First attack, median day (11 of 12 games have one with the rule on) | 5.4 | 5.7 |
+| Rule violations | 1 | 0 |
+
+- Fighting is early and then stops with the rule off, and the same with it on, only smaller: about a third of the early
+  attacks and captures. The war targets (winners decided by day 40 to 150; steady attacks to the end) are met by neither.
+- Not explained by this run: why there are fewer early attacks (an attack takes wardens that hold the lanterns; seats start
+  with 8 pairs). The wardens per seat and the lantern buildings left dark in these games were not read out. Two seeds per cell,
+  so the games are too few to call the 113 against 32 more than a large difference.
 
 ## Looking at the map
 

@@ -8,7 +8,9 @@ const SETTLERS = 12;
  * Goods a Hearthship takes besides its founders (mass 3 each): materials, the tools the first trades need (a colony
  * with no hammer builds nothing), and some bread. The stores must hold them first.
  */
-const CARGO = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
+const CARGO: Record<string, number> = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
+/** With the armed-wardens rule the colony's first lanterns need arms too (mass 4 more: the ship still fits). */
+const ARMED_CARGO: Record<string, number> = { ...CARGO, blade: 2, shield: 2 };
 
 /**
  * The scripted AI's voyages, for any seat (people's, a steward's, or an AI rival's): a launch
@@ -50,6 +52,7 @@ export class VoyagePlanner {
     const mine = eco.buildings.filter((b) => b.alive && b.owner === pl);
     const stock = eco.storageTotals(pl);
     const have = (id: string, n: number) => (stock[goodId(id)] ?? 0) >= n;
+    const cargo = eco.armedWardens ? ARMED_CARGO : CARGO;
 
     // The launch rail comes first.
     const rail = voyages.railOf(pl, home);
@@ -79,13 +82,13 @@ export class VoyagePlanner {
     // A colony, from a grown settlement with hands to spare, on the surveyed world nearest home's gravity.
     const pop = eco.population(pl);
     const people = pop.idle + pop.working;
-    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6) && Object.entries(CARGO).every(([g, n]) => have(g, n))) {
+    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6) && Object.entries(cargo).every(([g, n]) => have(g, n))) {
       const g = sys.planets[home]!.gravity;
       const target = sys.planets
         .filter((p) => p.surface && p.index !== home && voyages.isSurveyed(pl, p.index) && w.economyAt(p.index)?.keeps[pl] === undefined && !inFlight("hearthship", p.index))
         .sort((a, b) => Math.abs(a.gravity - g) - Math.abs(b.gravity - g) || a.index - b.index)[0];
       this.wait("hearthship", 40);
-      if (target && ctx.act({ t: "hearthship", from: home, to: target.index, settlers: Math.max(MIN_FOUNDERS, SETTLERS), cargo: CARGO }).ok) return true;
+      if (target && ctx.act({ t: "hearthship", from: home, to: target.index, settlers: Math.max(MIN_FOUNDERS, SETTLERS), cargo }).ok) return true;
     }
 
     // Skyships carry bread to a colony while home has some to spare; the route stops when home runs short.

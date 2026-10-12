@@ -490,6 +490,7 @@ export class ScenarioEditor extends Panel {
     difficulty.value = d.opts?.difficulty ?? "honest";
     const peace = h("input", { type: "number", min: 0, max: 99, value: d.opts?.peaceDays ?? 1, class: "num", "aria-label": "Peace days" }) as HTMLInputElement;
     const withMods = h("input", { type: "checkbox", checked: !!d.opts?.mods?.length }) as HTMLInputElement;
+    const armed = h("input", { type: "checkbox", checked: !!d.opts?.armedWardens }) as HTMLInputElement;
     const sequential = h("input", { type: "checkbox", checked: !!d.sequential }) as HTMLInputElement;
 
     const goals: { text: HTMLInputElement; cond: ReturnType<typeof condRow> }[] = [];
@@ -537,6 +538,8 @@ export class ScenarioEditor extends Panel {
       opts.rivals = Math.max(0, Math.min(7, Math.round(Number(rivals.value) || 0)));
       opts.difficulty = difficulty.value as never;
       opts.peaceDays = Math.max(0, Number(peace.value) || 0);
+      if (armed.checked) opts.armedWardens = true;
+      else delete opts.armedWardens;
       return {
         id: d.id,
         kind: "custom",
@@ -581,6 +584,7 @@ export class ScenarioEditor extends Panel {
         field("Peace days", peace),
         field("Difficulty", difficulty),
         h("label", { class: "inline" }, withMods, " include my turned-on mods"),
+        h("label", { class: "inline" }, armed, " armed wardens: a warden needs a blade and a shield"),
         h("h3", { class: "sub" }, "Story"),
         intro,
         outro,

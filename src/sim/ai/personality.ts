@@ -28,10 +28,11 @@ export const TEMPERS: Record<Personality, { commands: readonly string[]; buildin
   warden: { commands: ["probe", "hearthship", "land", "route", "unroute"], buildings: ["maypole", "fountain", "flowerbed", "bench", "statue", "launchrail"] },
 };
 
-/** Whether a temperament may give an order. */
-export function temperAllows(p: Personality, cmd: { t: string; type?: string }): boolean {
+/** Whether a temperament may give an order. With the armed-wardens rule every temperament may build the weaponsmith: without arms it could not expand. */
+export function temperAllows(p: Personality, cmd: { t: string; type?: string }, armedWardens = false): boolean {
   const limits = TEMPERS[p];
-  return !limits.commands.includes(cmd.t) && !(cmd.t === "build" && cmd.type !== undefined && limits.buildings.includes(cmd.type));
+  const barred = (type: string) => limits.buildings.includes(type) && !(armedWardens && type === "weaponsmith");
+  return !limits.commands.includes(cmd.t) && !(cmd.t === "build" && cmd.type !== undefined && barred(cmd.type));
 }
 
 export const AI_LEVELS: Record<AiLevel, { name: string; /** Thinks once per this many periods. */ every: number; sites: number; odds: number; wants: number }> = {

@@ -86,7 +86,7 @@ export function validateMod(data: unknown): string[] {
     if (!CATEGORIES.includes(b.category)) errors.push(`${where}: category must be one of ${CATEGORIES.join(", ")}.`);
     if (b.job && !JOBS.includes(b.job)) errors.push(`${where}: job must be one of ${JOBS.join(", ")}.`);
     if (b.job === "craft" && (!b.produces || !b.inputs)) errors.push(`${where}: a craft building needs produces and inputs.`);
-    if (b.produces && b.produces !== "tool" && !goods.has(b.produces)) errors.push(`${where}: unknown good ${b.produces}.`);
+    if (b.produces && b.produces !== "tool" && b.produces !== "arms" && !goods.has(b.produces)) errors.push(`${where}: unknown good ${b.produces}.`);
     if (b.tool && !goods.has(b.tool)) errors.push(`${where}: unknown tool ${b.tool}.`);
     if (b.looks && !BASE.buildingDefs.some((d) => d.id === b.looks)) errors.push(`${where}: looks must name a base building.`);
     if (b.terra || b.rail || b.storage) errors.push(`${where}: terraforming works, launch rails and stores can't be added by mods.`);

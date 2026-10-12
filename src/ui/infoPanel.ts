@@ -1,7 +1,7 @@
 import { GOODS, goodsFor } from "../sim/econ/defs";
 import { DEPOSIT_IDS } from "../sim/econ/landuse";
 import { CAMP_REACH, EXPLORE_REACH, PALISADE_GROUND, FLAG_CAPACITY, GOOD_AUTO, GOOD_COLLECT, GOOD_SEND, GOOD_STOP, STORE_IN, STORE_OUT, STORE_STOP, type Command, type Economy } from "../sim/econ/economy";
-import { ARM_BLADE, ARM_BOW, ARM_MOUNT, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
+import { ARM_BLADE, ARM_BOW, ARM_MOUNT, ARM_SHIELD, fullName, title as skillTitle, tradeName, type Person } from "../sim/econ/people";
 import { rankTitle } from "../sim/econ/combat";
 import { COMBAT } from "../sim/econ/defs";
 import { swatch } from "./swatch";
@@ -10,7 +10,7 @@ import { h, Panel } from "./dom";
 export type Selection = { kind: "building" | "flag" | "road" | "person"; id: number } | null;
 
 function armsText(arms: number): string {
-  const parts = [arms & ARM_BLADE ? "blade" : "", arms & ARM_BOW ? "bow" : "", arms & ARM_MOUNT ? "mount" : ""].filter(Boolean);
+  const parts = [arms & ARM_BLADE ? "blade" : "", arms & ARM_SHIELD ? "shield" : "", arms & ARM_BOW ? "bow" : "", arms & ARM_MOUNT ? "mount" : ""].filter(Boolean);
   return parts.length ? ` with ${parts.join(", ")}` : "";
 }
 
