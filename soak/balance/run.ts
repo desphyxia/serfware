@@ -1,6 +1,7 @@
 import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
 import type { AiLevel, Personality } from "../../src/sim/ai/personality";
 import { GOODS } from "../../src/sim/econ/defs";
+import { transportOptions } from "../../src/sim/econ/economy";
 import type { Difficulty } from "../../src/sim/econ/adversity";
 import { ORE_PRESETS, type MapOptions } from "../../src/sim/econ/landuse";
 import type { GridSize } from "../../src/sim/planet/grid";
@@ -95,6 +96,9 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.widePlacement = ai.includes("wide");
   aiOptions.borderCandidates = ai.includes("cand");
   aiOptions.woodByNeed = ai.includes("wood");
+  aiOptions.reserveRail = ai.includes("rail");
+  aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
+  transportOptions.breakRings = ai.includes("rings");
   if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);
   const foundEnv = (process.env.BALANCE_FOUND ?? "").split(",").map(Number);
   if (foundEnv.length === 2 && foundEnv.every(Number.isFinite)) VoyagePlanner.found = { population: foundEnv[0] as number, idle: foundEnv[1] as number };
