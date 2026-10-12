@@ -53,5 +53,10 @@
  * `woodByNeed`: while the stores hold under WOOD_SHORT planks and under WOOD_SHORT logs, the builder adds a woodcutter (a forester
  * for every three), one at a time, a pause of WOOD_GAP thoughts between orders, up to a number that grows with the finished
  * buildings; the woodcutters were otherwise added only when 6 adults stood idle, so wood grew with unemployment, not demand (#150).
+ * `reserveRail`: once a seat has 15 finished buildings and no launch rail, the voyage planner picks a site for it (the tile and the
+ * ring round it that a large building needs, within WIDE_REACH of the keep) and the AI's placements, flags and roads keep off those
+ * tiles until the rail is placed there; a wider search alone cannot help a seat whose land fills up first (#147).
+ * `turnBlockWeight` (needs `turnBuildings`): a flag side costs this much for each free tile beside its flag that it would take out
+ * of use (a flag allows no flag next to it), so a side on a flag that stands, which takes none, is preferred (#148).
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0 };

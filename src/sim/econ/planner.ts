@@ -79,6 +79,57 @@ export function landmassOf(w: World, start: number): Set<number> {
   return seen;
 }
 
+/** With `reserveRail`: the site kept free for a seat's launch rail, and the tiles a large building there needs. */
+const held = new WeakMap<World, Map<number, { tile: number; tiles: Set<number> }>>();
+/** Tiles tried when looking for a site to keep, and the finished buildings a seat needs before it keeps one. */
+const SITE_TRIES = 60;
+
+/** The tiles `placeOn` keeps off for `player` while a site is reserved (none when `reserveRail` is off). */
+function heldTiles(w: World, player: number): Set<number> | undefined {
+  return aiOptions.reserveRail ? held.get(w)?.get(player)?.tiles : undefined;
+}
+
+/** The tile reserved for `player`'s building, or -1. */
+export function reservedSite(w: World, player: number): number {
+  return held.get(w)?.get(player)?.tile ?? -1;
+}
+
+/** Let go of the reserved site (it is about to be built on, or no longer fits). */
+export function releaseSite(w: World, player: number): void {
+  held.get(w)?.delete(player);
+}
+
+/**
+ * Choose a site for a large building of `type` and keep the AI off it: the first tile, nearest the keep, out to WIDE_REACH
+ * steps inside the seat's own land where the building fits and a road can reach it. The tile and its ring are held (a large
+ * building needs its other neighbours clear), so `placeOn` skips them as building tiles, flag sides and road tiles. Returns the
+ * tile, or -1 when none fits. The hold is dropped by `releaseSite`, which `placeConnected` callers do before building there.
+ */
+export function reserveSite(w: World, type: string, player: number): number {
+  const eco = w.economy;
+  const land = w.land;
+  const keep = eco.buildings[eco.keeps[player] ?? -1];
+  if (!keep) return -1;
+  const def = BUILDINGS[buildingType(type)] as BuildingDef;
+  const inner = new Set(land.ring(keep.tile, 1));
+  let landmass: Set<number> | undefined;
+  const home = () => (landmass ??= landmassOf(w, keep.tile));
+  let tries = 0;
+  for (const t of land.ring(keep.tile, WIDE_REACH)) {
+    if (inner.has(t) || land.territory[t] !== player + 1) continue;
+    const sides = flagSides(w, t, def, player);
+    if (!sides.length) continue;
+    if (++tries > SITE_TRIES) break;
+    if (!sides.some((side) => planSide(w, def, t, side, player, home, null))) continue;
+    const tiles = new Set([t, ...land.planet.grid.neighborsOf(t)]);
+    let byPlayer = held.get(w);
+    if (!byPlayer) held.set(w, (byPlayer = new Map()));
+    byPlayer.set(player, { tile: t, tiles });
+    return t;
+  }
+  return -1;
+}
+
 /** Most partner buildings a side is scored against (the nearest ones). */
 const PARTNERS = 2;
 
@@ -154,6 +205,7 @@ function planSide(w: World, def: BuildingDef, t: number, flagTile: number, playe
   const c = land.planet.grid.center;
   const existing = eco.flagAt(flagTile);
   if (existing && existing.building >= 0) return null;
+  const hold = heldTiles(w, player);
   // Only flags that join the Hearthship's network: a road to a cut-off island leaves the site unreachable.
   const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
   const mine = eco.flags.filter((f) => f.alive && f.owner === player && f.tile !== flagTile);
@@ -169,7 +221,7 @@ function planSide(w: World, def: BuildingDef, t: number, flagTile: number, playe
     .slice(0, 6);
   let road: number[] | null = null;
   for (const [, ft] of near) {
-    const path = land.findPath(ft, flagTile, (x) => land.roadable(x, player) && x !== t, 1500);
+    const path = land.findPath(ft, flagTile, (x) => land.roadable(x, player) && x !== t && !hold?.has(x), 1500);
     if (!path || path.length < 3 || eco.checkRoad(path, player)) continue;
     if (!road || path.length < road.length) road = path;
   }
@@ -180,6 +232,12 @@ function planSide(w: World, def: BuildingDef, t: number, flagTile: number, playe
     const steps = partners.map((pt) => stepsBetween(w, flagTile, pt)).sort((a, b) => a - b);
     for (let i = 0; i < Math.min(PARTNERS, steps.length); i++) cost += (aiOptions.turnPartnerWeight * (steps[i] as number)) / Math.min(PARTNERS, steps.length);
     cost += Math.abs((land.planet.terrain.elevation[flagTile] as number) - (land.planet.terrain.elevation[t] as number)) * 0.1;
+    // A new flag takes the free tiles beside it out of use for flags and, with them, for buildings; one on a flag that stands takes none.
+    if (aiOptions.turnBlockWeight > 0 && !existing) {
+      let blocked = 0;
+      for (const n of land.planet.grid.neighborsOf(flagTile)) if (n !== t && land.roadable(n, player) && land.use[n] === Use.Free) blocked++;
+      cost += aiOptions.turnBlockWeight * blocked;
+    }
   }
   return { flagTile, existing, road, cost };
 }
@@ -202,13 +260,16 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
   let landmass: Set<number> | undefined;
   const home = () => (landmass ??= landmassOf(w, eco.buildings[eco.keeps[player] ?? -1]?.tile ?? 0));
   const partners = turn ? partnerFlags(w, def, player) : null;
+  const hold = heldTiles(w, player);
   for (const t of tiles) {
+    if (hold?.has(t)) continue;
     let sides: number[];
     if (turn) sides = flagSides(w, t, def, player);
     else {
       const flagTile = land.bestFlagTile(t, player);
       sides = flagTile < 0 || !land.canBuildDef(t, flagTile, def, player) ? [] : [flagTile];
     }
+    if (hold) sides = sides.filter((s) => !hold.has(s));
     if (!sides.length) continue;
     const first = eco.flagAt(sides[0] as number);
     if (!turn && first && first.building >= 0) continue;
