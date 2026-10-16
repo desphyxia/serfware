@@ -12,7 +12,7 @@ const PLANK = goodId("plank");
 const SIDES = 6;
 
 /** Private parts of the economy the test reaches into. */
-const inside = (eco: Economy) => eco as unknown as { spawnGood(type: number, flag: number): { dest: number } };
+const inside = (eco: Economy) => eco as unknown as { spawnGood(type: number, flag: number): { id: number; type: number; dest: number } };
 
 /** The 12 tiles two steps from `c`, in the order a road would walk them round it, or null if they do not make a ring. */
 function walkRound(w: World, c: number): number[] | null {
@@ -123,5 +123,43 @@ describe("a ring of full flags (#149)", () => {
     expect(goodsOn(turning!)).toBeLessThan(SIDES * FLAG_CAPACITY);
     // No flag ever holds more than one over its capacity.
     for (const id of turning!.flagIds) expect(turning!.w.economy.flags[id]!.goods.length).toBeLessThanOrEqual(FLAG_CAPACITY + 1);
+  }, 120000);
+});
+
+describe("a flag's last place (the old 9-good flags)", () => {
+  /** A carrier standing at one end of a road of the ring, carrying a good from the other end, with `held` goods on the flag it is at and `reserved` places promised there. */
+  function carrierAt(held: number, reserved: number) {
+    const r = ring(0);
+    expect(r).not.toBeNull();
+    const eco = r!.w.economy;
+    for (let i = 0; i < eco.dayTicks / 2; i++) r!.w.step();
+    const road = eco.roads.find((x) => x.alive && r!.flagIds.includes(x.a) && r!.flagIds.includes(x.b) && (eco.settlers[x.carrier]?.alive ?? false));
+    expect(road).toBeDefined();
+    const at = road!.a;
+    const away = road!.b;
+    const flag = eco.flags[at]!;
+    const own = eco.buildings.find((b) => b.alive && b.flag === at)!;
+    for (let k = 0; k < held; k++) inside(eco).spawnGood(PLANK, at).dest = own.id;
+    flag.reserved = reserved;
+    // The good the carrier brings: off its flag, bound for the building at the other end.
+    const carried = inside(eco).spawnGood(PLANK, away);
+    eco.flags[away]!.goods.pop();
+    carried.dest = own.id;
+    const s = eco.settlers[road!.carrier]!;
+    Object.assign(s, { carryGood: carried.id, carrying: carried.type, target: -1, back: -1, roadIdx: 0 });
+    const drop = () => (eco as unknown as { dropAt(s: unknown, road: unknown, at: number): boolean }).dropAt(s, road, at);
+    return { flag, drop };
+  }
+
+  it("a carrier with no place promised to it does not take the last one that is promised to another", () => {
+    const { flag, drop } = carrierAt(FLAG_CAPACITY - 1, 1);
+    expect(drop()).toBe(false);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY - 1);
+  }, 120000);
+
+  it("but puts its good down when a place is free", () => {
+    const { flag, drop } = carrierAt(FLAG_CAPACITY - 2, 1);
+    expect(drop()).toBe(true);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY - 1);
   }, 120000);
 });
