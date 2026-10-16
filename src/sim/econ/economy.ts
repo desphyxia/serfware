@@ -3424,7 +3424,7 @@ export class Economy {
       return into || s.back === back || bf.goods.length + bf.reserved < FLAG_CAPACITY;
     };
     let swap = -1;
-    if (s.target < 0 && flag.goods.length >= FLAG_CAPACITY) {
+    if (s.target < 0 && flag.goods.length + flag.reserved >= FLAG_CAPACITY) {
       swap = this.returnGood(road, at, s.id);
       if (swap < 0 || !fits(swap)) return false;
       flag.goods.splice(flag.goods.indexOf(swap), 1);

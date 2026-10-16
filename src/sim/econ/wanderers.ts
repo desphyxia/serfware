@@ -126,7 +126,8 @@ export class Wanderers {
       if (owner < 0 || eco.keeps[owner] === undefined || eco.defeated[owner]) continue;
       if ((eco.glow[owner] ?? 0) >= 50) {
         h.joined = owner;
-        land.use[h.tile] = Use.Free;
+        // The hut's tile is Blocked, which a flag may stand on beside a building: leave a flag or a road there alone.
+        if (land.use[h.tile] === Use.Blocked) land.use[h.tile] = Use.Free;
         eco.welcome(owner, h.people, `Came from the hamlet of ${h.name}, which joined the settlement.`);
         eco.notify(owner, `The hamlet of ${h.name} has joined you: ${h.people} people come to the Hearthship.`);
         this.version++;
