@@ -783,6 +783,71 @@ export class LandUse {
     return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(t) || (this.snowCover[t] as number) > 0.3);
   }
 
+  /**
+   * A* for a road the player lays: like `findPath`, but each bend costs extra, so a run keeps to one
+   * direction of the tile lattice and turns only when it must (long straight sides and 60° corners,
+   * as in Serf City) instead of zigzagging between two directions. Not used by the simulation.
+   */
+  findStraightPath(from: number, to: number, ok: (t: number) => boolean, maxNodes = 6000): number[] | null {
+    if (from === to) return [from];
+    const grid = this.planet.grid;
+    const c = grid.center;
+    const n = grid.count + 1;
+    const tx = c[to * 3] as number;
+    const ty = c[to * 3 + 1] as number;
+    const tz = c[to * 3 + 2] as number;
+    const h = (t: number) => (Math.sqrt(((c[t * 3] as number) - tx) ** 2 + ((c[t * 3 + 1] as number) - ty) ** 2 + ((c[t * 3 + 2] as number) - tz) ** 2) / this.spacing) * 0.7;
+    // A state is a tile and the tile we came from (grid.count = none), so a bend can be priced.
+    const g = new Map<number, number>([[from * n + grid.count, 0]]);
+    const came = new Map<number, number>();
+    const open = new MinHeap();
+    open.push(from * n + grid.count, h(from));
+    const closed = new Set<number>();
+    let expanded = 0;
+    let end = -1;
+    while (open.size > 0) {
+      const state = open.pop();
+      const cur = Math.floor(state / n);
+      const prev = state - cur * n;
+      if (cur === to) {
+        end = state;
+        break;
+      }
+      if (closed.has(state)) continue;
+      closed.add(state);
+      if (++expanded > maxNodes) return null;
+      const gc = g.get(state) as number;
+      const ring = grid.neighborsOf(cur);
+      const deg = ring.length;
+      const pi = prev === grid.count ? -1 : ring.indexOf(prev);
+      for (let k = 0; k < deg; k++) {
+        const nb = ring[k] as number;
+        if (nb === prev || (nb !== to && !ok(nb))) continue;
+        let bend = 0;
+        if (pi >= 0) {
+          const off = Math.abs(k - ((pi + (deg >> 1)) % deg));
+          const turn = Math.min(off, deg - off);
+          bend = turn === 0 ? 0 : turn === 1 ? 1 : 2;
+        }
+        const ng = gc + this.stepCost(cur, nb) + bend;
+        const ns = nb * n + cur;
+        const old = g.get(ns);
+        if (old === undefined || ng < old) {
+          g.set(ns, ng);
+          came.set(ns, state);
+          open.push(ns, ng + h(nb));
+        }
+      }
+    }
+    if (end < 0) return null;
+    const path: number[] = [];
+    for (let s = end; ; s = came.get(s) as number) {
+      path.push(Math.floor(s / n));
+      if (Math.floor(s / n) === from && !came.has(s)) break;
+    }
+    return path.reverse();
+  }
+
   /** A* over tiles. `ok` decides which tiles may be entered (the goal is always allowed). */
   findPath(from: number, to: number, ok: (t: number) => boolean, maxNodes = 6000): number[] | null {
     if (from === to) return [from];

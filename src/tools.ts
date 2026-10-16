@@ -211,7 +211,7 @@ export class Tools {
   private roadPath(from: number, to: number): number[] | null {
     const land = this.host.world().land;
     const pl = this.host.player();
-    return land.findPath(from, to, (x) => land.roadable(x, pl), 2500);
+    return land.findStraightPath(from, to, (x) => land.roadable(x, pl), 8000);
   }
 
   click(t: number, touch = false): void {
