@@ -48,6 +48,7 @@ import type { MapOptions } from "./sim/econ/landuse";
 import { creationText, download, library, PainterPanel, ScenarioEditor, type SavedWorld } from "./ui/creative";
 import { stroke, type WorldPaint } from "./sim/planet/paint";
 import type { GridSize } from "./sim/planet/grid";
+import { HexLattice } from "./sim/planet/lattice";
 import { scenarioById } from "./sim/scenario/campaign";
 import type { AiLevel } from "./sim/ai/personality";
 import type { Difficulty } from "./sim/econ/adversity";
@@ -167,6 +168,8 @@ export class Game {
   private fogOn = true;
   /** Debug: draw every tile's outline (the debug dialog toggles it; it follows the view across planets). */
   private tileEdges = false;
+  private lattice: HexLattice | null = null;
+  private latticeOn = false;
   /** Person the camera follows, or -1. */
   private following = -1;
   private readonly pointer = new THREE.Vector2(9, 9);
@@ -262,6 +265,7 @@ export class Game {
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
         "Tile edges": () => this.setTileEdges(!this.tileEdges),
+        "Lattice spike": () => this.latticeSpike(!this.latticeOn, this.world.economy.flags[0]?.tile ?? -1),
         "Weather here": () => this.summonWeather(),
         "Skip 6 days": () => this.skipDays(6),
         "Fog of war": () => {
@@ -2399,6 +2403,14 @@ export class Game {
     this.hud.setFps(this.settings.get().ui.showFps, this.fps);
     this.debug.update();
     if (this.view.overlays.tileEdgesOn !== this.tileEdges) this.view.overlays.setTileEdges(this.tileEdges);
+  }
+
+  /** Spike: show the tile-centre-and-corner road lattice around tile `near`, with a route and marked nodes; off hides it. */
+  latticeSpike(on: boolean, near = -1, route: readonly number[] = [], marks: readonly number[] = []): HexLattice {
+    this.lattice ??= new HexLattice(this.world.planet.grid);
+    this.latticeOn = on;
+    this.view.overlays.setLattice(on ? this.lattice : null, route, marks, near);
+    return this.lattice;
   }
 
   /** Debug: draw every tile's outline on the ground. */
