@@ -75,6 +75,12 @@ export class Tools {
     return false;
   }
 
+  /** What a click picks: whole tiles for buildings, tile corners for flags and roads (on the lattice). */
+  pickMode(): "tile" | "corner" | "node" {
+    if (this.tool === "select") return "node";
+    return this.tool === "flag" || this.tool === "road" ? "corner" : "tile";
+  }
+
   /** The tile the building ghost sits on: the one a touch tap chose, else the hovered one. */
   private at(): number {
     return this.pending >= 0 ? this.pending : this.hover;

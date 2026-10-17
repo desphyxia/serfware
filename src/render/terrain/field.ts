@@ -248,7 +248,7 @@ export class TerrainField {
       const k = key(a, b);
       if (nextKeys.has(k)) continue;
       nextKeys.add(k);
-      for (const t of [a, b]) {
+      for (const t of [...this.tilesOf(a), ...this.tilesOf(b)]) {
         let l = next.get(t);
         if (!l) next.set(t, (l = []));
         l.push([a, b]);
@@ -257,27 +257,41 @@ export class TerrainField {
     const oldKeys = new Set<string>();
     for (const l of this.roadEdges.values()) for (const [a, b] of l) oldKeys.add(key(a, b));
     const changed = new Set<number>();
-    for (const k of nextKeys) if (!oldKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
-    for (const k of oldKeys) if (!nextKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
+    for (const k of nextKeys) if (!oldKeys.has(k)) for (const n of k.split(":")) for (const t of this.tilesOf(Number(n))) changed.add(t);
+    for (const k of oldKeys) if (!nextKeys.has(k)) for (const n of k.split(":")) for (const t of this.tilesOf(Number(n))) changed.add(t);
     if (changed.size) this.roadEdges = next;
     return [...changed];
+  }
+
+  /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */
+  private tilesOf(n: number): readonly number[] {
+    const g = this.planet.grid;
+    if (n < g.count) return [n];
+    const o = (n - g.count) * 3;
+    return [g.cornerTiles[o] as number, g.cornerTiles[o + 1] as number, g.cornerTiles[o + 2] as number];
+  }
+
+  /** Unit-sphere position of a lattice node (tile centre or corner). */
+  private nodeXYZ(n: number): [number, number, number] {
+    const g = this.planet.grid;
+    const arr = n < g.count ? g.center : g.corners;
+    const o = (n < g.count ? n : n - g.count) * 3;
+    return [arr[o] as number, arr[o + 1] as number, arr[o + 2] as number];
   }
 
   /** Nearest road centreline to a point: distance (world units) and the closest centreline point. */
   roadAt(x: number, y: number, z: number, hint?: number): { d: number; cx: number; cy: number; cz: number } | null {
     if (this.roadEdges.size === 0) return null;
     const t = this.tileAt(x, y, z, hint);
-    const c = this.planet.grid.center;
     let best: { d: number; cx: number; cy: number; cz: number } | null = null;
     const test = (list: [number, number][] | undefined) => {
       if (!list) return;
       for (const [a, b] of list) {
-        const ax = c[a * 3] as number;
-        const ay = c[a * 3 + 1] as number;
-        const az = c[a * 3 + 2] as number;
-        const vx = (c[b * 3] as number) - ax;
-        const vy = (c[b * 3 + 1] as number) - ay;
-        const vz = (c[b * 3 + 2] as number) - az;
+        const [ax, ay, az] = this.nodeXYZ(a);
+        const [bx, by, bz] = this.nodeXYZ(b);
+        const vx = bx - ax;
+        const vy = by - ay;
+        const vz = bz - az;
         const len2 = vx * vx + vy * vy + vz * vz;
         const k = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / len2));
         const px = ax + vx * k;

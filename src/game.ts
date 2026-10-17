@@ -75,6 +75,15 @@ export function formatLatLon(p: THREE.Vector3): string {
 }
 
 /** Top-level runtime: owns the world, the view, the loop and the UI. */
+/** Experimental: `?lattice=1` builds solo worlds with Serf City style roads (flags on tile corners). Not saved. */
+function latticeOption(): { latticeRoads?: boolean } {
+  try {
+    return new URLSearchParams(location.search).get("lattice") === "1" ? { latticeRoads: true } : {};
+  } catch {
+    return {};
+  }
+}
+
 export class Game {
   world: World;
   view: WorldView;
@@ -206,7 +215,7 @@ export class Game {
     container.append(this.loading);
 
     library.register();
-    this.world = new World(seed, { rivals: this.rivals, mods: library.enabledMods() });
+    this.world = new World(seed, { rivals: this.rivals, mods: library.enabledMods(), ...latticeOption() });
     this.session = new SoloSession(this.world);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 9000);
     this.gfx = new GameRenderer(canvas, this.scene, this.camera, settings.get().graphics);
@@ -1415,7 +1424,7 @@ export class Game {
   playWorld(w: SavedWorld): void {
     this.endPainting();
     this.menu.hide();
-    this.useSession(new SoloSession(new World(w.seed, { size: w.size, paint: w.paint, rivals: this.rivals, stakes: this.stakes, difficulty: this.difficulty, aiLevel: this.aiLevel, mods: library.enabledMods() })));
+    this.useSession(new SoloSession(new World(w.seed, { size: w.size, paint: w.paint, rivals: this.rivals, stakes: this.stakes, difficulty: this.difficulty, aiLevel: this.aiLevel, mods: library.enabledMods(), ...latticeOption() })));
     this.toasts.show(`Playing "${w.name}".`, "good");
   }
 
@@ -1686,7 +1695,7 @@ export class Game {
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));
     const t0 = performance.now();
-    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel, mods: library.enabledMods(), ...(map && { map }) })));
+    this.useSession(new SoloSession(new World(seed, { rivals, stakes, difficulty, aiLevel, mods: library.enabledMods(), ...latticeOption(), ...(map && { map }) })));
     try {
       history.replaceState(null, "", `#${seed}`);
     } catch {
@@ -2086,7 +2095,7 @@ export class Game {
       else if (d.button === 2) this.tools.cancel();
     });
     canvas.addEventListener("dblclick", () => {
-      if (this.hoverTile >= 0) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(this.hoverTile)));
+      if (this.hoverTile >= 0) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(this.groundTile(this.hoverTile))));
     });
     window.addEventListener("resize", () => this.resize());
     window.addEventListener("keydown", (e) => {
@@ -2397,7 +2406,7 @@ export class Game {
     const day = this.world.localDay(this.focusLon());
     const where =
       this.hoverTile >= 0
-        ? `tile ${this.hoverTile} ${formatLatLon(new THREE.Vector3(...this.world.planet.grid.centerOf(this.hoverTile)))}`
+        ? `tile ${this.hoverTile} ${formatLatLon(new THREE.Vector3(...this.world.planet.grid.centerOf(this.groundTile(this.hoverTile))))}`
         : `view ${formatLatLon(this.cam.focus)}`;
     this.hud.setBugLine([`seed ${this.world.seed}`, `build ${BUILD.id}`, where, `${formatDay(day)} local (tick ${this.world.tick})`]);
     this.hud.setFps(this.settings.get().ui.showFps, this.fps);
@@ -2691,11 +2700,17 @@ export class Game {
     }
   }
 
+  /** The tile whose ground a hover node stands on (a corner uses its first tile). */
+  private groundTile(node: number): number {
+    const g = this.world.planet.grid;
+    return node >= g.count ? (g.cornerTiles[(node - g.count) * 3] as number) : node;
+  }
+
   private updateHover(): void {
     if (!this.pointerDirty) return;
     this.pointerDirty = false;
     if (Math.abs(this.pointer.x) > 1) return;
-    this.setHover(this.aimRay() ? this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? this.hoverTile : 0) : -1);
+    this.setHover(this.aimRay() ? this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? Math.min(this.hoverTile, this.world.planet.grid.count - 1) : 0, this.tools.pickMode()) : -1);
   }
 
   /** Aim the shared raycaster through the pointer; false when no sound ray exists. */
@@ -2705,10 +2720,13 @@ export class Game {
     return Number.isFinite(this.raycaster.ray.direction.x + this.raycaster.ray.direction.y + this.raycaster.ray.direction.z);
   }
 
-  private setHover(tile: number): void {
-    this.hoverTile = tile;
-    this.view.highlight.set(this.world.planet, tile);
-    if (tile < 0) {
+  private setHover(node: number): void {
+    this.hoverTile = node;
+    this.view.highlight.set(this.world.planet, node);
+    const grid0 = this.world.planet.grid;
+    // On the lattice the hover may be a tile corner: ground facts come from its first tile.
+    const tile = node >= grid0.count ? (grid0.cornerTiles[(node - grid0.count) * 3] as number) : node;
+    if (node < 0) {
       this.inspector.hidden = true;
       return;
     }
@@ -2723,7 +2741,7 @@ export class Game {
       ["Moisture", `${Math.round((terrain.moisture[tile] as number) * 100)} %`],
     ];
     const land = this.world.land;
-    this.tools.hoverTile(tile);
+    this.tools.hoverTile(node);
     const blocker = this.tools.hoverBlocker();
     if (blocker) rows.unshift(["Can't build here", blocker]);
     if (land.feature[tile] === Feature.Giant) rows.push(["Ancient tree", land.variety[tile] === 1 ? "marked for felling" : `${land.amount[tile]} logs · Demolish marks it`]);

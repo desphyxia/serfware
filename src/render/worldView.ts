@@ -387,7 +387,7 @@ export class WorldView {
     const pads: Pad[] = [];
     // Ground under a site is levelled once the builders have dug it flat.
     for (const b of eco.buildings) if (b.alive && b.dig <= 0) pads.push({ tile: b.tile, radius: b.def.large ? 0.55 : 0.42 });
-    for (const f of eco.flags) if (f.alive) pads.push({ tile: f.tile, radius: 0.2 });
+    for (const f of eco.flags) if (f.alive && f.tile < this.world.land.tileCount) pads.push({ tile: f.tile, radius: 0.2 });
     const edges: [number, number][] = [];
     for (const r of eco.roads) if (r.alive) for (let i = 0; i < r.tiles.length - 1; i++) edges.push([r.tiles[i] as number, r.tiles[i + 1] as number]);
     // Roads are part of the ground: a levelled bed, painted by the ground material.
@@ -405,20 +405,37 @@ export class WorldView {
   }
 
   /** Tile under a ray: intersect the sea-level sphere, then refine against tile heights. */
-  pick(ray: THREE.Ray, hint = 0): number {
+  pick(ray: THREE.Ray, hint = 0, nodes: "tile" | "corner" | "node" = "tile"): number {
     const planet = this.world.planet;
     let r = planet.params.radius;
     let tile = -1;
     const sphere = new THREE.Sphere(new THREE.Vector3(), r);
     const hit = new THREE.Vector3();
+    const d = new THREE.Vector3();
     for (let i = 0; i < 4; i++) {
       sphere.radius = r;
       if (!ray.intersectSphere(sphere, hit) || !Number.isFinite(hit.x + hit.y + hit.z)) return tile;
-      const d = hit.clone().normalize();
+      d.copy(hit).normalize();
       tile = planet.grid.nearestTile([d.x, d.y, d.z], tile >= 0 ? tile : hint);
       r = this.field.tileRadius(tile);
     }
-    return tile;
+    if (nodes === "tile" || tile < 0 || !this.world.land.lattice) return tile;
+    return this.nearestNode(tile, d, nodes === "node");
+  }
+
+  /** Lattice node nearest a ground direction among a tile's own corners (and its centre). */
+  private nearestNode(tile: number, d: THREE.Vector3, centre: boolean): number {
+    const grid = this.world.planet.grid;
+    let best = tile;
+    let bd = centre ? -(d.x * (grid.center[tile * 3] as number) + d.y * (grid.center[tile * 3 + 1] as number) + d.z * (grid.center[tile * 3 + 2] as number)) : Infinity;
+    for (const c of grid.cornersOf(tile)) {
+      const s = -(d.x * (grid.corners[c * 3] as number) + d.y * (grid.corners[c * 3 + 1] as number) + d.z * (grid.corners[c * 3 + 2] as number));
+      if (s < bd) {
+        bd = s;
+        best = grid.count + c;
+      }
+    }
+    return best;
   }
 
   dispose(): void {

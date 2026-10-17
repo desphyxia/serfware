@@ -1115,7 +1115,6 @@ export class Economy {
   /** Validate a road path (first tile must be a flag). Returns an error message or null. */
   checkRoad(tiles: readonly number[], p = 0): string | null {
     const land = this.land;
-    const grid = land.planet.grid;
     if (tiles.length < 3) return "Roads need at least one tile between flags.";
     if (tiles.length > MAX_ROAD_TILES) return "That road is too long. Add flags along the way.";
     const first = tiles[0] as number;
@@ -1127,7 +1126,7 @@ export class Economy {
       const t = tiles[i] as number;
       if (seen.has(t)) return "A road can't cross itself.";
       seen.add(t);
-      if (i > 0 && !grid.neighborsOf(tiles[i - 1] as number).includes(t)) return "Road tiles must be connected.";
+      if (i > 0 && !land.nbrs(tiles[i - 1] as number).includes(t)) return "Road tiles must be connected.";
       if (i > 0 && i < tiles.length - 1 && !land.roadable(t, p)) return "Something is in the way.";
     }
     if (last === first) return "A road needs two different flags.";
