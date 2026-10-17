@@ -75,6 +75,12 @@ export class Tools {
     return false;
   }
 
+  /** What a click picks: whole tiles for buildings, tile corners for flags and roads (on the lattice). */
+  pickMode(): "tile" | "corner" | "node" {
+    if (this.tool === "select") return "node";
+    return this.tool === "flag" || this.tool === "road" ? "corner" : "tile";
+  }
+
   /** The tile the building ghost sits on: the one a touch tap chose, else the hovered one. */
   private at(): number {
     return this.pending >= 0 ? this.pending : this.hover;
@@ -211,7 +217,7 @@ export class Tools {
   private roadPath(from: number, to: number): number[] | null {
     const land = this.host.world().land;
     const pl = this.host.player();
-    return land.findPath(from, to, (x) => land.roadable(x, pl), 2500);
+    return land.findStraightPath(from, to, (x) => land.roadable(x, pl), 8000);
   }
 
   click(t: number, touch = false): void {

@@ -9,6 +9,7 @@ import { computeHydrology, type Hydrology } from "../planet/hydrology";
 import { Region, REGIONS, regionFor, type RegionDef } from "../biomes/regions";
 import { TIDE_MEAN, TIDE_RANGE } from "../biomes/tides";
 import { sunHeight } from "../biomes/sun";
+import type { HexLattice } from "../planet/lattice";
 
 /** What stands on a tile. */
 export enum Use {
@@ -222,10 +223,26 @@ export class LandUse {
   /** Walking effort from gravity: under 1 on a light world (faster), over 1 on a heavy one (slower). */
   readonly lightness: number;
 
-  constructor(readonly planet: Planet) {
+  /** Tiles on the planet; ids from here up are lattice corners (lattice mode only). */
+  readonly tileCount: number;
+  /** Flags, roads and walkers live on this many nodes: the tiles, or in lattice mode the tiles and their corners. */
+  readonly nodes: number;
+
+  /**
+   * In lattice mode (see HexLattice) flags stand on tile corners and roads run along the lattice's
+   * borders and spokes, so flag, road and walker positions are lattice nodes: a tile centre is its
+   * own tile id, a corner is `tileCount + corner`. Ground data (terrain, weather, features,
+   * territory) stays per tile and is read through `pt` and `ownerOf`.
+   */
+  constructor(
+    readonly planet: Planet,
+    readonly lattice: HexLattice | null = null,
+  ) {
     const n = planet.grid.count;
-    this.use = new Uint8Array(n);
-    this.ref = new Int32Array(n).fill(-1);
+    this.tileCount = n;
+    this.nodes = lattice ? lattice.count : n;
+    this.use = new Uint8Array(this.nodes);
+    this.ref = new Int32Array(this.nodes).fill(-1);
     this.feature = new Uint8Array(n);
     this.amount = new Uint8Array(n);
     this.nextGrowth = new Int32Array(n);
@@ -278,6 +295,45 @@ export class LandUse {
     }
     this.soil = new Float32Array(n);
     for (let t = 0; t < n; t++) this.soil[t] = Math.min(1, 0.35 + 0.5 * (planet.terrain.moisture[t] as number) + (this.isRiver(t) ? 0.15 : 0));
+  }
+
+  /** The tile whose ground data stands for node `n` (itself for a tile; a corner's first tile). */
+  pt(n: number): number {
+    return n < this.tileCount ? n : (this.lattice as HexLattice).tileOf(n);
+  }
+
+  /** The nodes next to `n` on the graph flags, roads and walkers use. */
+  nbrs(n: number): Int32Array {
+    return this.lattice ? this.lattice.neighborsOf(n) : this.planet.grid.neighborsOf(n);
+  }
+
+  /** Unit-sphere position of a node. */
+  nodePos(n: number): [number, number, number] {
+    const p = this.lattice ? this.lattice.pos : this.planet.grid.center;
+    return [p[n * 3] as number, p[n * 3 + 1] as number, p[n * 3 + 2] as number];
+  }
+
+  /** The tiles around a corner node (three). */
+  private cornerTilesOf(n: number): [number, number, number] {
+    const c = n - this.tileCount;
+    const ct = this.planet.grid.cornerTiles;
+    return [ct[c * 3] as number, ct[c * 3 + 1] as number, ct[c * 3 + 2] as number];
+  }
+
+  /** Ground height at a node: a tile's own, or the mean of the three tiles at a corner. */
+  nodeElevation(n: number): number {
+    const e = this.planet.terrain.elevation;
+    if (n < this.tileCount) return e[n] as number;
+    const [a, b, c] = this.cornerTilesOf(n);
+    return ((e[a] as number) + (e[b] as number) + (e[c] as number)) / 3;
+  }
+
+  /** Who owns the land under a node: a tile's owner; a corner's when its three tiles agree, else nobody. */
+  ownerOf(n: number): number {
+    if (n < this.tileCount) return this.territory[n] as number;
+    const [a, b, c] = this.cornerTilesOf(n);
+    const o = this.territory[a] as number;
+    return o === this.territory[b] && o === this.territory[c] ? o : 0;
   }
 
   /** The region (game biome) a tile belongs to. */
@@ -476,12 +532,20 @@ export class LandUse {
   }
 
   isLand(t: number): boolean {
+    if (t >= this.tileCount) return this.cornerTilesOf(t).every((n) => this.isLand(n));
     return (this.planet.terrain.elevation[t] as number) > 0.05 && this.hydro?.lake[t] !== 1;
   }
 
   /** Height difference to the steepest neighbour, in world units. */
   slope(t: number): number {
     const e = this.planet.terrain.elevation;
+    if (t >= this.tileCount) {
+      const [a, b, c] = this.cornerTilesOf(t);
+      const ha = e[a] as number;
+      const hb = e[b] as number;
+      const hc = e[c] as number;
+      return Math.max(Math.abs(ha - hb), Math.abs(hb - hc), Math.abs(ha - hc));
+    }
     const h = e[t] as number;
     let m = 0;
     for (const n of this.planet.grid.neighborsOf(t)) m = Math.max(m, Math.abs((e[n] as number) - h));
@@ -490,6 +554,10 @@ export class LandUse {
 
   /** Settlers can walk here (land or lake ice, not a building, no rock, not too steep). */
   walkable(t: number): boolean {
+    if (t >= this.tileCount) {
+      // A corner is open ground when all three of its tiles are land; what grows on them lies beside it.
+      return this.isLand(t) && this.use[t] !== Use.Building && this.cornerTilesOf(t).every((n) => !this.flooded[n] || !!this.causeway[n]);
+    }
     if (this.flooded[t] && !this.causeway[t]) return false;
     const f = this.feature[t];
     return (this.isLand(t) || this.isIce(t) || this.bridge[t] === 1) && this.use[t] !== Use.Building && f !== Feature.Rock && f !== Feature.Giant && f !== Feature.Vent && f !== Feature.Spire && f !== Feature.Ruin;
@@ -511,6 +579,7 @@ export class LandUse {
 
   /** A flag or road of `owner` may go here. */
   roadable(t: number, owner = 0, foothold = false): boolean {
+    if (t >= this.tileCount) return this.isLand(t) && this.mayRoad(t, owner, foothold) && (this.use[t] === Use.Free || this.use[t] === Use.Blocked) && this.slope(t) < 2.2;
     // Ice roads: frozen lakes can be crossed (until they thaw).
     if (this.isIce(t) || this.bridge[t] === 1) return this.mayRoad(t, owner, foothold) && this.use[t] === Use.Free;
     return (
@@ -531,19 +600,20 @@ export class LandUse {
 
   /** Own land, or a partner's under a shared-roads treaty. */
   mayRoad(t: number, owner: number, foothold = false): boolean {
-    const o = this.territory[t] as number;
+    const o = this.ownerOf(t);
     return o === owner + 1 || (foothold && o === 0) || (o > 0 && ((this.roadShare[owner] ?? 0) & (1 << (o - 1))) !== 0);
   }
 
   canPlaceFlag(t: number, owner = 0, foothold = false): boolean {
+    // On the lattice flags stand on tile corners: a tile centre is for a building.
+    if (this.lattice && t < this.tileCount) return false;
     if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
     // Tiles reserved around the Hearthship are Blocked for buildings but may carry a flag; a lone
     // Blocked tile (a hamlet) may not.
-    const grid = this.planet.grid;
-    if (this.use[t] === Use.Blocked && !grid.neighborsOf(t).some((n) => this.use[n] === Use.Building)) return false;
+    if (this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return false;
     // Flags need breathing room: no neighbouring flag.
-    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return false;
-    return this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0);
+    for (const n of this.nbrs(t)) if (this.use[n] === Use.Flag) return false;
+    return this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0);
   }
 
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
@@ -554,8 +624,8 @@ export class LandUse {
     if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap || f === Feature.Ruin))) return false;
     if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
-    if (!grid.neighborsOf(t).includes(flagTile)) return false;
-    if (!(this.use[flagTile] === Use.Flag ? this.territory[flagTile] === owner + 1 || (foothold && this.territory[flagTile] === 0) : this.canPlaceFlag(flagTile, owner, foothold))) return false;
+    if (!this.nbrs(t).includes(flagTile)) return false;
+    if (!(this.use[flagTile] === Use.Flag ? this.ownerOf(flagTile) === owner + 1 || (foothold && this.ownerOf(flagTile) === 0) : this.canPlaceFlag(flagTile, owner, foothold))) return false;
     for (const n of grid.neighborsOf(t)) {
       // Small buildings may stand shoulder to shoulder (as in Serf City); a large one needs room
       // around it, and so does anything next to a large one.
@@ -579,17 +649,16 @@ export class LandUse {
   footholdAt: ((flagTile: number, owner: number) => boolean) | null = null;
 
   bestFlagTile(t: number, owner = 0, foothold = false): number {
-    const grid = this.planet.grid;
     let best = -1;
     let bestScore = Infinity;
     // A free flag of ours next to the spot serves the new building; a flag that already serves
     // another building is passed over for a fresh flag on another side, if there is room.
-    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Flag && (this.territory[n] === owner + 1 || (foothold && this.territory[n] === 0)) && !this.flagServes?.(n)) return n;
-    for (const n of grid.neighborsOf(t)) {
+    for (const n of this.nbrs(t)) if (this.use[n] === Use.Flag && (this.ownerOf(n) === owner + 1 || (foothold && this.ownerOf(n) === 0)) && !this.flagServes?.(n)) return n;
+    for (const n of this.nbrs(t)) {
       if (this.use[n] === Use.Flag) continue;
       if (!this.canPlaceFlag(n, owner, foothold)) continue;
       // The ring around the Hearthship is a last resort: automatic flags keep clear of it.
-      const s = Math.abs((this.planet.terrain.elevation[n] as number) - (this.planet.terrain.elevation[t] as number)) * 10 + (this.use[n] === Use.Blocked ? 1e6 : 0) + n * 1e-9;
+      const s = Math.abs(this.nodeElevation(n) - this.nodeElevation(t)) * 10 + (this.use[n] === Use.Blocked ? 1e6 : 0) + n * 1e-9;
       if (s < bestScore) {
         bestScore = s;
         best = n;
@@ -603,8 +672,7 @@ export class LandUse {
    * north). Used to let the player pick which side a building's flag goes on.
    */
   neighborInDirection(t: number, dir: number): number {
-    const grid = this.planet.grid;
-    const [cx, cy, cz] = grid.centerOf(t);
+    const [cx, cy, cz] = this.nodePos(t);
     // North = world +y projected onto the tangent plane (x axis near the poles); east = up × north.
     let nx = -cx * cy;
     let ny = 1 - cy * cy;
@@ -625,8 +693,8 @@ export class LandUse {
     // Sides sorted by bearing; sector 0 is the one nearest north and each step turns to the next
     // side round, so the six sectors reach six different sides even where the grid is uneven.
     const sides: { n: number; a: number }[] = [];
-    for (const n of grid.neighborsOf(t)) {
-      const [px, py, pz] = grid.centerOf(n);
+    for (const n of this.nbrs(t)) {
+      const [px, py, pz] = this.nodePos(n);
       const vx = px - cx;
       const vy = py - cy;
       const vz = pz - cz;
@@ -642,14 +710,14 @@ export class LandUse {
   flagBlocker(t: number, owner = 0, foothold = false): string | null {
     if (this.use[t] === Use.Flag) return null;
     if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) return "water";
-    if (!(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return "outside your border";
+    if (!(this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0))) return "outside your border";
     if (this.use[t] === Use.Building) return "a building";
-    const f = this.feature[t];
+    const f = t < this.tileCount ? this.feature[t] : Feature.None;
     if (f === Feature.Tree) return "a tree";
     if (f === Feature.Rock) return "a rock";
     if (f !== Feature.None && f !== Feature.Shrub) return "something growing or standing there";
     if (this.slope(t) >= 2.2) return "too steep";
-    for (const n of this.planet.grid.neighborsOf(t)) if (this.use[n] === Use.Flag) return "another flag next to it";
+    for (const n of this.nbrs(t)) if (this.use[n] === Use.Flag) return "another flag next to it";
     return this.canPlaceFlag(t, owner, foothold) ? null : "in the way";
   }
 
@@ -679,7 +747,7 @@ export class LandUse {
     }
     if (flagTile < 0) {
       const why = new Map<string, number>();
-      for (const n of grid.neighborsOf(t)) {
+      for (const n of this.nbrs(t)) {
         const r = this.flagBlocker(n, owner, foothold);
         if (r) why.set(r, (why.get(r) ?? 0) + 1);
       }
@@ -700,6 +768,7 @@ export class LandUse {
 
   /** Claim unowned tiles within `radius` steps of `center` for `owner`. */
   claim(center: number, radius: number, owner = 0): void {
+    if (center >= this.tileCount) center = this.pt(center);
     const grid = this.planet.grid;
     const dist = new Map<number, number>([[center, 0]]);
     const queue = [center];
@@ -720,6 +789,7 @@ export class LandUse {
 
   /** Tiles within `radius` steps of `center`, nearest first (ties by tile index). */
   ring(center: number, radius: number): readonly number[] {
+    if (center >= this.tileCount) center = this.pt(center);
     // The grid never changes, so a small ring is worked out once per (tile, radius) and shared: callers must not change it.
     const key = center * 16 + radius;
     const cached = radius < 16 ? this.rings.get(key) : undefined;
@@ -754,40 +824,109 @@ export class LandUse {
 
   /** Cost of stepping from a to b: longer uphill, cheaper on roads. */
   stepCost(a: number, b: number): number {
+    // On the lattice a step is shorter than a tile's width, and ground data is read per tile.
+    const len = this.lattice ? this.lattice.dist(a, b) / this.spacing : 1;
+    const pb = this.pt(b);
     // Boats cross at a steady pace.
-    if (this.ferry[b]) return 0.9;
+    if (this.ferry[pb]) return 0.9 * len;
     const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
     // Lake ice is flat: sledges fly over it on a road, feet slip and slide off one.
-    if (this.isIce(b)) return road ? 0.5 : 1.15;
-    const e = this.planet.terrain.elevation;
-    const dh = (e[b] as number) - (e[a] as number);
-    const snow = this.snowCover[b] as number;
+    if (this.isIce(pb)) return (road ? 0.5 : 1.15) * len;
+    const dh = this.nodeElevation(b) - this.nodeElevation(a);
+    const snow = this.snowCover[pb] as number;
     let base: number;
     if (road) {
       // Roads are packed and swept: on snow the carriers take to sledges and go faster.
-      base = (snow > 0.3 ? 0.55 : 0.7) * (1 + 0.5 * (this.mud[b] as number)) * (1 + 1.5 * (this.sand[b] as number));
+      base = (snow > 0.3 ? 0.55 : 0.7) * (1 + 0.5 * (this.mud[pb] as number)) * (1 + 1.5 * (this.sand[pb] as number));
     } else {
       // Fording a river is slow; mud slows everyone; snow is deeper in the Rimefall drifts.
-      const drift = this.region[b] === Region.RimefallTundra ? 0.9 : 0.4;
-      base = (this.isRiver(b) ? 1.4 : 1) * (1 + 0.5 * (this.mud[b] as number) + drift * snow);
+      const drift = this.region[pb] === Region.RimefallTundra ? 0.9 : 0.4;
+      base = (this.isRiver(pb) ? 1.4 : 1) * (1 + 0.5 * (this.mud[pb] as number) + drift * snow);
       // Bitter cold saps walkers far from any hearth.
-      if (this.chill[b] && !this.warm[b]) base *= 1.35;
+      if (this.chill[pb] && !this.warm[pb]) base *= 1.35;
     }
     // Lumen Mire nights are dark: slow going where nothing glows.
-    if (this.dim[b]) base *= 1.3;
-    return base * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15) * this.lightness;
+    if (this.dim[pb]) base *= 1.3;
+    return base * len * (1 + Math.max(0, dh) * 0.6 + Math.max(0, -dh) * 0.15) * this.lightness;
   }
 
   /** Carriers here ride a sledge (a road over snow or ice); for visuals. */
   sledging(t: number): boolean {
-    return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(t) || (this.snowCover[t] as number) > 0.3);
+    const p = this.pt(t);
+    return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(p) || (this.snowCover[p] as number) > 0.3);
+  }
+
+  /**
+   * A* for a road the player lays: like `findPath`, but each bend costs extra, so a run keeps to one
+   * direction of the tile lattice and turns only when it must (long straight sides and 60° corners,
+   * as in Serf City) instead of zigzagging between two directions. Not used by the simulation.
+   */
+  findStraightPath(from: number, to: number, ok: (t: number) => boolean, maxNodes = 6000): number[] | null {
+    if (from === to) return [from];
+    // The lattice has its own bend-aware search (its rings are not in angular order).
+    if (this.lattice) return this.lattice.findPath(from, to, ok, maxNodes);
+    const grid = this.planet.grid;
+    const c = grid.center;
+    const n = grid.count + 1;
+    const tx = c[to * 3] as number;
+    const ty = c[to * 3 + 1] as number;
+    const tz = c[to * 3 + 2] as number;
+    const h = (t: number) => (Math.sqrt(((c[t * 3] as number) - tx) ** 2 + ((c[t * 3 + 1] as number) - ty) ** 2 + ((c[t * 3 + 2] as number) - tz) ** 2) / this.spacing) * 0.7;
+    // A state is a tile and the tile we came from (grid.count = none), so a bend can be priced.
+    const g = new Map<number, number>([[from * n + grid.count, 0]]);
+    const came = new Map<number, number>();
+    const open = new MinHeap();
+    open.push(from * n + grid.count, h(from));
+    const closed = new Set<number>();
+    let expanded = 0;
+    let end = -1;
+    while (open.size > 0) {
+      const state = open.pop();
+      const cur = Math.floor(state / n);
+      const prev = state - cur * n;
+      if (cur === to) {
+        end = state;
+        break;
+      }
+      if (closed.has(state)) continue;
+      closed.add(state);
+      if (++expanded > maxNodes) return null;
+      const gc = g.get(state) as number;
+      const ring = grid.neighborsOf(cur);
+      const deg = ring.length;
+      const pi = prev === grid.count ? -1 : ring.indexOf(prev);
+      for (let k = 0; k < deg; k++) {
+        const nb = ring[k] as number;
+        if (nb === prev || (nb !== to && !ok(nb))) continue;
+        let bend = 0;
+        if (pi >= 0) {
+          const off = Math.abs(k - ((pi + (deg >> 1)) % deg));
+          const turn = Math.min(off, deg - off);
+          bend = turn === 0 ? 0 : turn === 1 ? 1 : 2;
+        }
+        const ng = gc + this.stepCost(cur, nb) + bend;
+        const ns = nb * n + cur;
+        const old = g.get(ns);
+        if (old === undefined || ng < old) {
+          g.set(ns, ng);
+          came.set(ns, state);
+          open.push(ns, ng + h(nb));
+        }
+      }
+    }
+    if (end < 0) return null;
+    const path: number[] = [];
+    for (let s = end; ; s = came.get(s) as number) {
+      path.push(Math.floor(s / n));
+      if (Math.floor(s / n) === from && !came.has(s)) break;
+    }
+    return path.reverse();
   }
 
   /** A* over tiles. `ok` decides which tiles may be entered (the goal is always allowed). */
   findPath(from: number, to: number, ok: (t: number) => boolean, maxNodes = 6000): number[] | null {
     if (from === to) return [from];
-    const grid = this.planet.grid;
-    const c = grid.center;
+    const c = this.lattice ? this.lattice.pos : this.planet.grid.center;
     const tx = c[to * 3] as number;
     const ty = c[to * 3 + 1] as number;
     const tz = c[to * 3 + 2] as number;
@@ -810,7 +949,7 @@ export class LandUse {
       closed.add(cur);
       if (++expanded > maxNodes) return null;
       const gc = g.get(cur) as number;
-      for (const n of grid.neighborsOf(cur)) {
+      for (const n of this.nbrs(cur)) {
         if (closed.has(n) || (n !== to && !ok(n))) continue;
         const ng = gc + this.stepCost(cur, n);
         const old = g.get(n);

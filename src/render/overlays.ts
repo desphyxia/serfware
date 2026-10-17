@@ -3,6 +3,7 @@ import { attribute, dot, float, mrt, positionWorld, pow, sin, smoothstep, time, 
 import type { LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
 import { buildingGeometry, flagGeometry } from "./models";
+import type { HexLattice } from "../sim/planet/lattice";
 
 /** Build-mode helpers: territory border, placement markers, road preview and ghost buildings. */
 export class Overlays {
@@ -21,6 +22,8 @@ export class Overlays {
   /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
   private tileEdges: THREE.Mesh | null = null;
   private triEdges: THREE.Mesh | null = null;
+  /** Spike: the tile-centre-and-corner road lattice, with an optional route and marked nodes. */
+  private latticeMesh: THREE.Group | null = null;
 
   constructor(
     private readonly land: LandUse,
@@ -210,6 +213,76 @@ export class Overlays {
     this.group.add(this.triEdges);
     this.group.add(hex);
     return hex;
+  }
+
+  /** Spike: draw the finer road lattice (borders and spokes), a route along it and marked nodes; null hides it. */
+  setLattice(lat: HexLattice | null, route: readonly number[] = [], marks: readonly number[] = [], near = -1, radius = 14): void {
+    if (this.latticeMesh) {
+      this.group.remove(this.latticeMesh);
+      for (const m of this.latticeMesh.children) (m as THREE.Mesh).geometry.dispose();
+      this.latticeMesh = null;
+    }
+    if (!lat) return;
+    const { grid } = this.land.planet;
+    const elevation = this.land.planet.terrain.elevation;
+    const R = this.land.planet.params.radius;
+    const point = (n: number, lift: number) => {
+      let h: number;
+      if (n < lat.tiles) h = Math.max(0, elevation[n] as number);
+      else {
+        h = 0;
+        for (let j = 0; j < 3; j++) h += Math.max(0, elevation[grid.cornerTiles[(n - lat.tiles) * 3 + j] as number] as number);
+        h /= 3;
+      }
+      const r = R + h + lift;
+      return new THREE.Vector3((lat.pos[n * 3] as number) * r, (lat.pos[n * 3 + 1] as number) * r, (lat.pos[n * 3 + 2] as number) * r);
+    };
+    const up = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    const strip = (out: number[], a: THREE.Vector3, b: THREE.Vector3, width: number) => {
+      dir.subVectors(b, a).normalize();
+      up.addVectors(a, b).normalize();
+      side.crossVectors(dir, up).normalize().multiplyScalar(width / 2);
+      const p = [a.clone().sub(side), a.clone().add(side), b.clone().add(side), b.clone().sub(side)];
+      for (const i of [0, 1, 2, 0, 2, 3]) out.push(p[i]!.x, p[i]!.y, p[i]!.z);
+    };
+    const near3 = near >= 0 ? point(near, 0) : null;
+    const within = (n: number) => !near3 || point(n, 0).distanceTo(near3) < radius;
+    const borders: number[] = [];
+    const spokes: number[] = [];
+    for (let n = 0; n < lat.count; n++) {
+      if (!within(n)) continue;
+      for (const m of lat.neighborsOf(n)) {
+        if (m < n) continue;
+        // A spoke has a tile centre at one end; a border joins two corners.
+        strip(n < lat.tiles ? spokes : borders, point(n, 0.16), point(m, 0.16), n < lat.tiles ? 0.05 : 0.07);
+      }
+    }
+    const routeLine: number[] = [];
+    for (let i = 1; i < route.length; i++) strip(routeLine, point(route[i - 1] as number, 0.3), point(route[i] as number, 0.3), 0.22);
+    const dots: number[] = [];
+    for (const n of marks) {
+      const p = point(n, 0.34);
+      const s = 0.32;
+      const q = p.clone().normalize();
+      const t1 = new THREE.Vector3().crossVectors(q, new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(s);
+      const t2 = new THREE.Vector3().crossVectors(q, t1).normalize().multiplyScalar(s);
+      const c = [p.clone().add(t1).add(t2), p.clone().sub(t1).add(t2), p.clone().sub(t1).sub(t2), p.clone().add(t1).sub(t2)];
+      for (const i of [0, 1, 2, 0, 2, 3]) dots.push(c[i]!.x, c[i]!.y, c[i]!.z);
+    }
+    const mesh = (pos: number[], color: string, order: number) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+      m.renderOrder = order;
+      m.frustumCulled = false;
+      return m;
+    };
+    const g = new THREE.Group();
+    g.add(mesh(spokes, "#6fb4d9", 14), mesh(borders, "#ffe14d", 15), mesh(routeLine, "#ff4d3a", 16), mesh(dots, "#ffffff", 17));
+    this.latticeMesh = g;
+    this.group.add(g);
   }
 
   /** Show placement markers on the given tiles (or hide with an empty list). */
