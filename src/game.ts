@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Ambience, type WorkSound } from "./audio/ambience";
-import { BUILD } from "./build";
+import { BUILD, LATTICE_DEFAULT } from "./build";
 import { crash } from "./core/crash";
 import { log } from "./core/log";
 import { describeLeak, MemoryMonitor, type MemSample } from "./core/memory";
@@ -78,7 +78,8 @@ export function formatLatLon(p: THREE.Vector3): string {
 /** Experimental: `?lattice=1` builds solo worlds with Serf City style roads (flags on tile corners). Not saved. */
 function latticeOption(): { latticeRoads?: boolean } {
   try {
-    return new URLSearchParams(location.search).get("lattice") === "1" ? { latticeRoads: true } : {};
+    const q = new URLSearchParams(location.search).get("lattice");
+    return q === "1" || (LATTICE_DEFAULT && q !== "0") ? { latticeRoads: true } : {};
   } catch {
     return {};
   }
