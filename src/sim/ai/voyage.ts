@@ -74,7 +74,8 @@ export class VoyagePlanner {
           }
         }
       }
-      if (mine.some((b) => b.def.rail || !b.built) || !this.can("rail")) return false;
+      // A rail already ordered, or (without `railWithSites`) any unfinished building at all, holds the order back.
+      if (mine.some((b) => b.def.rail || (!aiOptions.railWithSites && !b.built)) || !this.can("rail")) return false;
       if (finished < 30 || !have("iron", 6) || !have("plank", 8) || !have("stone", 10)) return false;
       this.wait("rail", 15);
       const site = reservedSite(w, pl);
@@ -104,7 +105,7 @@ export class VoyagePlanner {
     // A colony, from a grown settlement with hands to spare, on the surveyed world nearest home's gravity.
     const pop = eco.population(pl);
     const people = pop.idle + pop.working;
-    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6) && Object.entries(cargo).every(([g, n]) => have(g, n))) {
+    if (this.can("hearthship") && people >= VoyagePlanner.found.population && pop.idle >= VoyagePlanner.found.idle && (aiOptions.orderEarly ? !voyages.list.some((v) => v.owner === pl && v.kind === "hearthship" && v.state !== "done") : (have("plank", 30) && have("stone", 12) && have("log", 10) && have("iron", 6) && Object.entries(cargo).every(([g, n]) => have(g, n))))) {
       const g = sys.planets[home]!.gravity;
       const target = sys.planets
         .filter((p) => p.surface && p.index !== home && voyages.isSurveyed(pl, p.index) && w.economyAt(p.index)?.keeps[pl] === undefined && !inFlight("hearthship", p.index))

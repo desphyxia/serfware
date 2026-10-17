@@ -97,6 +97,10 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.borderCandidates = ai.includes("cand");
   aiOptions.woodByNeed = ai.includes("wood");
   aiOptions.reserveRail = ai.includes("rail");
+  aiOptions.railWithSites = ai.includes("railsites");
+  // On by default (it only matters with `food`); "nofoodidle" plays without it.
+  aiOptions.foodWithoutIdle = !ai.includes("nofoodidle");
+  aiOptions.orderEarly = ai.includes("early");
   aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
   transportOptions.breakRings = ai.includes("rings");
   if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);

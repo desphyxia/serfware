@@ -601,6 +601,8 @@ the AI did and why it could not do more, bundled like the other helpers. All are
   what stands on them, where each good is bound and the route length. `railwhy.ts <size> <seed> <days>` (#147): the questions the
   voyage planner asks before a launch rail, one by one, then a rail placed the way it places it (this one places a building).
 - `ringwhy.ts <size> <seed> <seat> <days> [turn] [wide] [rings] [w=<weight>]` (#149): every 10 days, the full flags of one seat that no good can leave (each good bound for another flag in the set, no good coming back to swap), their goods by next hop, and a cycle through them; `rings` plays `transportOptions.breakRings` and prints how many times it fired.
+- `colonywhy.ts <size> <seed> <days> [population idle]` (#126): plays the assess game with a lowered colony threshold (default 30 people, 5 idle) and records, each day from day 10, the first voyage gate each seat fails (rail, probes, Hearthship), then the voyage events and, every 10 days, what a loading Hearthship's rail still lacks. `COLONY_FLAGS="early,railsites"` turns those two switches on for it.
+- `hungerwhy.ts <size> <seed> <days>` (#126): per seat and 10-day window, hungry days, people, idle adults, food, the days food cover was under 1 or nobody was idle, the food buildings standing and building, where the builder's thoughts stopped, and the food wishes placed or failed; at the end, the farm, orchard, fisher and hunter sites on the seat's land by reach, why placement fails (no road path), and the pockets of land that no road reaches with what blocks them.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
 
 #### Result: border candidates and wood by need (#150, medium and large, 3 seeds each, 80 days, no war)
@@ -675,6 +677,55 @@ existing hubs, which fill. It stays off.
 - Goods stuck on small rose at day 60 (1.09 → 5.48) without `rings`; one seat's jam is likely, not looked at.
 - Together (`rings,block,rail`) on medium: buildings 91.3 → 90.9, land held 780 → 721, launch-rail seats 67% → 44%; the loss follows
   `block`, which alone cut rails to 33%.
+
+#### Result: hunger, the launch rail and the Hearthship's loading (#126)
+
+**Why colonies are not founded.** With the colony threshold lowered to 30 people and 5 idle (`colonywhy.ts`), nine games on tiny,
+small and medium still sent no Hearthship. The voyage planner asks in order: a launch rail (30 finished buildings, iron 6, plank 8,
+stone 10 in the stores, and no unfinished building at all), probes (iron 2, plank 2), then the Hearthship (the people and idle
+numbers, plank 30, stone 12, log 10, iron 6 and every cargo good in the stores at once). The rail gate fails first: a growing
+seat almost never has every building finished. After it, logs: the sawmills empty the stores of logs as fast as woodcutters fill them
+while planks pile up, so `log 10` rarely holds. And no toolsmith makes a saw, because `toolsByDemand` counts only tools a workplace
+or site waits for, not cargo.
+
+**The game itself loads a Hearthship progressively.** A `hearthship` command creates a voyage "loading"; the launch rail asks
+carriers for the craft and cargo (`voyages.ts` `refreshWants`); founders board at departure (12 idle adults, at least 6). The AI
+orders only when the stores hold everything. With `orderEarly` (off) most goods arrived, but the voyage stalled on the saw
+(nothing makes one) and on logs (the sawmills win them). Not built: wants of the rail that outrank the sawmills for logs, a toolsmith
+that makes the cargo tools.
+
+**Hunger** is seat-specific. Mechanisms seen with `hungerwhy.ts`: no site a road can reach (pockets of land fenced by water or trees),
+the "no idle hands" early return before the food wishes, and farm sites that fail. `foodWithoutIdle` takes the second one.
+
+Standard stack as the base, no war, 80 days, tiny, small and medium, 3 seeds each (3 games a size; differences under about 15% are
+noise). `large` was left out of these runs.
+
+| | tiny | small | medium |
+|---|---|---|---|
+| Hungry seat-days from day 30: base | 44% | 40% | 34% |
+| `foodidle` | 24% | 43% | 26% |
+| `railsites` | 44% | 40% | 39% |
+| Goods stuck on flags d60: base | 0.78 | 1.09 | 41.7 |
+| `foodidle` | 0.11 | 3.33 | 10.4 |
+| `railsites` | 0.78 | 2.67 | 41.4 |
+| Seats with a launch rail: base | 11% | 44% | 56% |
+| `foodidle` | 11% | 11% | 56% |
+| `railsites` | 11% | 44% | 67% |
+| Probes sent per game: base | 0.33 | 4 | 4.67 |
+| `foodidle` | 0.33 | 2.67 | 6.33 |
+| `railsites` | 0.33 | 4 | 7 |
+
+- `foodWithoutIdle` (`foodidle`): the food wishes also run when no adult is idle. Buildings and people on medium +7% to +10%; tiny
+  dipped at day 20 (45 to 38 buildings) and was level by day 60. No rule violations. It is on by default (it acts only with
+  `foodByNeed`, the `food` token); `BALANCE_AI=...,nofoodidle` plays without it. The `foodidle` rows above were played with the
+  switch on and the base (`ab11-base`) with it absent, which was the same as off.
+- `railWithSites` (`railsites`, off): the launch rail may be ordered while buildings are unfinished. Two more medium seats build a
+  rail and probes rise on medium; buildings, people and hunger are otherwise level, hunger on medium 34% to 39% (not traced). No game
+  sent a Hearthship, since the 70-person threshold stands.
+- `orderEarly` (off, experimental): see above.
+- Node crashed at random (signals 11, 5, 4) in parallel sweeps under WSL2, more often with more workers; a solo replay of a crashed game
+  ran clean. Sweeps ran at low concurrency (2 workers) and resumed (the sweep skips games already in `assess.jsonl`); one failed game
+  was retried.
 
 ## Looking at the map
 
