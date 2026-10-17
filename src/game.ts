@@ -521,7 +521,7 @@ export class Game {
       this.camera,
       planet.params.radius,
       (dir) => {
-        const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.hoverTile : 0);
+        const t = planet.grid.nearestTile([dir.x, dir.y, dir.z], this.hoverTile >= 0 ? this.groundTile(this.hoverTile) : 0);
         return this.view ? this.view.frames.groundAt(dir, t) : planet.surfaceRadius(t);
       },
       { invertZoom: () => this.settings.get().ui.invertZoom, edgeScroll: () => this.settings.get().ui.edgeScroll, key: (a) => this.keys.key(a), wheel: (step) => step !== 0 && this.tools.placing() && (this.tools.rotateFlag(step), true) },
@@ -567,7 +567,7 @@ export class Game {
   private weatherChip(): { text: string; title: string } {
     const w = this.world;
     const f = this.cam.focus;
-    const t = w.planet.grid.nearestTile([f.x, f.y, f.z], this.hoverTile >= 0 ? this.hoverTile : 0);
+    const t = w.planet.grid.nearestTile([f.x, f.y, f.z], this.hoverTile >= 0 ? this.groundTile(this.hoverTile) : 0);
     const c = w.climate;
     const temp = c.temp[t] as number;
     const rain = c.rain[t] as number;
@@ -2624,7 +2624,7 @@ export class Game {
     if (!this.audio.running && !caps) return;
     const R = this.world.planet.params.radius;
     const land = this.world.land;
-    const focusTile = this.world.planet.grid.nearestTile([this.cam.focus.x, this.cam.focus.y, this.cam.focus.z], this.hoverTile >= 0 ? this.hoverTile : 0);
+    const focusTile = this.world.planet.grid.nearestTile([this.cam.focus.x, this.cam.focus.y, this.cam.focus.z], this.hoverTile >= 0 ? this.groundTile(this.hoverTile) : 0);
     const ring = land.ring(focusTile, 6);
     this.waterNear = ring.filter((t) => !land.isLand(t)).length / ring.length;
     const ground = this.cam.groundPoint();
@@ -2711,7 +2711,7 @@ export class Game {
     if (!this.pointerDirty) return;
     this.pointerDirty = false;
     if (Math.abs(this.pointer.x) > 1) return;
-    this.setHover(this.aimRay() ? this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? Math.min(this.hoverTile, this.world.planet.grid.count - 1) : 0, this.tools.pickMode()) : -1);
+    this.setHover(this.aimRay() ? this.view.pick(this.raycaster.ray, this.hoverTile >= 0 ? this.groundTile(this.hoverTile) : 0, this.tools.pickMode()) : -1);
   }
 
   /** Aim the shared raycaster through the pointer; false when no sound ray exists. */
