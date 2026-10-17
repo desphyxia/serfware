@@ -58,5 +58,14 @@
  * tiles until the rail is placed there; a wider search alone cannot help a seat whose land fills up first (#147).
  * `turnBlockWeight` (needs `turnBuildings`): a flag side costs this much for each free tile beside its flag that it would take out
  * of use (a flag allows no flag next to it), so a side on a flag that stands, which takes none, is preferred (#148).
+ * `foodWithoutIdle` (on by default; has an effect only with `foodByNeed`): the food wishes of `foodByNeed` are tried when no adult is
+ * idle too. Without it a seat that employs everyone stops at the "no idle hands" check before the food wishes, however hungry its
+ * people are. In the 80-day assessment it cut hungry seat-days on tiny (44% to 24%) and medium (34% to 26%) and left small as it was.
+ * `railWithSites`: the launch rail may be placed while other buildings are still unfinished. Without it the voyage planner waits
+ * until every building the seat has is finished, which a growing seat almost never is.
+ * `orderEarly`: the Hearthship is ordered as soon as the seat is grown enough and a world is surveyed, without the stores holding
+ * its goods first; the launch rail then asks carriers for the craft and the cargo (voyages.ts `refreshWants`), as it does for any
+ * order, and the founders board when the cargo is aboard and the window is open. Without it the planner orders only when the stores
+ * hold everything, which the economy hardly ever allows (the sawmills empty the stores of logs).
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0 };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false };

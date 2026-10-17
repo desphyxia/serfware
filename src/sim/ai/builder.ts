@@ -419,21 +419,25 @@ export class AiBuilder implements Brain {
     const housed = aiOptions.stonePriority && eco.capacity(pl) >= people + ROOM_SPARE;
     const triage = (list: typeof wants) => (aiOptions.stonePriority && stone < STONE_SHORT ? list.filter((x) => !STONE_HUNGRY.has(x.key)) : list);
     want(!housed && idle < 2 && plank >= 4 && count("house") < 2 + Math.floor(people / 6), near("house"));
-    if (idle < 1) {
-      tally(pl, 2);
-      stage = "noidle";
-      attempt(wants, wants.length);
-      return;
-    }
     // Short of food past the opening quotas: one more food building at a time, in the order cheapest first, each type capped by the population.
-    if (aiOptions.foodByNeed && this.foodCover < FOOD_SHORT && mine.filter((b) => b.built).length >= 12 && !mine.some((b) => !b.built && FOOD_BUILDINGS.has(b.def.id))) {
+    const foodShort = aiOptions.foodByNeed && this.foodCover < FOOD_SHORT && mine.filter((b) => b.built).length >= 12 && !mine.some((b) => !b.built && FOOD_BUILDINGS.has(b.def.id));
+    const foodWishes = () => {
       want(count("fisher") < 1 + Math.floor(people / 40), near("fisher", undefined, 11));
       want(count("hunter") < 1 + Math.floor(people / 40), near("hunter", Feature.Tree, 10));
       want(count("orchard") < 1 + Math.floor(people / 30), near("orchard"));
       want(count("farm") < 2 + Math.floor(people / 20), near("farm"));
       want(count("mill") < Math.ceil(count("farm") / 3) && count("farm") > 0, near("mill"));
       want(count("bakery") < Math.ceil(count("farm") / 3) && count("mill") > 0, near("bakery"));
+    };
+    if (idle < 1) {
+      tally(pl, 2);
+      stage = "noidle";
+      // `foodWithoutIdle`: hungry people are not waited on for idle hands.
+      if (aiOptions.foodWithoutIdle && foodShort) foodWishes();
+      attempt(wants, wants.length);
+      return;
     }
+    if (foodShort) foodWishes();
     want(count("woodcutter") < 1, near("woodcutter", Feature.Tree));
     want(count("quarry") < 1, near("quarry", Feature.Rock));
     want(count("sawmill") < 1, near("sawmill"));
