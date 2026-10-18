@@ -100,3 +100,11 @@ it("a ferry links two corner quays and a boatman rows it", () => {
   expect(link!.carrier).toBeGreaterThanOrEqual(0);
   expect(report(hits)).toBe("");
 }, 300000);
+
+it("three rivals at war, with hard adversity, never read tile-only data at a corner", () => {
+  const w = new World("quiet-cairn-171", { rivals: 3, latticeRoads: true, difficulty: "hard", peaceDays: 0 } as never);
+  const hits = watchCornerIds(w);
+  for (let i = 0; i < 12000; i++) w.step();
+  expect(report(hits)).toBe("");
+  expect(w.economy.buildings.filter((b) => b.alive && b.built).length).toBeGreaterThan(30);
+}, 900000);
