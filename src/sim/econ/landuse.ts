@@ -355,6 +355,21 @@ export class LandUse {
     return this.frozen[t] === 1 && this.hydro.lake[t] === 1;
   }
 
+  /**
+   * A bridge carries node `n`: a bridged tile, or a corner where two of the three tiles are
+   * bridged, or where one is and the others are land or ice (the head of a bridge on the shore).
+   */
+  deck(n: number): boolean {
+    if (n < this.tileCount) return this.bridge[n] === 1;
+    let bridged = 0;
+    let open = false;
+    for (const t of this.cornerTilesOf(n)) {
+      if (this.bridge[t] === 1) bridged++;
+      else if (!this.isLand(t) && !this.isIce(t)) open = true;
+    }
+    return bridged >= 2 || (bridged === 1 && !open);
+  }
+
   /** Lake ice at node `n` has gone soft: a lake tile that has thawed, or a corner with such a tile round it. */
   thinIce(n: number): boolean {
     const thin = (t: number) => this.hydro.lake[t] === 1 && !this.frozen[t];
@@ -602,7 +617,7 @@ export class LandUse {
   walkable(t: number): boolean {
     if (t >= this.tileCount) {
       // A corner is open ground when all three of its tiles are land; what grows on them lies beside it.
-      return this.isLand(t) && this.use[t] !== Use.Building && this.cornerTilesOf(t).every((n) => !this.flooded[n] || !!this.causeway[n]);
+      return (this.isLand(t) || this.isIce(t) || this.deck(t)) && this.use[t] !== Use.Building && this.cornerTilesOf(t).every((n) => !this.flooded[n] || !!this.causeway[n]);
     }
     if (this.flooded[t] && !this.causeway[t]) return false;
     const f = this.feature[t];
@@ -614,6 +629,7 @@ export class LandUse {
 
   /** Why a bridge can't go on this tile for `owner`, or null if it can (goods apart). */
   bridgeBlocked(t: number, owner: number): string | null {
+    t = this.pt(t);
     if (this.isLand(t) || this.isIce(t) || this.bridge[t]) return "Bridges go over open shallow water.";
     if (this.territory[t] !== owner + 1) return "Bridges go on water inside your own border.";
     if ((this.planet.terrain.elevation[t] as number) < LandUse.BRIDGE_DEPTH) return "The water is too deep to bridge.";
@@ -625,7 +641,11 @@ export class LandUse {
 
   /** A flag or road of `owner` may go here. */
   roadable(t: number, owner = 0, foothold = false): boolean {
-    if (t >= this.tileCount) return this.isLand(t) && this.mayRoad(t, owner, foothold) && (this.use[t] === Use.Free || this.use[t] === Use.Blocked) && this.slope(t) < 2.2;
+    if (t >= this.tileCount) {
+      if (!this.mayRoad(t, owner, foothold)) return false;
+      if (this.isLand(t)) return (this.use[t] === Use.Free || this.use[t] === Use.Blocked) && this.slope(t) < 2.2;
+      return (this.isIce(t) || this.deck(t)) && this.use[t] === Use.Free;
+    }
     // Ice roads: frozen lakes can be crossed (until they thaw).
     if (this.isIce(t) || this.bridge[t] === 1) return this.mayRoad(t, owner, foothold) && this.use[t] === Use.Free;
     return (
@@ -757,7 +777,7 @@ export class LandUse {
   /** Why a flag can't stand on `t` for `owner`, or null if it can. */
   flagBlocker(t: number, owner = 0, foothold = false): string | null {
     if (this.use[t] === Use.Flag) return null;
-    if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) {
+    if (!this.isLand(t) && !this.isIce(t) && !this.deck(t)) {
       // Shallow water lets the sand below show through, so say when a corner is only partly under it.
       if (t >= this.tileCount) {
         const wet = this.cornerTilesOf(t).filter((n) => !this.isLand(n)).length;
@@ -888,7 +908,7 @@ export class LandUse {
     if (this.ferry[pb]) return 0.9 * len;
     const road = this.use[b] === Use.Road || this.use[b] === Use.Flag;
     // Lake ice is flat: sledges fly over it on a road, feet slip and slide off one.
-    if (this.isIce(pb)) return (road ? 0.5 : 1.15) * len;
+    if (this.isIce(b)) return (road ? 0.5 : 1.15) * len;
     const dh = this.nodeElevation(b) - this.nodeElevation(a);
     const snow = this.snowCover[pb] as number;
     let base: number;
@@ -910,7 +930,7 @@ export class LandUse {
   /** Carriers here ride a sledge (a road over snow or ice); for visuals. */
   sledging(t: number): boolean {
     const p = this.pt(t);
-    return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(p) || (this.snowCover[p] as number) > 0.3);
+    return (this.use[t] === Use.Road || this.use[t] === Use.Flag) && (this.isIce(t) || (this.snowCover[p] as number) > 0.3);
   }
 
   /**

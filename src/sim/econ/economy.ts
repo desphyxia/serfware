@@ -1207,10 +1207,9 @@ export class Economy {
   /** The same between two flag tiles, over at most `limit` steps of open water. */
   ferryRoute(fa: number, fb: number, limit: number): { tiles: number[]; steps: number } | null {
     const land = this.land;
-    const grid = land.planet.grid;
     const open = (t: number) => !land.isLand(t) && !land.isIce(t);
-    const targets = new Set(grid.neighborsOf(fb).filter(open));
-    const from = grid.neighborsOf(fa).filter(open);
+    const targets = new Set(Array.from(land.nbrs(fb)).filter(open));
+    const from = Array.from(land.nbrs(fa)).filter(open);
     if (!targets.size || !from.length) return null;
     const parent = new Map<number, number>();
     const depth = new Map<number, number>();
@@ -1230,7 +1229,7 @@ export class Economy {
         return { tiles: tiles.reverse(), steps: d };
       }
       if (d >= limit) continue;
-      for (const n of grid.neighborsOf(t)) {
+      for (const n of land.nbrs(t)) {
         if (parent.has(n) || !open(n)) continue;
         parent.set(n, t);
         depth.set(n, d + 1);
@@ -1403,6 +1402,7 @@ export class Economy {
   /** Engineers: a bridge over a shallow stretch of water inside your borders, joined to land. */
   private cmdBridge(p: number, tile: number): CommandResult {
     const land = this.land;
+    tile = land.pt(tile);
     const why = land.bridgeBlocked(tile, p);
     if (why) return { ok: false, reason: why };
     if (!this.takeGoods(p, BRIDGE_COST)) return { ok: false, reason: "A bridge needs 2 planks in your stores." };
