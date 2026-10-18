@@ -153,8 +153,10 @@ export function waterNodes(u: WaterUniforms, o: WaterOptions = {}): { color: V3;
   // The lattice lets flags stand on corners, so shallows must read as water, not as sand.
   const trans = exp(thickB.mul(vec3(-1.5, -0.6, -0.42)).mul(latticeRequested() ? 3 : 1));
   const deep = vec3(0.025, 0.12, 0.2).mul(light);
+  // Lattice only: shallows lean towards a clear blue instead of the deep-sea teal.
+  const shallowBlue = latticeRequested() ? vec3(0.05, 0.38, 0.62).mul(light) : deep;
   const tint = vec3(0.7, 0.88, 0.9);
-  let col: V3 = bed.mul(tint).mul(trans).add(deep.mul(vec3(1, 1, 1).sub(trans)));
+  let col: V3 = bed.mul(tint).mul(trans).add(shallowBlue.mul(vec3(1, 1, 1).sub(trans)));
   // Caustics: bright wandering lines on the shallow bed.
   // They fade out with distance, where they would only read as noise.
   const cp = o.flow ? positionWorld.mul(0.8).sub(o.flow.mul(phaseA.mul(1.5))) : positionWorld.mul(0.8);
