@@ -386,6 +386,7 @@ export class Overlays {
     if (this.ghost) {
       const p = this.frames.pos(tile, -0.02);
       this.ghost.position.copy(p);
+      this.ghost.scale.setScalar(this.land.lattice ? 0.8 : 1);
       this.frames.orient(p, flagTile >= 0 ? this.frames.pos(flagTile) : null, this.ghost.quaternion);
       this.ghost.visible = true;
     }

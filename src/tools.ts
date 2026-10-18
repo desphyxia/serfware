@@ -158,7 +158,6 @@ export class Tools {
   /** Why the building in hand can't go on the hovered tile, or null (also null for other tools). */
   hoverBlocker(): string | null {
     if (this.at() < 0 || !this.isBuilding(this.tool)) return null;
-    if (this.at() >= this.host.world().land.tileCount) return "Buildings stand on tile centres; flags go on the corners.";
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return null;
     const land = this.host.world().land;
@@ -173,7 +172,6 @@ export class Tools {
     if (t < 0) return [];
     const land = this.host.world().land;
     const pl = this.host.player();
-    if (this.isBuilding(this.tool) && t >= land.tileCount) return [[t, this.hoverBlocker()]];
     if (this.tool === "flag" || this.tool === "road") return [[t, land.use[t] === Use.Flag ? null : land.flagBlocker(t, pl)]];
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return [];
@@ -207,7 +205,7 @@ export class Tools {
       const n = queue[i] as number;
       if (land.ownerOf(n) === pl + 1) {
         if (def) {
-          if (n < land.tileCount && !land.canBuildDef(n, this.flagTileFor(n, pl, false), def, pl)) out.push({ node: n, ok: false });
+          if (!land.canBuildDef(n, this.flagTileFor(n, pl, false), def, pl)) out.push({ node: n, ok: false });
         } else if (land.use[n] !== Use.Flag && !land.canPlaceFlag(n, pl)) out.push({ node: n, ok: false });
       }
       if (queue.length >= 120) continue;
@@ -273,7 +271,7 @@ export class Tools {
     const spots = [...this.blockedSpots(), ...(debug ? this.debugSpots().map(([node, why]) => ({ node, ok: why === null })) : [])];
     if (spots.length || this.spotsShown) ov.setSpots(spots);
     this.spotsShown = spots.length > 0;
-    if (t < 0 || (this.isBuilding(this.tool) && t >= land.tileCount)) return;
+    if (t < 0) return;
 
     if (this.tool === "flag") {
       ov.setGhost("flag", t, -1, land.canPlaceFlag(t, pl));
@@ -380,10 +378,6 @@ export class Tools {
       }
       default: {
         if (!this.isBuilding(this.tool)) return;
-        if (t >= land.tileCount) {
-          this.host.notify("Buildings stand on tile centres; flags go on the corners.", "warn");
-          return;
-        }
         // Touch has no hover: the first tap shows the ghost (turn its flag with the Flag button),
         // a second tap on the same spot places it.
         if (touch && this.pending !== t) {

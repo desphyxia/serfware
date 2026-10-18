@@ -515,7 +515,7 @@ export class Economy {
       this.apiaryMap.fill(0);
       for (const b of this.buildings) {
         if (!b.alive || !b.built || b.def.job !== "bees") continue;
-        this.apiaryMap[b.tile] = 1;
+        this.apiaryMap[this.land.pt(b.tile)] = 1;
         for (const m of this.land.ring(b.tile, 3)) this.apiaryMap[m] = 1;
       }
     }
@@ -529,7 +529,7 @@ export class Economy {
       this.wellMap.fill(0);
       for (const b of this.buildings) {
         if (!b.alive || !b.built || !(b.def.well || b.def.dew)) continue;
-        this.wellMap[b.tile] = 1;
+        this.wellMap[this.land.pt(b.tile)] = 1;
         for (const m of this.land.ring(b.tile, WELL_REACH)) this.wellMap[m] = 1;
       }
     }
@@ -1167,7 +1167,7 @@ export class Economy {
     const existing = this.flagAt(flagTile);
     if (existing && existing.building >= 0) return { ok: false, reason: "That flag already serves a building." };
     // A foothold on free ground: a ferry from the nearest finished quay goes with it.
-    const foothold = def.ferry !== undefined && land.territory[tile] === 0;
+    const foothold = def.ferry !== undefined && land.ownerOf(tile) === 0;
     let source: Building | undefined;
     if (foothold) {
       source = this.footholdSource(flagTile, p);
@@ -1574,7 +1574,7 @@ export class Economy {
     land.use[tile] = Use.Building;
     land.ref[tile] = b.id;
     // Everything on the ground is cleared, except the giant a treehouse is built into.
-    if (land.feature[tile] !== Feature.None && def.terrain !== "giant") {
+    if (tile < land.tileCount && land.feature[tile] !== Feature.None && def.terrain !== "giant") {
       land.feature[tile] = Feature.None;
       land.featureVersion++;
     }
@@ -1866,7 +1866,7 @@ export class Economy {
     const land = this.land;
     for (const b of this.buildings) {
       if (!b.alive || !b.built) continue;
-      const damp = (land.mud[b.tile] as number) + (land.planet.terrain.moisture[b.tile] as number) * 0.5;
+      const damp = (land.mud[land.pt(b.tile)] as number) + (land.planet.terrain.moisture[land.pt(b.tile)] as number) * 0.5;
       b.wear = Math.min(1, b.wear + 0.018 + damp * 0.012);
       if (b.wear > 0.3) b.moss = Math.min(1, b.moss + damp * 0.03);
       if (b.def.forge && b.worker >= 0) b.soot = Math.min(1, b.soot + 0.04);
@@ -1882,7 +1882,7 @@ export class Economy {
       }
     }
     // Wells draw on the groundwater.
-    for (const b of this.buildings) if (b.alive && b.built && b.def.well) this.ecology.draw(b.tile, 0.04);
+    for (const b of this.buildings) if (b.alive && b.built && b.def.well) this.ecology.draw(this.land.pt(b.tile), 0.04);
   }
 
   /** Worn-out buildings (wear above 0.85) work at two-thirds speed. */
@@ -2517,7 +2517,7 @@ export class Economy {
     const land = this.land;
     for (const b of this.buildings) {
       if (!b.alive || b.stranded < 0) continue;
-      if (land.territory[b.tile] === b.owner + 1 && !this.defeated[b.owner]) {
+      if (land.ownerOf(b.tile) === b.owner + 1 && !this.defeated[b.owner]) {
         b.stranded = -1;
         this.structureVersion++;
         this.notify(b.owner, `Your ${b.def.name.toLowerCase()} is back in your light.`);
@@ -3658,7 +3658,7 @@ export class Economy {
   private speedFactor(s: Settler, trade: string): number {
     const p = this.people[s.person];
     const b = this.buildings[s.building];
-    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60) * (b && b.built ? this.wearSpeed(b) : 1) * (b ? this.heatSpeed(b.tile) : 1);
+    return skillSpeed(p?.skills[trade] ?? 0) * glowSpeed(this.glow[s.owner] ?? 60) * (b && b.built ? this.wearSpeed(b) : 1) * (b ? this.heatSpeed(this.land.pt(b.tile)) : 1);
   }
 
   /**
@@ -3898,9 +3898,10 @@ export class Economy {
     const grid = land.planet.grid;
     const exp = (this.explored[b.owner] ??= new Uint8Array(grid.count));
     const reach = EXPLORE_REACH[b.reach] ?? EXPLORE_REACH[1];
-    const parent = new Map<number, number>([[b.tile, -1]]);
-    const depth = new Map<number, number>([[b.tile, 0]]);
-    const queue = [b.tile];
+    const start = land.pt(b.tile);
+    const parent = new Map<number, number>([[start, -1]]);
+    const depth = new Map<number, number>([[start, 0]]);
+    const queue = [start];
     for (let i = 0; i < queue.length; i++) {
       const t = queue[i] as number;
       const d = depth.get(t) as number;
@@ -3951,7 +3952,7 @@ export class Economy {
           return;
         }
         // Solar kilns and salt pans work by daylight; tide mills while the tide runs.
-        if ((def.daylight && !this.sunUp(b.tile)) || (def.tidal && this.climate && Math.abs(this.climate.tide) > 0.85)) {
+        if ((def.daylight && !this.sunUp(this.land.pt(b.tile))) || (def.tidal && this.climate && Math.abs(this.climate.tide) > 0.85)) {
           s.timer = 60;
           return;
         }
@@ -3979,7 +3980,7 @@ export class Economy {
         }
         if (def.job === "ropeway") {
           // Gondolas go up only while a sky island with stone drifts within reach.
-          const isle = this.islandNear(b.tile, def.radius ?? 3);
+          const isle = this.islandNear(this.land.pt(b.tile), def.radius ?? 3);
           if (!isle) {
             s.timer = 120;
             return;
@@ -3992,12 +3993,12 @@ export class Economy {
         }
         if (def.job === "bees") {
           // Bees fly in the warm months; the more flowers nearby, the faster the honey.
-          if (this.climate && (this.climate.temp[b.tile] as number) < 8) {
+          if (this.climate && (this.climate.temp[land.pt(b.tile)] as number) < 8) {
             s.timer = 120;
             return;
           }
           let bees = 0;
-          const around = [b.tile, ...land.ring(b.tile, 2)];
+          const around = [land.pt(b.tile), ...land.ring(b.tile, 2)];
           for (const t of around) bees += this.ecology.bees[t] as number;
           bees /= around.length * 255;
           s.state = "craft";
@@ -4199,7 +4200,7 @@ export class Economy {
         if (def.terra) this.onTerraform?.(b);
         // The kiln's focused heat can set dry growth next door alight.
         if (def.fireRisk && mix32(b.id, this.tick) % def.fireRisk === 0) {
-          const ns = land.planet.grid.neighborsOf(b.tile);
+          const ns = land.nbrs(b.tile);
           const t = ns[mix32(this.tick, b.tile) % ns.length] as number;
           if (this.ecology.ignite(t)) this.notify(b.owner, `Sparks from the ${def.name.toLowerCase()} have started a fire!`);
         }
@@ -4728,7 +4729,7 @@ export class Economy {
       this.dewMap.fill(0);
       for (const b of this.buildings) {
         if (!b.alive || !b.built || !b.def.dew) continue;
-        this.dewMap[b.tile] = 1;
+        this.dewMap[this.land.pt(b.tile)] = 1;
         for (const m of this.land.ring(b.tile, 3)) this.dewMap[m] = 1;
       }
     }
@@ -4794,7 +4795,7 @@ export class Economy {
 
   /** A forge within two steps of a vent needs no coal. */
   ventHeat(b: Building): boolean {
-    return !!b.def.forge && !!b.def.inputs?.fuel && this.land.nearVent(b.tile, 2);
+    return !!b.def.forge && !!b.def.inputs?.fuel && this.land.nearVent(this.land.pt(b.tile), 2);
   }
 
   /** A waystation has fuel burning. */

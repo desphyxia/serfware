@@ -501,25 +501,27 @@ export class LandUse {
 
   /** Building-specific placement: terrain rules on top of canBuild. */
   canBuildDef(t: number, flagTile: number, def: BuildingDef, owner = 0): boolean {
+    // A tile corner (lattice mode) takes its ground facts from the corner's first tile.
+    const g = this.pt(t);
     // Lantern buildings keep their distance from each other, whoever's they are (as in Serf City,
     // where military buildings can't stand within two steps of each other): they claim land
     // outward, not in heaps.
     if (def.slots && this.lanternAt && this.ring(t, LANTERN_GAP - 1).some((n) => this.use[n] === Use.Building && this.lanternAt?.(n))) return false;
     if (def.terrain === "mountain") {
-      if (!this.isMountain(t)) return false;
+      if (!this.isMountain(g)) return false;
       return this.canBuild(t, flagTile, !!def.large, owner, 3.2);
     }
     if (def.terrain === "coast" && !this.isCoast(t)) return false;
     // A quay's flag stands on the water's edge, where the ferry ties up.
-    if (def.ferry !== undefined && !this.planet.grid.neighborsOf(flagTile).some((n) => !this.isLand(n) && !this.isIce(n))) return false;
-    if (def.terrain === "aquifer" && (this.aquifer?.[t] ?? 0) < 0.35) return false;
-    if (def.terrain === "vent" && !this.nearVent(t)) return false;
-    if (def.terrain === "saltpan" && this.region[t] !== Region.SaltglassFlats && !this.isCoast(t)) return false;
-    if (def.terrain === "skyreef" && this.region[t] !== Region.Skyreef && !this.ring(t, 2).some((m) => this.region[m] === Region.Skyreef)) return false;
+    if (def.ferry !== undefined && !this.nbrs(flagTile).some((n) => !this.isLand(n) && !this.isIce(n))) return false;
+    if (def.terrain === "aquifer" && (this.aquifer?.[g] ?? 0) < 0.35) return false;
+    if (def.terrain === "vent" && !this.nearVent(g)) return false;
+    if (def.terrain === "saltpan" && this.region[g] !== Region.SaltglassFlats && !this.isCoast(t)) return false;
+    if (def.terrain === "skyreef" && this.region[g] !== Region.Skyreef && !this.ring(t, 2).some((m) => this.region[m] === Region.Skyreef)) return false;
     // Treehouses go up an ancient giant (which stays standing).
-    if (def.terrain === "giant") return this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
+    if (def.terrain === "giant") return t < this.tileCount && this.feature[t] === Feature.Giant && this.variety[t] === 0 && this.canBuild(t, flagTile, false, owner, 1.8, true);
     // A quay may found a foothold on free ground a ferry can reach.
-    const foothold = def.ferry !== undefined && this.territory[t] === 0 && (this.footholdAt?.(flagTile, owner) ?? false);
+    const foothold = def.ferry !== undefined && this.ownerOf(t) === 0 && (this.footholdAt?.(flagTile, owner) ?? false);
     // Large buildings may go on a slope the builders can level (see LEVEL_SLOPE).
     return this.canBuild(t, flagTile, !!def.large, owner, def.large ? MAX_LEVEL_SLOPE : 1.3, false, foothold);
   }
@@ -617,19 +619,23 @@ export class LandUse {
   /** A building may stand on `t` with its flag on `flagTile` (a neighbour). */
   canBuild(t: number, flagTile: number, large = false, owner = 0, maxSlope = 1.3, onGiant = false, foothold = false): boolean {
     const grid = this.planet.grid;
-    if (!this.isLand(t) || !(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return false;
-    const f = this.feature[t];
+    // Lattice mode: a building may stand on a tile corner too; its ground facts come from the three tiles.
+    const corner = t >= this.tileCount;
+    if (!this.isLand(t) || !(this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0))) return false;
+    const f = corner ? Feature.None : this.feature[t];
     if (this.use[t] !== Use.Free || (!onGiant && (f === Feature.Tree || f === Feature.Rock || f === Feature.Field || f === Feature.Hedge || f === Feature.Giant || f === Feature.Vent || f === Feature.Spire || f === Feature.Glowcap || f === Feature.Ruin))) return false;
-    if (grid.degree(t) === 5) return false; // Star Wells are sacred ground.
+    if (!corner && grid.degree(t) === 5) return false; // Star Wells are sacred ground.
     if (this.slope(t) > maxSlope) return false;
     if (!this.nbrs(t).includes(flagTile)) return false;
     if (!(this.use[flagTile] === Use.Flag ? this.ownerOf(flagTile) === owner + 1 || (foothold && this.ownerOf(flagTile) === 0) : this.canPlaceFlag(flagTile, owner, foothold))) return false;
-    for (const n of grid.neighborsOf(t)) {
+    for (const n of this.nbrs(t)) {
       // Small buildings may stand shoulder to shoulder (as in Serf City); a large one needs room
       // around it, and so does anything next to a large one.
       if (this.use[n] === Use.Building && (large || this.largeAt?.(n) !== false)) return false;
-      if (large && n !== flagTile && (this.use[n] !== Use.Free || this.feature[n] === Feature.Rock)) return false;
+      if (large && n !== flagTile && (this.use[n] !== Use.Free || (n < this.tileCount && this.feature[n] === Feature.Rock))) return false;
     }
+    // On the lattice a building is two steps wide in each direction: a large one keeps its distance from others.
+    if (this.lattice) for (const n of this.nbrs(t)) for (const m of this.nbrs(n)) if (m !== t && this.use[m] === Use.Building && (large || this.largeAt?.(m) !== false)) return false;
     return true;
   }
 
@@ -727,12 +733,12 @@ export class LandUse {
   buildBlocker(t: number, def: BuildingDef, owner = 0, foothold = false, chosenFlag = -1): string | null {
     const grid = this.planet.grid;
     if (!this.isLand(t)) return "Buildings go on dry land.";
-    if (!(this.territory[t] === owner + 1 || (foothold && this.territory[t] === 0))) return "That's outside your border.";
-    if (grid.degree(t) === 5) return "Star Wells are sacred ground.";
+    if (!(this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0))) return "That's outside your border.";
+    if (t < this.tileCount && grid.degree(t) === 5) return "Star Wells are sacred ground.";
     if (this.use[t] === Use.Building) return "There's already a building here.";
     if (this.use[t] === Use.Flag) return "A flag stands here.";
     if (this.use[t] === Use.Road) return "A road runs over this spot.";
-    const f = this.feature[t];
+    const f = t < this.tileCount ? this.feature[t] : Feature.None;
     if (f !== Feature.None && f !== Feature.Shrub && def.terrain !== "giant") {
       const what = f === Feature.Tree ? "A tree" : f === Feature.Rock ? "A rock" : f === Feature.Field ? "A field" : f === Feature.Giant ? "An ancient tree" : "Something";
       return `${what} is in the way.`;
@@ -754,13 +760,14 @@ export class LandUse {
       return `No room for this building's flag: the spots beside it are blocked (${top.join(", ") || "taken"}).`;
     }
     if (this.canBuildDef(t, flagTile, def, owner)) return null;
-    if (def.terrain === "mountain" && !this.isMountain(t)) return "This needs mountain ground.";
+    if (def.terrain === "mountain" && !this.isMountain(this.pt(t))) return "This needs mountain ground.";
     if (def.terrain === "coast" && !this.isCoast(t)) return "This needs to stand by the water.";
     if (def.terrain === "aquifer") return "There's no water underground here.";
     if (def.terrain === "vent") return "This must stand near a vent.";
     if (def.terrain === "giant") return "This goes up an ancient giant tree.";
     if (def.slots && this.lanternAt && this.ring(t, LANTERN_GAP - 1).some((n) => this.use[n] === Use.Building && this.lanternAt?.(n))) return "Too close to another lantern building.";
-    for (const n of grid.neighborsOf(t)) if (this.use[n] === Use.Building && (def.large || this.largeAt?.(n) !== false)) return "Too close to a neighbouring building.";
+    for (const n of this.nbrs(t)) if (this.use[n] === Use.Building && (def.large || this.largeAt?.(n) !== false)) return "Too close to a neighbouring building.";
+    if (this.lattice) for (const n of this.nbrs(t)) for (const m of this.nbrs(n)) if (m !== t && this.use[m] === Use.Building && (def.large || this.largeAt?.(m) !== false)) return "Too close to a neighbouring building.";
     if (def.large) return "A large building needs clear ground all round.";
     return "It can't be built here.";
   }

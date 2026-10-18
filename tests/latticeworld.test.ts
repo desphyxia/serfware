@@ -97,3 +97,65 @@ describe("lattice flags beside the Hearthship", () => {
     expect(land.canPlaceFlag(blocked!, 0)).toBe(true);
   });
 });
+
+describe("lattice buildings on tile corners", () => {
+  /** A free lattice node near `near`, at least `minSteps` away, where `id` can stand. */
+  function cornerSite(w: World, id: string, near: number, minSteps: number): { tile: number; flag: number } | null {
+    const land = w.land;
+    const def = BUILDINGS[buildingType(id)]!;
+    const seen = new Set<number>([near]);
+    const queue = [near];
+    const depth = new Map<number, number>([[near, 0]]);
+    for (let i = 0; i < queue.length && i < 600; i++) {
+      const n = queue[i]!;
+      for (const m of land.nbrs(n)) if (!seen.has(m)) {
+        seen.add(m);
+        depth.set(m, depth.get(n)! + 1);
+        queue.push(m);
+      }
+    }
+    for (const n of queue) {
+      if (n < land.tileCount || (depth.get(n) as number) < minSteps) continue;
+      const flag = land.bestFlagTile(n, 0);
+      if (flag >= 0 && land.canBuildDef(n, flag, def, 0)) return { tile: n, flag };
+    }
+    return null;
+  }
+
+  it("builds, connects and runs buildings that stand on corners", () => {
+    const w = new World(SEED, { size: "small", latticeRoads: true });
+    const eco = w.economy;
+    const land = w.land;
+    const keep = eco.buildings[eco.keeps[0]!]!;
+    const keepFlag = eco.flags[keep.flag]!;
+    const placed: number[] = [];
+    for (const id of ["woodcutter", "sawmill", "house", "quarry", "forester"]) {
+      const s = cornerSite(w, id, keep.tile, 4);
+      if (!s) continue;
+      const r = w.command({ t: "build", type: id, tile: s.tile, flagTile: s.flag });
+      if (!r.ok) continue;
+      expect(connect(w, s.flag, keepFlag.tile)).toBe(true);
+      placed.push(s.tile);
+    }
+    expect(placed.length).toBeGreaterThanOrEqual(3);
+    expect(placed.every((t) => t >= land.tileCount)).toBe(true);
+    for (let i = 0; i < 8000; i++) w.step();
+    const mine = eco.buildings.filter((b) => b.alive && b.tile >= land.tileCount);
+    expect(mine.filter((b) => b.built).length).toBeGreaterThanOrEqual(3);
+    for (const b of mine) for (const v of [...b.stock, ...b.cost, b.wear, b.soot, b.moss]) expect(Number.isFinite(v)).toBe(true);
+    for (const s of eco.settlers) if (s.alive) for (const p of s.path) expect(Number.isFinite(p) && p >= 0 && p < land.nodes).toBe(true);
+    expect(eco.buildings.some((b) => b.alive && b.built && b.def.id === "woodcutter" && b.tile >= land.tileCount)).toBe(true);
+  });
+
+  it("keeps a corner building away from the large Hearthship", () => {
+    const w = new World(SEED, { size: "small", latticeRoads: true });
+    const land = w.land;
+    const keep = w.economy.buildings[w.economy.keeps[0]!]!;
+    const def = BUILDINGS[buildingType("house")]!;
+    for (const n of land.nbrs(keep.tile)) for (const m of land.nbrs(n)) {
+      if (m === keep.tile || m >= land.nodes) continue;
+      const flag = land.bestFlagTile(m, 0);
+      if (flag >= 0) expect(land.canBuildDef(m, flag, def, 0)).toBe(false);
+    }
+  });
+});

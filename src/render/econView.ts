@@ -285,7 +285,7 @@ export class EconView {
       mesh.userData.weather = new THREE.Vector3(b.wear, b.moss, b.soot);
       mesh.userData.meta = meta;
       // On the tidal flats buildings stand on stilts, clear of high water.
-      const stilts = this.eco.land.tidal[b.tile] === 1 && b.def.id !== "shellfisher";
+      const stilts = this.eco.land.tidal[this.eco.land.pt(b.tile)] === 1 && b.def.id !== "shellfisher";
       const p = this.frames.pos(b.tile, stilts ? 0.4 : -0.05);
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
       mesh.position.copy(p);

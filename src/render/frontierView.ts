@@ -239,7 +239,6 @@ export class FrontierView {
   /** Boats moored by the shellfisher, fisher and tide mill ride the tide. */
   private updateBoats(time: number, tideLift: number): void {
     const land = this.eco.land;
-    const grid = land.planet.grid;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const one = new THREE.Vector3(1, 1, 1);
@@ -249,11 +248,11 @@ export class FrontierView {
       if (n >= this.boats.instanceMatrix.count) break;
       if (!b.alive || !b.built || !(b.def.id === "shellfisher" || b.def.id === "fisher" || b.def.id === "tidemill")) continue;
       if (hiddenAt(this.mask, b.tile)) continue;
-      const water = grid.neighborsOf(b.tile).find((x) => !land.isLand(x)) ?? land.ring(b.tile, 2).find((x) => !land.isLand(x));
+      const water = land.nbrs(b.tile).find((x) => !land.isLand(x)) ?? land.ring(b.tile, 2).find((x) => !land.isLand(x));
       if (water === undefined) continue;
       // Halfway between the shore and the water tile, on the sea (lifted by the tide near the flats).
       const d = this.frames.dir(b.tile).lerp(this.frames.dir(water), 0.7).normalize();
-      const tidal = land.region[b.tile] === Region.TidewaterReach ? tideLift : 0;
+      const tidal = land.region[land.pt(b.tile)] === Region.TidewaterReach ? tideLift : 0;
       const bob = Math.sin(time * 1.3 + b.id) * 0.03;
       p.copy(d).multiplyScalar(Math.max(this.frames.field.R + tidal, this.frames.groundAt(d)) + 0.02 + bob);
       this.frames.orient(p, this.frames.pos(b.tile), q);
