@@ -3,14 +3,14 @@ import { Fn, If, clamp, dot, float, int, ivec2, length, max, min, normalize, pos
 import type { TerrainField } from "./field";
 
 /** Road segments kept per tile. */
-const SLOTS = 6;
+const SLOTS = 12;
 
 type V4 = THREE.Node<"vec4">;
 
 /**
  * Lattice-mode road segments for the ground shader, so roads are drawn exactly per pixel instead of
  * from per-vertex distances (which break wherever the mesh is coarser than the road is wide).
- * Each tile holds up to SLOTS segments, two texels each: the end points on the unit sphere, with 1 in
+ * Each tile holds up to SLOTS segments (a tile has twelve: six spokes and six borders), two texels each: the end points on the unit sphere, with 1 in
  * the first texel's w for a used slot.
  */
 export class RoadData {
@@ -31,15 +31,29 @@ export class RoadData {
   /** Reload the segments from the field's current roads. */
   update(field: TerrainField): void {
     this.data.fill(0);
-    for (const [t, list] of field.roadEdgesByTile()) {
-      for (let s = 0; s < Math.min(SLOTS, list.length); s++) {
-        const [a, b] = list[s] as [number, number];
+    const used = new Uint8Array(this.count);
+    const seen = new Set<string>();
+    for (const list of field.roadEdgesByTile().values()) {
+      for (const [a, b] of list) {
+        const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // A pixel near a segment sits in a ground triangle that has one of these tiles: the tile a spoke
+        // starts from, or the two tiles a border runs between. Fewer slots used than every tile it touches.
+        const ta = field.tilesOf(a);
+        const tb = field.tilesOf(b);
+        const tiles = a < this.count ? ta : b < this.count ? tb : ta.filter((t) => tb.includes(t));
         const pa = field.nodeXYZ(a);
         const pb = field.nodeXYZ(b);
-        const o = (t * SLOTS + s) * 2 * 4;
-        this.data.set(pa, o);
-        this.data[o + 3] = 1;
-        this.data.set(pb, o + 4);
+        for (const t of tiles) {
+          const s = used[t] as number;
+          if (s >= SLOTS) continue;
+          used[t] = s + 1;
+          const o = (t * SLOTS + s) * 2 * 4;
+          this.data.set(pa, o);
+          this.data[o + 3] = 1;
+          this.data.set(pb, o + 4);
+        }
       }
     }
     this.texture.needsUpdate = true;

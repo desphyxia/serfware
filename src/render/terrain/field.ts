@@ -278,7 +278,7 @@ export class TerrainField {
   }
 
   /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */
-  private tilesOf(n: number): readonly number[] {
+  tilesOf(n: number): readonly number[] {
     const g = this.planet.grid;
     if (n < g.count) return [n];
     const o = (n - g.count) * 3;
