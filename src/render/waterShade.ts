@@ -28,7 +28,6 @@ import {
   viewportSharedTexture,
 } from "three/tsl";
 import { rgb } from "./painterly";
-import { latticeRequested } from "../build";
 
 type F = THREE.Node<"float">;
 type V3 = THREE.Node<"vec3">;
@@ -150,14 +149,10 @@ export function waterNodes(u: WaterUniforms, o: WaterOptions = {}): { color: V3;
   const thickB = select(useR, max(behindR.sub(linearDepth()).mul(range), 0), thick);
 
   // Absorption: red goes first, then green; deep water turns to the water's own colour.
-  // The lattice lets flags stand on corners, so shallows must read as water, not as sand.
-  const trans = exp(thickB.mul(vec3(-1.5, -0.6, -0.42)).mul(latticeRequested() ? 3 : 1));
+  const trans = exp(thickB.mul(vec3(-1.5, -0.6, -0.42)));
   const deep = vec3(0.025, 0.12, 0.2).mul(light);
-  // Lattice only: shallows lean towards a clear blue instead of the deep-sea teal.
-  const shallowBlue = latticeRequested() ? vec3(0.32, 0.72, 0.95).mul(light) : deep;
-  const tint = latticeRequested() ? vec3(0.55, 0.85, 1) : vec3(0.7, 0.88, 0.9);
-  let col: V3 = bed.mul(tint).mul(trans).add(shallowBlue.mul(vec3(1, 1, 1).sub(trans)));
-  if (latticeRequested()) col = mix(col, vec3(0.1, 0.62, 0.66).mul(light), 0.85);
+  const tint = vec3(0.7, 0.88, 0.9);
+  let col: V3 = bed.mul(tint).mul(trans).add(deep.mul(vec3(1, 1, 1).sub(trans)));
   // Caustics: bright wandering lines on the shallow bed.
   // They fade out with distance, where they would only read as noise.
   const cp = o.flow ? positionWorld.mul(0.8).sub(o.flow.mul(phaseA.mul(1.5))) : positionWorld.mul(0.8);
