@@ -73,6 +73,8 @@ const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
 };
 
 /** Roads, flags, buildings, goods and settlers drawn from the economy each frame. */
+const LATTICE_BUILDING_SCALE = 0.8;
+
 export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
@@ -290,6 +292,8 @@ export class EconView {
       this.frames.orient(p, flagPos, mesh.quaternion);
       // Towers stand taller on light worlds and squatter on heavy ones.
       if (b.def.slots || b.def.id === "ropeway") mesh.scale.y = Math.min(1.3, Math.max(0.85, Math.pow(1 / this.eco.land.planet.params.gravity, 0.45)));
+      // Lattice nodes sit closer together than tile centres did, so buildings stand a little smaller.
+      if (this.eco.land.lattice) mesh.scale.multiplyScalar(LATTICE_BUILDING_SCALE);
       if (stilts) {
         this.stiltGeo ??= stiltsGeometry();
         const legs = new THREE.Mesh(this.stiltGeo, this.buildingMat);

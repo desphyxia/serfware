@@ -5,6 +5,7 @@ import { Biome } from "../../sim/planet/terrain";
 import { Noise3 } from "../noise";
 import { biomeColor, tileHash } from "../palette";
 import { Region } from "../../sim/biomes/regions";
+import { latticeRequested } from "../../build";
 
 const CANOPY_FLOOR = new THREE.Color("#2c3a22");
 /** Rimefall: lichen and frost-bitten moss, blue-grey. Emberglass: rust and ochre, iron-rich. */
@@ -23,7 +24,7 @@ export interface Pad {
 }
 
 /** Half-width of a road's surface, in world units. */
-export const ROAD_HALF = 0.34;
+export const ROAD_HALF = latticeRequested() ? 0.2 : 0.34;
 
 /** A point on a smoothed river course. */
 export interface RiverPoint {
