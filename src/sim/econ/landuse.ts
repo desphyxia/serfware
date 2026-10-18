@@ -608,7 +608,7 @@ export class LandUse {
     if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
     // Tiles reserved around the Hearthship are Blocked for buildings but may carry a flag; a lone
     // Blocked tile (a hamlet) may not.
-    if (this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return false;
+    if (!this.lattice && this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return false;
     // Flags need breathing room: no neighbouring flag.
     for (const n of this.nbrs(t)) if (this.use[n] === Use.Flag) return false;
     return this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0);
@@ -710,7 +710,7 @@ export class LandUse {
     if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) return "water";
     if (!(this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0))) return "outside your border";
     if (this.use[t] === Use.Building) return "a building";
-    if (this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return "ground kept clear around the Hearthship";
+    if (!this.lattice && this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return "ground kept clear around the Hearthship";
     const f = t < this.tileCount ? this.feature[t] : Feature.None;
     if (f === Feature.Tree) return "a tree";
     if (f === Feature.Rock) return "a rock";

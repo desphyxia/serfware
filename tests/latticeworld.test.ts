@@ -85,3 +85,15 @@ describe("lattice flags on tile centres", () => {
     expect(land.canPlaceFlag(next, 0)).toBe(false);
   });
 });
+
+describe("lattice flags beside the Hearthship", () => {
+  it("allows a flag on reserved (Blocked) tile centres, as it does on corners", () => {
+    const w = new World(SEED, { size: "small", latticeRoads: true });
+    const land = w.land;
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[0]!]!;
+    const blocked = land.ring(keep.tile, 4).find((t) => land.use[t] === Use.Blocked && land.isLand(t) && !land.nbrs(t).some((n) => land.use[n] === Use.Flag));
+    expect(blocked).toBeDefined();
+    expect(land.canPlaceFlag(blocked!, 0)).toBe(true);
+  });
+});
