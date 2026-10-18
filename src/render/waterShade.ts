@@ -157,6 +157,7 @@ export function waterNodes(u: WaterUniforms, o: WaterOptions = {}): { color: V3;
   const shallowBlue = latticeRequested() ? vec3(0.32, 0.72, 0.95).mul(light) : deep;
   const tint = latticeRequested() ? vec3(0.55, 0.85, 1) : vec3(0.7, 0.88, 0.9);
   let col: V3 = bed.mul(tint).mul(trans).add(shallowBlue.mul(vec3(1, 1, 1).sub(trans)));
+  if (latticeRequested()) col = mix(col, vec3(0.2, 0.62, 0.95).mul(light), 0.6);
   // Caustics: bright wandering lines on the shallow bed.
   // They fade out with distance, where they would only read as noise.
   const cp = o.flow ? positionWorld.mul(0.8).sub(o.flow.mul(phaseA.mul(1.5))) : positionWorld.mul(0.8);
