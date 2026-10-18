@@ -3,6 +3,7 @@ import { attribute, dot, float, mrt, positionWorld, pow, sin, smoothstep, time, 
 import type { LandUse } from "../sim/econ/landuse";
 import { SurfaceFrames } from "./frames";
 import { buildingGeometry, flagGeometry } from "./models";
+import type { HexLattice } from "../sim/planet/lattice";
 
 /** Build-mode helpers: territory border, placement markers, road preview and ghost buildings. */
 export class Overlays {
@@ -11,6 +12,9 @@ export class Overlays {
   private territoryVersion = -1;
   private readonly markers: THREE.InstancedMesh;
   private readonly reach: THREE.InstancedMesh;
+  /** Debug: green and red rings on the spots a placement check looked at. */
+  private readonly spots: THREE.InstancedMesh;
+  private readonly spotsOk: THREE.InstancedMesh;
   private readonly preview: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly ghostMat = new THREE.MeshStandardMaterial({ color: "#9cc58f", transparent: true, opacity: 0.55, emissive: "#2a4a20", depthWrite: false });
   private ghost: THREE.Mesh | null = null;
@@ -21,13 +25,15 @@ export class Overlays {
   /** Debug: every tile's outline, drawn on the ground (built the first time it is switched on). */
   private tileEdges: THREE.Mesh | null = null;
   private triEdges: THREE.Mesh | null = null;
+  /** Spike: the tile-centre-and-corner road lattice, with an optional route and marked nodes. */
+  private latticeMesh: THREE.Group | null = null;
 
   constructor(
     private readonly land: LandUse,
     private readonly frames: SurfaceFrames,
   ) {
     const disc = new THREE.RingGeometry(0.18, 0.3, 16).rotateX(-Math.PI / 2);
-    this.markers = new THREE.InstancedMesh(disc, new THREE.MeshBasicMaterial({ color: "#c8f0a8", transparent: true, opacity: 0.75, depthWrite: false }), land.planet.grid.count);
+    this.markers = new THREE.InstancedMesh(disc, new THREE.MeshBasicMaterial({ color: "#c8f0a8", transparent: true, opacity: 0.75, depthWrite: false }), land.nodes);
     this.markers.count = 0;
     this.markers.frustumCulled = false;
     this.markers.renderOrder = 6;
@@ -36,6 +42,16 @@ export class Overlays {
     this.reach.count = 0;
     this.reach.frustumCulled = false;
     this.reach.renderOrder = 12;
+    // Two meshes, one per colour: per-instance colour does not reach a pipeline compiled while the mesh was empty.
+    const ring = new THREE.RingGeometry(0.3, 0.5, 20).rotateX(-Math.PI / 2);
+    const spotMat = (color: string) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, toneMapped: false });
+    this.spots = new THREE.InstancedMesh(ring, spotMat("#ff3b3b"), 160);
+    this.spotsOk = new THREE.InstancedMesh(ring, spotMat("#5fe07a"), 160);
+    for (const m of [this.spots, this.spotsOk]) {
+      m.count = 0;
+      m.frustumCulled = false;
+      m.renderOrder = 12;
+    }
     const pg = new THREE.BufferGeometry();
     pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
     this.preview = new THREE.Line(pg, new THREE.LineBasicMaterial({ color: "#9cc58f", transparent: true, depthTest: false, linewidth: 2 }));
@@ -54,7 +70,7 @@ export class Overlays {
       this.anchor.add(m);
     }
     this.anchor.visible = false;
-    this.group.add(this.markers, this.reach, this.preview, this.ghostFlag, this.anchor);
+    this.group.add(this.markers, this.reach, this.spots, this.spotsOk, this.preview, this.ghostFlag, this.anchor);
   }
 
   /** Highlight the flag a road starts from (-1 hides it). */
@@ -212,6 +228,76 @@ export class Overlays {
     return hex;
   }
 
+  /** Spike: draw the finer road lattice (borders and spokes), a route along it and marked nodes; null hides it. */
+  setLattice(lat: HexLattice | null, route: readonly number[] = [], marks: readonly number[] = [], near = -1, radius = 14): void {
+    if (this.latticeMesh) {
+      this.group.remove(this.latticeMesh);
+      for (const m of this.latticeMesh.children) (m as THREE.Mesh).geometry.dispose();
+      this.latticeMesh = null;
+    }
+    if (!lat) return;
+    const { grid } = this.land.planet;
+    const elevation = this.land.planet.terrain.elevation;
+    const R = this.land.planet.params.radius;
+    const point = (n: number, lift: number) => {
+      let h: number;
+      if (n < lat.tiles) h = Math.max(0, elevation[n] as number);
+      else {
+        h = 0;
+        for (let j = 0; j < 3; j++) h += Math.max(0, elevation[grid.cornerTiles[(n - lat.tiles) * 3 + j] as number] as number);
+        h /= 3;
+      }
+      const r = R + h + lift;
+      return new THREE.Vector3((lat.pos[n * 3] as number) * r, (lat.pos[n * 3 + 1] as number) * r, (lat.pos[n * 3 + 2] as number) * r);
+    };
+    const up = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    const strip = (out: number[], a: THREE.Vector3, b: THREE.Vector3, width: number) => {
+      dir.subVectors(b, a).normalize();
+      up.addVectors(a, b).normalize();
+      side.crossVectors(dir, up).normalize().multiplyScalar(width / 2);
+      const p = [a.clone().sub(side), a.clone().add(side), b.clone().add(side), b.clone().sub(side)];
+      for (const i of [0, 1, 2, 0, 2, 3]) out.push(p[i]!.x, p[i]!.y, p[i]!.z);
+    };
+    const near3 = near >= 0 ? point(near, 0) : null;
+    const within = (n: number) => !near3 || point(n, 0).distanceTo(near3) < radius;
+    const borders: number[] = [];
+    const spokes: number[] = [];
+    for (let n = 0; n < lat.count; n++) {
+      if (!within(n)) continue;
+      for (const m of lat.neighborsOf(n)) {
+        if (m < n) continue;
+        // A spoke has a tile centre at one end; a border joins two corners.
+        strip(n < lat.tiles ? spokes : borders, point(n, 0.16), point(m, 0.16), n < lat.tiles ? 0.05 : 0.07);
+      }
+    }
+    const routeLine: number[] = [];
+    for (let i = 1; i < route.length; i++) strip(routeLine, point(route[i - 1] as number, 0.3), point(route[i] as number, 0.3), 0.22);
+    const dots: number[] = [];
+    for (const n of marks) {
+      const p = point(n, 0.34);
+      const s = 0.32;
+      const q = p.clone().normalize();
+      const t1 = new THREE.Vector3().crossVectors(q, new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(s);
+      const t2 = new THREE.Vector3().crossVectors(q, t1).normalize().multiplyScalar(s);
+      const c = [p.clone().add(t1).add(t2), p.clone().sub(t1).add(t2), p.clone().sub(t1).sub(t2), p.clone().add(t1).sub(t2)];
+      for (const i of [0, 1, 2, 0, 2, 3]) dots.push(c[i]!.x, c[i]!.y, c[i]!.z);
+    }
+    const mesh = (pos: number[], color: string, order: number) => {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+      m.renderOrder = order;
+      m.frustumCulled = false;
+      return m;
+    };
+    const g = new THREE.Group();
+    g.add(mesh(spokes, "#6fb4d9", 14), mesh(borders, "#ffe14d", 15), mesh(routeLine, "#ff4d3a", 16), mesh(dots, "#ffffff", 17));
+    this.latticeMesh = g;
+    this.group.add(g);
+  }
+
   /** Show placement markers on the given tiles (or hide with an empty list). */
   setMarkers(tiles: readonly number[], color: string): void {
     const m = new THREE.Matrix4();
@@ -227,6 +313,26 @@ export class Overlays {
     this.markers.count = n;
     this.markers.instanceMatrix.needsUpdate = true;
     (this.markers.material as THREE.MeshBasicMaterial).color.set(color);
+  }
+
+  /** Debug: ring the spots a placement check looked at, green if it passed and red if not. */
+  setSpots(spots: readonly { node: number; ok: boolean }[]): void {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3(1, 1, 1);
+    let bad = 0;
+    let good = 0;
+    for (const sp of spots.slice(-160)) {
+      const p = this.frames.pos(sp.node, 0.25);
+      this.frames.orient(p, null, q);
+      m.compose(p, q, s);
+      if (sp.ok) this.spotsOk.setMatrixAt(good++, m);
+      else this.spots.setMatrixAt(bad++, m);
+    }
+    this.spots.count = bad;
+    this.spotsOk.count = good;
+    this.spots.instanceMatrix.needsUpdate = true;
+    this.spotsOk.instanceMatrix.needsUpdate = true;
   }
 
   /** Ring the enemy buildings a selected lantern could attack (empty list hides them). */
@@ -280,6 +386,7 @@ export class Overlays {
     if (this.ghost) {
       const p = this.frames.pos(tile, -0.02);
       this.ghost.position.copy(p);
+      this.ghost.scale.setScalar(this.land.lattice ? 0.8 : 1);
       this.frames.orient(p, flagTile >= 0 ? this.frames.pos(flagTile) : null, this.ghost.quaternion);
       this.ghost.visible = true;
     }

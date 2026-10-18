@@ -44,8 +44,28 @@ export class PlanetGrid {
     return [this.center[t * 3] as number, this.center[t * 3 + 1] as number, this.center[t * 3 + 2] as number];
   }
 
-  /** Walk from a start tile toward the direction d until no neighbour is closer. */
+  /**
+   * Walk from a start tile toward the direction d until no neighbour is closer. A walk can stall
+   * on a far tile (a bad hint, such as tile 0), so a poor result is retried from the Star Wells,
+   * which are spread over the whole sphere.
+   */
   nearestTile(d: Vec3, from = 0): number {
+    const first = this.walk(d, from);
+    if (this.dotTo(first, d) >= 1 - (2 * Math.PI) / this.count) return first;
+    let best = first;
+    let bestDot = this.dotTo(first, d);
+    for (const p of this.pentagons) {
+      const t = this.walk(d, p);
+      const s = this.dotTo(t, d);
+      if (s > bestDot) {
+        best = t;
+        bestDot = s;
+      }
+    }
+    return best;
+  }
+
+  private walk(d: Vec3, from: number): number {
     let cur = from;
     let best = this.dotTo(cur, d);
     for (;;) {

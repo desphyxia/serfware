@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
     base: "./",
     define: {
       __BUILD_ID__: JSON.stringify(gitSha() + dirty),
+      __LATTICE_DEFAULT__: JSON.stringify(process.env.SEEDFALL_LATTICE === "1"),
       __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
     },
     plugins: single ? [viteSingleFile()] : [],

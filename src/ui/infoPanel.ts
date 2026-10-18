@@ -325,7 +325,7 @@ export class InfoPanel extends Panel {
         body.push(h("p", { class: b.wear >= 0.5 ? "hint warn" : "hint" }, cond));
       }
       if (b.def.well) {
-        const water = Math.round((eco.ecology.table[b.tile] ?? 0) * 100);
+        const water = Math.round((eco.ecology.table[eco.land.pt(b.tile)] ?? 0) * 100);
         body.push(h("p", { class: "hint" }, `Groundwater ${water} %. Bucket lines guard everything within five steps against fire.`));
       }
       if (b.def.job === "hunt") {

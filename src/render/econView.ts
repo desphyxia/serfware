@@ -73,6 +73,8 @@ const TRADES: Record<string, { hat: Hat; tool: Tool; work: Anim }> = {
 };
 
 /** Roads, flags, buildings, goods and settlers drawn from the economy each frame. */
+const LATTICE_BUILDING_SCALE = 0.8;
+
 export class EconView {
   readonly group = new THREE.Group();
   private readonly frames: SurfaceFrames;
@@ -283,13 +285,15 @@ export class EconView {
       mesh.userData.weather = new THREE.Vector3(b.wear, b.moss, b.soot);
       mesh.userData.meta = meta;
       // On the tidal flats buildings stand on stilts, clear of high water.
-      const stilts = this.eco.land.tidal[b.tile] === 1 && b.def.id !== "shellfisher";
+      const stilts = this.eco.land.tidal[this.eco.land.pt(b.tile)] === 1 && b.def.id !== "shellfisher";
       const p = this.frames.pos(b.tile, stilts ? 0.4 : -0.05);
       const flagPos = this.frames.pos((this.eco.flags[b.flag] as { tile: number }).tile);
       mesh.position.copy(p);
       this.frames.orient(p, flagPos, mesh.quaternion);
       // Towers stand taller on light worlds and squatter on heavy ones.
       if (b.def.slots || b.def.id === "ropeway") mesh.scale.y = Math.min(1.3, Math.max(0.85, Math.pow(1 / this.eco.land.planet.params.gravity, 0.45)));
+      // Lattice nodes sit closer together than tile centres did, so buildings stand a little smaller.
+      if (this.eco.land.lattice) mesh.scale.multiplyScalar(LATTICE_BUILDING_SCALE);
       if (stilts) {
         this.stiltGeo ??= stiltsGeometry();
         const legs = new THREE.Mesh(this.stiltGeo, this.buildingMat);

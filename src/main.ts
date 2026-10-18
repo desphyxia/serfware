@@ -6,7 +6,7 @@ import { setLanguage } from "./core/i18n";
 import "./locales";
 import { applyPlayerPalette } from "./render/players";
 import { SettingsStore, suggestPreset } from "./core/settings";
-import { BUILD } from "./build";
+import { BUILD, PREVIEW_SEED } from "./build";
 import { Game } from "./game";
 import { bootScreen } from "./ui/bootScreen";
 import { demoBattle, demoSettlement, placeConnected } from "./sim/econ/planner";
@@ -28,6 +28,7 @@ window.__seedfall = { ready: false, errors: () => crash.errors.length, lastError
 function initialSeed(): string {
   const fromHash = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (fromHash) return normaliseSeed(fromHash);
+  if (PREVIEW_SEED) return PREVIEW_SEED;
   return randomSeedWord(Math.floor(Math.random() * 2 ** 32));
 }
 

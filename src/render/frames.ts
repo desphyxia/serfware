@@ -22,7 +22,13 @@ export class SurfaceFrames {
     readonly planet: Planet,
     readonly field: TerrainField,
   ) {
-    this.tileR = new Float32Array(planet.grid.count);
+    this.tileR = new Float32Array(planet.grid.count + planet.grid.corners.length / 3);
+  }
+
+  /** The tile whose ground data stands for a node (a corner's first tile). */
+  private hintTile(t: number): number {
+    const g = this.planet.grid;
+    return t >= g.count ? (g.cornerTiles[(t - g.count) * 3] as number) : t;
   }
 
   /** Forget cached tile heights (after pads change). */
@@ -31,7 +37,10 @@ export class SurfaceFrames {
   }
 
   dir(t: number, out = new THREE.Vector3()): THREE.Vector3 {
-    const c = this.planet.grid.center;
+    const g = this.planet.grid;
+    // Lattice roads: ids past the tile count are tile corners.
+    if (t >= g.count) return out.set(g.corners[(t - g.count) * 3] as number, g.corners[(t - g.count) * 3 + 1] as number, g.corners[(t - g.count) * 3 + 2] as number);
+    const c = g.center;
     return out.set(c[t * 3] as number, c[t * 3 + 1] as number, c[t * 3 + 2] as number);
   }
 
@@ -39,7 +48,7 @@ export class SurfaceFrames {
   radius(t: number): number {
     let r = this.tileR[t] as number;
     if (!r) {
-      r = this.field.tileRadius(t);
+      r = t >= this.planet.grid.count ? this.field.radiusAt(this.dir(t), this.hintTile(t)) : this.field.tileRadius(t);
       this.tileR[t] = r;
     }
     return Math.max(r, this.iceTop(t));
@@ -47,6 +56,7 @@ export class SurfaceFrames {
 
   /** Radius of the ice surface on a frozen lake tile, else 0. */
   iceTop(t: number): number {
+    t = this.hintTile(t);
     if (this.causeway?.[t]) return this.field.R + CAUSEWAY_TOP;
     const ice = this.ice;
     return ice && ice.frozen[t] && ice.lake[t] ? this.field.R + (ice.level[t] as number) + ICE_LIFT : 0;
@@ -64,12 +74,12 @@ export class SurfaceFrames {
     const da = this.dir(a, new THREE.Vector3());
     const db = this.dir(b, _tmp);
     out.copy(da).lerp(db, f).normalize();
-    return out.multiplyScalar(Math.max(this.field.R, this.field.radiusAt(out, f < 0.5 ? a : b), this.iceTop(a), this.iceTop(b)) + lift);
+    return out.multiplyScalar(Math.max(this.field.R, this.field.radiusAt(out, this.hintTile(f < 0.5 ? a : b)), this.iceTop(a), this.iceTop(b)) + lift);
   }
 
   /** Ground radius at any unit direction. */
   groundAt(dir: THREE.Vector3, hint?: number): number {
-    return Math.max(this.field.R, this.field.radiusAt(dir, hint), hint === undefined ? 0 : this.iceTop(hint));
+    return Math.max(this.field.R, this.field.radiusAt(dir, hint === undefined ? undefined : this.hintTile(hint)), hint === undefined ? 0 : this.iceTop(hint));
   }
 
   /** Orientation with local +Y along the surface normal and local +Z toward `toward` (a world point). */

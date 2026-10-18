@@ -5,6 +5,7 @@ import { Biome } from "../../sim/planet/terrain";
 import { Noise3 } from "../noise";
 import { biomeColor, tileHash } from "../palette";
 import { Region } from "../../sim/biomes/regions";
+import { latticeRequested } from "../../build";
 
 const CANOPY_FLOOR = new THREE.Color("#2c3a22");
 /** Rimefall: lichen and frost-bitten moss, blue-grey. Emberglass: rust and ochre, iron-rich. */
@@ -23,7 +24,7 @@ export interface Pad {
 }
 
 /** Half-width of a road's surface, in world units. */
-export const ROAD_HALF = 0.34;
+export const ROAD_HALF = latticeRequested() ? 0.2 : 0.34;
 
 /** A point on a smoothed river course. */
 export interface RiverPoint {
@@ -72,6 +73,8 @@ export class TerrainField {
   private pads = new Map<number, number>();
   /** Road edges (tile pairs) by tile, stored under both ends. */
   private roadEdges = new Map<number, [number, number][]>();
+  /** Roads run along tile borders (lattice mode): painted per pixel by the ground shader, the mesh only gets a levelled bed. */
+  private latticeRoads = false;
   /** Smoothed river courses, shared by the carved bed and the water surface. */
   readonly rivers: RiverPoint[][] = [];
   /** River segments: ax, ay, az, bx, by, bz, width, depth per segment. */
@@ -241,6 +244,7 @@ export class TerrainField {
 
   /** Replace the set of roads (pairs of neighbouring tiles). Returns tiles whose ground changes. */
   setRoads(edges: readonly [number, number][]): number[] {
+    this.latticeRoads = edges.some(([a, b]) => a >= this.planet.grid.count || b >= this.planet.grid.count);
     const next = new Map<number, [number, number][]>();
     const key = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
     const nextKeys = new Set<string>();
@@ -248,7 +252,7 @@ export class TerrainField {
       const k = key(a, b);
       if (nextKeys.has(k)) continue;
       nextKeys.add(k);
-      for (const t of [a, b]) {
+      for (const t of [...this.tilesOf(a), ...this.tilesOf(b)]) {
         let l = next.get(t);
         if (!l) next.set(t, (l = []));
         l.push([a, b]);
@@ -257,27 +261,51 @@ export class TerrainField {
     const oldKeys = new Set<string>();
     for (const l of this.roadEdges.values()) for (const [a, b] of l) oldKeys.add(key(a, b));
     const changed = new Set<number>();
-    for (const k of nextKeys) if (!oldKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
-    for (const k of oldKeys) if (!nextKeys.has(k)) for (const t of k.split(":")) changed.add(Number(t));
+    for (const k of nextKeys) if (!oldKeys.has(k)) for (const n of k.split(":")) for (const t of this.tilesOf(Number(n))) changed.add(t);
+    for (const k of oldKeys) if (!nextKeys.has(k)) for (const n of k.split(":")) for (const t of this.tilesOf(Number(n))) changed.add(t);
     if (changed.size) this.roadEdges = next;
     return [...changed];
+  }
+
+  /** Lattice roads are painted per pixel from exact segments, not from per-vertex distances. */
+  get roadsArePerPixel(): boolean {
+    return this.latticeRoads;
+  }
+
+  /** Road edges (node pairs) stored under each tile. */
+  roadEdgesByTile(): ReadonlyMap<number, readonly [number, number][]> {
+    return this.roadEdges;
+  }
+
+  /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */
+  tilesOf(n: number): readonly number[] {
+    const g = this.planet.grid;
+    if (n < g.count) return [n];
+    const o = (n - g.count) * 3;
+    return [g.cornerTiles[o] as number, g.cornerTiles[o + 1] as number, g.cornerTiles[o + 2] as number];
+  }
+
+  /** Unit-sphere position of a lattice node (tile centre or corner). */
+  nodeXYZ(n: number): [number, number, number] {
+    const g = this.planet.grid;
+    const arr = n < g.count ? g.center : g.corners;
+    const o = (n < g.count ? n : n - g.count) * 3;
+    return [arr[o] as number, arr[o + 1] as number, arr[o + 2] as number];
   }
 
   /** Nearest road centreline to a point: distance (world units) and the closest centreline point. */
   roadAt(x: number, y: number, z: number, hint?: number): { d: number; cx: number; cy: number; cz: number } | null {
     if (this.roadEdges.size === 0) return null;
     const t = this.tileAt(x, y, z, hint);
-    const c = this.planet.grid.center;
     let best: { d: number; cx: number; cy: number; cz: number } | null = null;
     const test = (list: [number, number][] | undefined) => {
       if (!list) return;
       for (const [a, b] of list) {
-        const ax = c[a * 3] as number;
-        const ay = c[a * 3 + 1] as number;
-        const az = c[a * 3 + 2] as number;
-        const vx = (c[b * 3] as number) - ax;
-        const vy = (c[b * 3 + 1] as number) - ay;
-        const vz = (c[b * 3 + 2] as number) - az;
+        const [ax, ay, az] = this.nodeXYZ(a);
+        const [bx, by, bz] = this.nodeXYZ(b);
+        const vx = bx - ax;
+        const vy = by - ay;
+        const vz = bz - az;
         const len2 = vx * vx + vy * vy + vz * vz;
         const k = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / len2));
         const px = ax + vx * k;
