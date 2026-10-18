@@ -368,7 +368,7 @@ export class ChunkedTerrain {
       col[i * 3 + 2] = color.b;
       tileAttr[i] = s.tile;
       edgeAttr[i] = edge[i] as number;
-      roadAttr[i] = field.roadsAreRibbons ? 9 : Math.min(9, field.roadDistance(x, y, z, hint));
+      roadAttr[i] = field.roadsArePerPixel ? 9 : Math.min(9, field.roadDistance(x, y, z, hint));
       riverAttr[i] = Math.min(9, field.riverEdge(x, y, z, hint));
       if (!onBorder[i]) continue;
       // Normal from central differences on the field.

@@ -73,7 +73,7 @@ export class TerrainField {
   private pads = new Map<number, number>();
   /** Road edges (tile pairs) by tile, stored under both ends. */
   private roadEdges = new Map<number, [number, number][]>();
-  /** Roads run along tile borders (lattice mode): drawn as ribbons, the ground only gets a levelled bed. */
+  /** Roads run along tile borders (lattice mode): painted per pixel by the ground shader, the mesh only gets a levelled bed. */
   private latticeRoads = false;
   /** Smoothed river courses, shared by the carved bed and the water surface. */
   readonly rivers: RiverPoint[][] = [];
@@ -267,9 +267,14 @@ export class TerrainField {
     return [...changed];
   }
 
-  /** Lattice roads are drawn as ribbons of their own, not painted into the ground. */
-  get roadsAreRibbons(): boolean {
+  /** Lattice roads are painted per pixel from exact segments, not from per-vertex distances. */
+  get roadsArePerPixel(): boolean {
     return this.latticeRoads;
+  }
+
+  /** Road edges (node pairs) stored under each tile. */
+  roadEdgesByTile(): ReadonlyMap<number, readonly [number, number][]> {
+    return this.roadEdges;
   }
 
   /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */

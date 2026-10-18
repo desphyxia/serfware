@@ -27,6 +27,7 @@ import {
 } from "three/tsl";
 import { PAINT, PainterlyMaterial } from "../painterly";
 import { ROAD_HALF } from "./field";
+import type { RoadData } from "./roadData";
 import type { TileData } from "./tileData";
 
 /**
@@ -35,7 +36,7 @@ import type { TileData } from "./tileData";
  * sand at the shore), footpath wear, the build-mode grid, seasons (autumn, mud, snow) and
  * fog of war. Per-tile data comes from the shared tile texture, looked up per vertex.
  */
-export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMaterial & { userData: { uniforms: { uGrid: THREE.UniformNode<"float", number> } } } {
+export function makeGroundMaterial(tiles: TileData, radius: number, roads?: RoadData): PainterlyMaterial & { userData: { uniforms: { uGrid: THREE.UniformNode<"float", number> } } } {
   const mat = new PainterlyMaterial({ vertexColors: true, brush: 0 });
   const uGrid = uniform(0);
   const tile = attribute("aTile", "float");
@@ -82,7 +83,7 @@ export function makeGroundMaterial(tiles: TileData, radius: number): PainterlyMa
   const strata = sin(height.mul(5.5).add(mid.mul(2.5))).mul(0.5).add(0.5);
   const rock = mix(vec3(0.52, 0.49, 0.45), vec3(0.64, 0.58, 0.5), strata).mul(float(0.85).add(fine.mul(0.15)));
   // Distances to the nearest road centreline and to the river's water edge (world units).
-  const roadD = attribute("aRoad", "float");
+  const roadD = roads ? roads.distance(ts, radius) : attribute("aRoad", "float");
   const riverD = attribute("aRiver", "float");
   // Riverbanks are grassy and damp, not bare rock.
   const bank = smoothstep(1.8, 0.0, riverD);

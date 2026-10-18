@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 import { ChunkedTerrain } from "./terrain/chunks";
 import { TerrainField, type Pad } from "./terrain/field";
 import { makeGroundMaterial } from "./terrain/material";
+import { RoadData } from "./terrain/roadData";
 import { TileData } from "./terrain/tileData";
 import type { GraphicsSettings } from "../core/settings";
 import type { World } from "../sim/world";
@@ -22,7 +23,6 @@ import { WIND } from "./wind";
 import { SurfaceFrames } from "./frames";
 import { NatureView } from "./natureView";
 import { Overlays } from "./overlays";
-import { RoadRibbons } from "./roadRibbons";
 import { RiverView } from "./rivers";
 import { WeatherFx } from "./weatherFx";
 import type { FogMask } from "./fogMask";
@@ -41,8 +41,8 @@ export class WorldView {
   /** The detailed ground: a height field and the chunked mesh built on it. */
   readonly field: TerrainField;
   readonly terrain: ChunkedTerrain;
-  /** Lattice-mode roads, drawn as ribbons on the ground. */
-  readonly ribbons: RoadRibbons;
+  /** Lattice-mode road segments for the ground shader (exact per-pixel distance). */
+  private readonly roadData: RoadData | null;
   readonly tileData: TileData;
   private readonly groundMat: ReturnType<typeof makeGroundMaterial>;
   private padKey = -1;
@@ -111,7 +111,8 @@ export class WorldView {
       }
       this.tileData.commit("b");
     }
-    this.groundMat = makeGroundMaterial(this.tileData, R);
+    this.roadData = world.land.lattice ? new RoadData(planet.grid.count) : null;
+    this.groundMat = makeGroundMaterial(this.tileData, R, this.roadData ?? undefined);
     this.terrain = new ChunkedTerrain(planet, this.field, this.groundMat, graphics.terrainDetail);
 
     this.waterU = makeWaterUniforms();
@@ -162,10 +163,8 @@ export class WorldView {
     this.nature.blight = world.economy.adversity;
     this.grass.cover = world.economy.ecology;
     this.undergrowth.cover = world.economy.ecology;
-    this.ribbons = new RoadRibbons(this.field, R);
     this.group.add(
       this.terrain.group,
-      this.ribbons.group,
       this.water,
       this.rivers.group,
       this.frontier.group,
@@ -319,7 +318,6 @@ export class WorldView {
     this.econ.night.value = 1 - p.daylight;
     // Far from the view nobody is drawn: beyond about 1.6 view-distances (and at least 14 tiles) people only keep their place.
     this.econ.cull = p.ground && p.distance !== undefined ? { center: p.ground, r2: Math.max(p.distance * 1.6, 14) ** 2 } : null;
-    this.ribbons.update(p.distance ?? 20);
     this.econ.update(p.time, p.dt);
     this.grass.update(p.focus, p.closeness, p.vegetation);
     this.undergrowth.update(p.focus, p.closeness, p.vegetation);
@@ -400,7 +398,7 @@ export class WorldView {
     if (this.world.land.lattice) for (const b of eco.buildings) if (b.alive) edges.push([(eco.flags[b.flag] as { tile: number }).tile, b.tile]);
     // Roads are part of the ground: a levelled bed, painted by the ground material.
     const changed = [...this.field.setPads(pads), ...this.field.setRoads(edges)];
-    if (this.world.land.lattice) this.ribbons.set(edges);
+    this.roadData?.update(this.field);
     if (changed.length) {
       this.terrain.invalidate(changed);
       this.frames.invalidate();
