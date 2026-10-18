@@ -199,13 +199,13 @@ export class GameRenderer {
     const samples = g.ao && this.backend === "WebGPU" ? 0 : g.msaa;
     const scenePass = pass(this.scene, this.camera, { samples });
     // Only write the attachments a pass will read: every extra render target costs bandwidth,
-    // which is what phones' tile-based GPUs run out of first.
-    if (g.ao || g.bloom) {
-      const targets: Record<string, THREE.Node> = { output };
-      if (g.ao) targets.normal = packNormalToRGB(normalView);
-      if (g.bloom) targets.emissive = emissive;
-      scenePass.setMRT(mrt(targets));
-    }
+    // which is what phones' tile-based GPUs run out of first. The pass always gets an MRT, even
+    // with just the colour: without one the sea cannot read the depth behind it and shows the
+    // sea floor as plain sand (the low preset has no occlusion or bloom).
+    const targets: Record<string, THREE.Node> = { output };
+    if (g.ao) targets.normal = packNormalToRGB(normalView);
+    if (g.bloom) targets.emissive = emissive;
+    scenePass.setMRT(mrt(targets));
     this.scenePass = scenePass;
     const color = scenePass.getTextureNode("output");
     let lit = color.rgb;
