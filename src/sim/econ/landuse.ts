@@ -713,7 +713,14 @@ export class LandUse {
   /** Why a flag can't stand on `t` for `owner`, or null if it can. */
   flagBlocker(t: number, owner = 0, foothold = false): string | null {
     if (this.use[t] === Use.Flag) return null;
-    if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) return "water";
+    if (!this.isLand(t) && !this.isIce(t) && this.bridge[t] !== 1) {
+      // Shallow water lets the sand below show through, so say when a corner is only partly under it.
+      if (t >= this.tileCount) {
+        const wet = this.cornerTilesOf(t).filter((n) => !this.isLand(n)).length;
+        return `water (${wet} of the 3 tiles meeting here are under the sea; shallow water shows the sand below)`;
+      }
+      return "water";
+    }
     if (!(this.ownerOf(t) === owner + 1 || (foothold && this.ownerOf(t) === 0))) return "outside your border";
     if (this.use[t] === Use.Building) return "a building";
     if (!this.lattice && this.use[t] === Use.Blocked && !this.nbrs(t).some((n) => this.use[n] === Use.Building)) return "ground kept clear around the Hearthship";
