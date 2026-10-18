@@ -19,6 +19,8 @@ interface Chunk {
   level: number;
   mesh: THREE.Mesh | null;
   dirty: boolean;
+  /** A road runs through the chunk: roads are narrower than a coarse triangle, so it refines fully. */
+  hasRoad?: boolean;
   /** 0 = showing the next-coarser shape, 1 = the full detail of `level`. */
   morph: number;
   /** Level being faded down to before the mesh is swapped, or -1. */
@@ -110,7 +112,7 @@ export class ChunkedTerrain {
     const lvl = d < s * 15 ? 3 : d < s * 30 ? 2 : d < s * 60 ? 1 : 0;
     // Chunks on the far side of the planet stay coarse.
     const facing = c.center.dot(cam.clone().normalize());
-    return Math.min(this.maxLevel, facing < -0.2 ? 0 : lvl);
+    return Math.min(c.hasRoad ? 3 : this.maxLevel, facing < -0.2 ? 0 : lvl);
   }
 
   /**
@@ -494,6 +496,7 @@ export class ChunkedTerrain {
     this.triangles += tris.length / 3;
     c.level = level;
     c.dirty = false;
+    c.hasRoad = c.tiles.some((t) => field.hasRoad(t));
   }
 
   dispose(): void {

@@ -72,6 +72,8 @@ export class TerrainField {
   private pads = new Map<number, number>();
   /** Road edges (tile pairs) by tile, stored under both ends. */
   private roadEdges = new Map<number, [number, number][]>();
+  /** Roads run along tile borders (lattice mode), which coarse ground triangles cannot show. */
+  private latticeRoads = false;
   /** Smoothed river courses, shared by the carved bed and the water surface. */
   readonly rivers: RiverPoint[][] = [];
   /** River segments: ax, ay, az, bx, by, bz, width, depth per segment. */
@@ -241,6 +243,7 @@ export class TerrainField {
 
   /** Replace the set of roads (pairs of neighbouring tiles). Returns tiles whose ground changes. */
   setRoads(edges: readonly [number, number][]): number[] {
+    this.latticeRoads = edges.some(([a, b]) => a >= this.planet.grid.count || b >= this.planet.grid.count);
     const next = new Map<number, [number, number][]>();
     const key = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
     const nextKeys = new Set<string>();
@@ -261,6 +264,11 @@ export class TerrainField {
     for (const k of oldKeys) if (!nextKeys.has(k)) for (const n of k.split(":")) for (const t of this.tilesOf(Number(n))) changed.add(t);
     if (changed.size) this.roadEdges = next;
     return [...changed];
+  }
+
+  /** Does a lattice road pass through or beside this tile? */
+  hasRoad(t: number): boolean {
+    return this.latticeRoads && this.roadEdges.has(t);
   }
 
   /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */
