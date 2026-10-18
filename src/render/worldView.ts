@@ -390,6 +390,8 @@ export class WorldView {
     for (const f of eco.flags) if (f.alive && f.tile < this.world.land.tileCount) pads.push({ tile: f.tile, radius: 0.2 });
     const edges: [number, number][] = [];
     for (const r of eco.roads) if (r.alive) for (let i = 0; i < r.tiles.length - 1; i++) edges.push([r.tiles[i] as number, r.tiles[i + 1] as number]);
+    // In lattice mode a short path leads from each building's flag to its door.
+    if (this.world.land.lattice) for (const b of eco.buildings) if (b.alive) edges.push([(eco.flags[b.flag] as { tile: number }).tile, b.tile]);
     // Roads are part of the ground: a levelled bed, painted by the ground material.
     const changed = [...this.field.setPads(pads), ...this.field.setRoads(edges)];
     if (changed.length) {

@@ -24,7 +24,7 @@ export interface Pad {
 }
 
 /** Half-width of a road's surface, in world units. */
-export const ROAD_HALF = latticeRequested() ? 0.2 : 0.34;
+export const ROAD_HALF = latticeRequested() ? 0.28 : 0.34;
 
 /** A point on a smoothed river course. */
 export interface RiverPoint {
