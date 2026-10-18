@@ -360,6 +360,7 @@ export class Game {
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
       flagDirChanged: (label) => this.buildBar.setFlagDir(label),
       placementDebug: () => this.placementDebug,
+      centreNode: () => this.centreNode(),
     });
     this.buildBar = new BuildBar(
       (id) => this.tools.set(id),
@@ -561,6 +562,58 @@ export class Game {
     }
     else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
     return r.ok;
+  }
+
+  /** Last lattice node clicked with a tool, for the coordinate label. */
+  private clickedNode = -1;
+  private centreHint = 0;
+  private centreSeen = -1;
+  private coordLabel: HTMLElement | null = null;
+  private coordLabelAt = 0;
+
+  private toolClick(node: number, touch = false): void {
+    if (node >= 0) this.clickedNode = node;
+    this.tools.click(node, touch);
+    this.updateCoordLabel(true);
+  }
+
+  /** The lattice node under the middle of the screen (-1 when no ground is there). */
+  private centreNode(): number {
+    const ray = new THREE.Ray();
+    if (!this.cam.rayAt(0, 0, ray)) return -1;
+    const n = this.view.pick(ray, this.centreHint, "node");
+    if (n >= 0) this.centreHint = this.groundTile(n);
+    return n;
+  }
+
+  /** `tile 4872 · 12.30°N 45.60°E` or `corner 9314 (tiles a, b, c) · …` for a lattice node. */
+  private nodeLabel(node: number): string {
+    if (node < 0) return "-";
+    const grid = this.world.planet.grid;
+    const corner = node >= grid.count;
+    const c = corner ? [grid.corners[(node - grid.count) * 3], grid.corners[(node - grid.count) * 3 + 1], grid.corners[(node - grid.count) * 3 + 2]] : grid.centerOf(node);
+    const ll = formatLatLon(new THREE.Vector3(c[0] as number, c[1] as number, c[2] as number));
+    return corner ? `corner ${node} (tiles ${[...grid.cornerTiles.subarray((node - grid.count) * 3, (node - grid.count) * 3 + 3)].join(", ")}) · ${ll}` : `tile ${node} · ${ll}`;
+  }
+
+  /** Lattice mode: a label with the node at the middle of the screen and the last one clicked; keeps the red circles in step. */
+  private updateCoordLabel(force = false): void {
+    if (!this.world.land.lattice) return;
+    const now = performance.now();
+    if (!force && now - this.coordLabelAt < 200) return;
+    this.coordLabelAt = now;
+    if (!this.coordLabel) {
+      this.coordLabel = h("div", { class: "coordlabel" });
+      Object.assign(this.coordLabel.style, { position: "fixed", left: "8px", top: "100px", zIndex: "30", font: "11px/1.35 ui-monospace, monospace", color: "#fff", background: "rgba(0,0,0,0.55)", padding: "4px 6px", borderRadius: "4px", pointerEvents: "none", whiteSpace: "pre" });
+      document.body.append(this.coordLabel);
+    }
+    const centre = this.centreNode();
+    this.coordLabel.textContent = `Centre: ${this.nodeLabel(centre)}\nClicked: ${this.nodeLabel(this.clickedNode)}`;
+    // With nothing under the pointer, the red circles follow the middle of the screen.
+    if (this.hoverTile < 0 && centre !== this.centreSeen) {
+      this.centreSeen = centre;
+      this.tools.refresh();
+    }
   }
 
   /** Debug suffix for a message: where a lattice node is and what the ground there is (empty when off). */
@@ -2076,7 +2129,7 @@ export class Game {
       }
       this.updateHover();
       if (this.tools.tool === "select" && this.pickPerson()) return;
-      this.tools.click(this.hoverTile);
+      this.toolClick(this.hoverTile);
     };
     canvas.addEventListener("pointermove", (e) => {
       const d = this.downAt;
@@ -2118,7 +2171,7 @@ export class Game {
         if (this.painting) return this.paintClick(this.hoverTile);
         if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
-        this.tools.click(this.hoverTile, e.pointerType === "touch");
+        this.toolClick(this.hoverTile, e.pointerType === "touch");
       }
       else if (d.button === 2) this.tools.cancel();
     });
@@ -2252,7 +2305,7 @@ export class Game {
       case "confirm":
         if (this.tryLand(this.hoverTile)) return;
         if (this.tools.tool === "select" && this.pickPerson()) return;
-        this.tools.click(this.hoverTile);
+        this.toolClick(this.hoverTile);
         return;
       case "back":
         this.escape();
@@ -2439,6 +2492,7 @@ export class Game {
     this.hud.setBugLine([`seed ${this.world.seed}`, `build ${BUILD.id}`, where, `${formatDay(day)} local (tick ${this.world.tick})`]);
     this.hud.setFps(this.settings.get().ui.showFps, this.fps);
     this.debug.update();
+    this.updateCoordLabel();
     if (this.view.overlays.tileEdgesOn !== this.tileEdges) this.view.overlays.setTileEdges(this.tileEdges);
   }
 

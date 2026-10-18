@@ -14,6 +14,7 @@ export class Overlays {
   private readonly reach: THREE.InstancedMesh;
   /** Debug: green and red rings on the spots a placement check looked at. */
   private readonly spots: THREE.InstancedMesh;
+  private readonly spotsOk: THREE.InstancedMesh;
   private readonly preview: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   private readonly ghostMat = new THREE.MeshStandardMaterial({ color: "#9cc58f", transparent: true, opacity: 0.55, emissive: "#2a4a20", depthWrite: false });
   private ghost: THREE.Mesh | null = null;
@@ -41,10 +42,16 @@ export class Overlays {
     this.reach.count = 0;
     this.reach.frustumCulled = false;
     this.reach.renderOrder = 12;
-    this.spots = new THREE.InstancedMesh(new THREE.RingGeometry(0.3, 0.5, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.95, depthWrite: false, depthTest: false }), 16);
-    this.spots.count = 0;
-    this.spots.frustumCulled = false;
-    this.spots.renderOrder = 12;
+    // Two meshes, one per colour: per-instance colour does not reach a pipeline compiled while the mesh was empty.
+    const ring = new THREE.RingGeometry(0.3, 0.5, 20).rotateX(-Math.PI / 2);
+    const spotMat = (color: string) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false, toneMapped: false });
+    this.spots = new THREE.InstancedMesh(ring, spotMat("#ff3b3b"), 160);
+    this.spotsOk = new THREE.InstancedMesh(ring, spotMat("#5fe07a"), 160);
+    for (const m of [this.spots, this.spotsOk]) {
+      m.count = 0;
+      m.frustumCulled = false;
+      m.renderOrder = 12;
+    }
     const pg = new THREE.BufferGeometry();
     pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
     this.preview = new THREE.Line(pg, new THREE.LineBasicMaterial({ color: "#9cc58f", transparent: true, depthTest: false, linewidth: 2 }));
@@ -63,7 +70,7 @@ export class Overlays {
       this.anchor.add(m);
     }
     this.anchor.visible = false;
-    this.group.add(this.markers, this.reach, this.spots, this.preview, this.ghostFlag, this.anchor);
+    this.group.add(this.markers, this.reach, this.spots, this.spotsOk, this.preview, this.ghostFlag, this.anchor);
   }
 
   /** Highlight the flag a road starts from (-1 hides it). */
@@ -313,19 +320,19 @@ export class Overlays {
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3(1, 1, 1);
-    const c = new THREE.Color();
-    let n = 0;
-    for (const sp of spots.slice(0, 16)) {
+    let bad = 0;
+    let good = 0;
+    for (const sp of spots.slice(-160)) {
       const p = this.frames.pos(sp.node, 0.25);
       this.frames.orient(p, null, q);
       m.compose(p, q, s);
-      this.spots.setMatrixAt(n, m);
-      this.spots.setColorAt(n, c.set(sp.ok ? "#5fe07a" : "#ff4d4d"));
-      n++;
+      if (sp.ok) this.spotsOk.setMatrixAt(good++, m);
+      else this.spots.setMatrixAt(bad++, m);
     }
-    this.spots.count = n;
+    this.spots.count = bad;
+    this.spotsOk.count = good;
     this.spots.instanceMatrix.needsUpdate = true;
-    if (this.spots.instanceColor) this.spots.instanceColor.needsUpdate = true;
+    this.spotsOk.instanceMatrix.needsUpdate = true;
   }
 
   /** Ring the enemy buildings a selected lantern could attack (empty list hides them). */

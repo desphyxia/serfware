@@ -25,6 +25,8 @@ export interface ToolHost {
   flagDirChanged(label: string | null): void;
   /** Debug layer on: show why each spot beside the pointer works or not. */
   placementDebug?(): boolean;
+  /** The lattice node at the middle of the screen (-1: none), where the red "can't place" circles go when nothing is hovered. */
+  centreNode?(): number;
 }
 
 /** Compass sectors for the flag direction, clockwise from north (see LandUse.neighborInDirection). */
@@ -80,7 +82,7 @@ export class Tools {
 
   /** What a click picks: whole tiles for buildings, any lattice node (centre or corner) for flags and roads. */
   pickMode(): "tile" | "corner" | "node" {
-    return this.tool === "select" || this.tool === "flag" || this.tool === "road" ? "node" : "tile";
+    return this.tool === "select" || this.tool === "flag" || this.tool === "road" || this.isBuilding(this.tool) ? "node" : "tile";
   }
 
   /** The tile the building ghost sits on: the one a touch tap chose, else the hovered one. */
@@ -156,6 +158,7 @@ export class Tools {
   /** Why the building in hand can't go on the hovered tile, or null (also null for other tools). */
   hoverBlocker(): string | null {
     if (this.at() < 0 || !this.isBuilding(this.tool)) return null;
+    if (this.at() >= this.host.world().land.tileCount) return "Buildings stand on tile centres; flags go on the corners.";
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return null;
     const land = this.host.world().land;
@@ -170,6 +173,7 @@ export class Tools {
     if (t < 0) return [];
     const land = this.host.world().land;
     const pl = this.host.player();
+    if (this.isBuilding(this.tool) && t >= land.tileCount) return [[t, this.hoverBlocker()]];
     if (this.tool === "flag" || this.tool === "road") return [[t, land.use[t] === Use.Flag ? null : land.flagBlocker(t, pl)]];
     const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
     if (!def) return [];
@@ -183,6 +187,34 @@ export class Tools {
       else why = land.flagBlocker(n, pl, foothold);
       if (why === null && !land.canBuildDef(t, n, def, pl)) why = land.buildBlocker(t, def, pl, foothold, n) ?? "the building can't stand here with its flag on this side";
       out.push([n, why]);
+    }
+    return out;
+  }
+
+  /** Lattice mode: the nodes near the pointer (or the screen centre) where the tool in hand can't be used, ringed red. */
+  private blockedSpots(): { node: number; ok: boolean }[] {
+    const land = this.host.world().land;
+    const isB = this.isBuilding(this.tool);
+    if (!land.lattice || !(isB || this.tool === "flag" || this.tool === "road")) return [];
+    const origin = this.at() >= 0 ? this.at() : (this.host.centreNode?.() ?? -1);
+    if (origin < 0) return [];
+    const pl = this.host.player();
+    const def = isB ? BUILDINGS[BUILDING_INDEX.get(this.tool) as number] : undefined;
+    const seen = new Set<number>([origin]);
+    const queue = [origin];
+    const out: { node: number; ok: boolean }[] = [];
+    for (let i = 0; i < queue.length; i++) {
+      const n = queue[i] as number;
+      if (land.ownerOf(n) === pl + 1) {
+        if (def) {
+          if (n < land.tileCount && !land.canBuildDef(n, this.flagTileFor(n, pl, false), def, pl)) out.push({ node: n, ok: false });
+        } else if (land.use[n] !== Use.Flag && !land.canPlaceFlag(n, pl)) out.push({ node: n, ok: false });
+      }
+      if (queue.length >= 120) continue;
+      for (const m of land.nbrs(n)) if (!seen.has(m) && queue.length < 120) {
+        seen.add(m);
+        queue.push(m);
+      }
     }
     return out;
   }
@@ -238,9 +270,10 @@ export class Tools {
       ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : this.tool === "causeway" ? "#c8c0b0" : this.tool === "bridge" ? "#d8b878" : "#b8f08c");
     }
     const debug = this.host.placementDebug?.() ?? false;
-    if (debug || this.spotsShown) ov.setSpots(debug ? this.debugSpots().map(([node, why]) => ({ node, ok: why === null })) : []);
-    this.spotsShown = debug;
-    if (t < 0) return;
+    const spots = [...this.blockedSpots(), ...(debug ? this.debugSpots().map(([node, why]) => ({ node, ok: why === null })) : [])];
+    if (spots.length || this.spotsShown) ov.setSpots(spots);
+    this.spotsShown = spots.length > 0;
+    if (t < 0 || (this.isBuilding(this.tool) && t >= land.tileCount)) return;
 
     if (this.tool === "flag") {
       ov.setGhost("flag", t, -1, land.canPlaceFlag(t, pl));
@@ -347,6 +380,10 @@ export class Tools {
       }
       default: {
         if (!this.isBuilding(this.tool)) return;
+        if (t >= land.tileCount) {
+          this.host.notify("Buildings stand on tile centres; flags go on the corners.", "warn");
+          return;
+        }
         // Touch has no hover: the first tap shows the ghost (turn its flag with the Flag button),
         // a second tap on the same spot places it.
         if (touch && this.pending !== t) {
