@@ -154,8 +154,8 @@ export function waterNodes(u: WaterUniforms, o: WaterOptions = {}): { color: V3;
   const trans = exp(thickB.mul(vec3(-1.5, -0.6, -0.42)).mul(latticeRequested() ? 3 : 1));
   const deep = vec3(0.025, 0.12, 0.2).mul(light);
   // Lattice only: shallows lean towards a clear blue instead of the deep-sea teal.
-  const shallowBlue = latticeRequested() ? vec3(0.05, 0.38, 0.62).mul(light) : deep;
-  const tint = vec3(0.7, 0.88, 0.9);
+  const shallowBlue = latticeRequested() ? vec3(0.32, 0.72, 0.95).mul(light) : deep;
+  const tint = latticeRequested() ? vec3(0.55, 0.85, 1) : vec3(0.7, 0.88, 0.9);
   let col: V3 = bed.mul(tint).mul(trans).add(shallowBlue.mul(vec3(1, 1, 1).sub(trans)));
   // Caustics: bright wandering lines on the shallow bed.
   // They fade out with distance, where they would only read as noise.
