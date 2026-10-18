@@ -24,7 +24,7 @@ export interface Pad {
 }
 
 /** Half-width of a road's surface, in world units. */
-export const ROAD_HALF = latticeRequested() ? 0.28 : 0.34;
+export const ROAD_HALF = latticeRequested() ? 0.2 : 0.34;
 
 /** A point on a smoothed river course. */
 export interface RiverPoint {
@@ -73,7 +73,7 @@ export class TerrainField {
   private pads = new Map<number, number>();
   /** Road edges (tile pairs) by tile, stored under both ends. */
   private roadEdges = new Map<number, [number, number][]>();
-  /** Roads run along tile borders (lattice mode), which coarse ground triangles cannot show. */
+  /** Roads run along tile borders (lattice mode): drawn as ribbons, the ground only gets a levelled bed. */
   private latticeRoads = false;
   /** Smoothed river courses, shared by the carved bed and the water surface. */
   readonly rivers: RiverPoint[][] = [];
@@ -267,9 +267,9 @@ export class TerrainField {
     return [...changed];
   }
 
-  /** Does a lattice road pass through or beside this tile? */
-  hasRoad(t: number): boolean {
-    return this.latticeRoads && this.roadEdges.has(t);
+  /** Lattice roads are drawn as ribbons of their own, not painted into the ground. */
+  get roadsAreRibbons(): boolean {
+    return this.latticeRoads;
   }
 
   /** The tiles a lattice node touches: a tile centre is itself, a corner is its three tiles. */
@@ -281,7 +281,7 @@ export class TerrainField {
   }
 
   /** Unit-sphere position of a lattice node (tile centre or corner). */
-  private nodeXYZ(n: number): [number, number, number] {
+  nodeXYZ(n: number): [number, number, number] {
     const g = this.planet.grid;
     const arr = n < g.count ? g.center : g.corners;
     const o = (n < g.count ? n : n - g.count) * 3;
