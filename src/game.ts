@@ -700,7 +700,7 @@ export class Game {
   /** Look at the first building of a type owned by the local player. */
   focusBuilding(type: string, distance = 20): boolean {
     const b = this.world.economy.buildings.find((x) => x.alive && x.def.id === type && x.owner === this.session.player);
-    if (b) this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(b.tile)), distance);
+    if (b) this.focusTile(b.tile, distance);
     return !!b;
   }
 
@@ -716,7 +716,7 @@ export class Game {
   }
 
   focusTile(tile: number, distance = 20): void {
-    this.cam.lookAt(new THREE.Vector3(...this.world.planet.grid.centerOf(tile)), distance);
+    this.cam.lookAt(new THREE.Vector3(...this.world.land.nodePos(tile)), distance);
   }
 
   selectBuilding(id: number): void {
@@ -1159,7 +1159,7 @@ export class Game {
       }
     }
     if (stage === "rail" || stage === "launch") {
-      this.cam.lookAt(new THREE.Vector3(...w.planet.grid.centerOf(rail.tile)), 12);
+      this.cam.lookAt(new THREE.Vector3(...w.land.nodePos(rail.tile)), 12);
     } else this.visitPlanet(to, true);
     return to;
   }

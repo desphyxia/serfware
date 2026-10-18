@@ -39,7 +39,7 @@ export class FireView {
     const glow = new THREE.Vector3();
     let glowN = 0;
     const burn = (t: number, strength: number, key: string) => {
-      if (hiddenAt(this.mask, t)) return;
+      if (hiddenAt(this.mask, this.eco.land.pt(t))) return;
       const base = this.frames.pos(t);
       if (base.distanceTo(focus) < 25) {
         glow.add(base);

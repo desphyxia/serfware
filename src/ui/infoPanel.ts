@@ -303,7 +303,7 @@ export class InfoPanel extends Panel {
         if (b.def.job === "mine") {
           const land = eco.land;
           let left = 0;
-          for (const t of [b.tile, ...land.ring(b.tile, b.def.radius ?? 2)]) if (land.deposit[t] && DEPOSIT_IDS[land.deposit[t] as number] === b.def.resource) left += land.depositAmount[t] as number;
+          for (const t of [land.pt(b.tile), ...land.ring(b.tile, b.def.radius ?? 2)]) if (land.deposit[t] && DEPOSIT_IDS[land.deposit[t] as number] === b.def.resource) left += land.depositAmount[t] as number;
           body.push(h("p", { class: "hint" }, `About ${left} loads left in reach. Food for ${b.food} more.`));
         }
         if (b.def.inputs) body.push(h("h3", { class: "sub" }, "Inputs"), h("div", { class: "chips" }, ...Object.keys(b.def.inputs).map((id) => goodChip(GOODS.findIndex((g) => g.id === id), b.stock[GOODS.findIndex((g) => g.id === id)] ?? 0))));

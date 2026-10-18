@@ -247,7 +247,7 @@ export class FrontierView {
     for (const b of this.eco.buildings) {
       if (n >= this.boats.instanceMatrix.count) break;
       if (!b.alive || !b.built || !(b.def.id === "shellfisher" || b.def.id === "fisher" || b.def.id === "tidemill")) continue;
-      if (hiddenAt(this.mask, b.tile)) continue;
+      if (hiddenAt(this.mask, land.pt(b.tile))) continue;
       const water = land.nbrs(b.tile).find((x) => !land.isLand(x)) ?? land.ring(b.tile, 2).find((x) => !land.isLand(x));
       if (water === undefined) continue;
       // Halfway between the shore and the water tile, on the sea (lifted by the tide near the flats).

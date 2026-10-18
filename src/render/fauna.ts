@@ -196,7 +196,7 @@ export class Fauna {
     const near = new Set(around);
     near.add(center);
     for (const b of this.eco.buildings) {
-      if (!b.alive || !b.built || b.def.id !== "pasture" || !near.has(b.tile)) continue;
+      if (!b.alive || !b.built || b.def.id !== "pasture" || !near.has(this.eco.land.pt(b.tile))) continue;
       const pen = this.frames.pos(b.tile);
       const cows = b.id % 3 === 0;
       const n = cows ? 2 : 4;
@@ -228,7 +228,7 @@ export class Fauna {
     // Bees: around the skeps of apiaries and among orchard trees.
     this.beeState.length = 0;
     const hives: number[] = [];
-    for (const b of this.eco.buildings) if (b.alive && b.built && b.def.job === "bees" && near.has(b.tile)) hives.push(b.tile, b.tile, b.tile);
+    for (const b of this.eco.buildings) if (b.alive && b.built && b.def.job === "bees" && near.has(this.eco.land.pt(b.tile))) hives.push(this.eco.land.pt(b.tile), this.eco.land.pt(b.tile), this.eco.land.pt(b.tile));
     for (const t of landTiles) if (land.feature[t] === Feature.Tree && land.variety[t] === ORCHARD) hives.push(t);
     for (let i = 0; i < this.bees.count && hives.length; i++) {
       const t = hives[Math.floor(r() * hives.length)] as number;
