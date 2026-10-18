@@ -71,3 +71,17 @@ describe("lattice roads world", () => {
     for (const s of eco.settlers) if (s.alive) for (const p of s.path) expect(Number.isFinite(p) && p >= 0 && p < land.nodes).toBe(true);
   });
 });
+
+describe("lattice flags on tile centres", () => {
+  it("allows a flag on a free tile centre, but not beside another flag", () => {
+    const w = new World(SEED, { size: "small", latticeRoads: true });
+    const land = w.land;
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[0]!]!;
+    const centre = land.ring(keep.tile, 5).find((t) => land.canPlaceFlag(t, 0));
+    expect(centre).toBeDefined();
+    expect(w.command({ t: "flag", tile: centre! }).ok).toBe(true);
+    const next = land.nbrs(centre!)[0]!;
+    expect(land.canPlaceFlag(next, 0)).toBe(false);
+  });
+});

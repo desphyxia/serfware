@@ -78,10 +78,9 @@ export class Tools {
     return false;
   }
 
-  /** What a click picks: whole tiles for buildings, tile corners for flags and roads (on the lattice). */
+  /** What a click picks: whole tiles for buildings, any lattice node (centre or corner) for flags and roads. */
   pickMode(): "tile" | "corner" | "node" {
-    if (this.tool === "select") return "node";
-    return this.tool === "flag" || this.tool === "road" ? "corner" : "tile";
+    return this.tool === "select" || this.tool === "flag" || this.tool === "road" ? "node" : "tile";
   }
 
   /** The tile the building ghost sits on: the one a touch tap chose, else the hovered one. */
@@ -221,6 +220,7 @@ export class Tools {
           const n = land.tileCount + c;
           if (land.ownerOf(n) === pl + 1 && land.canPlaceFlag(n, pl) && land.use[n] !== Use.Road) tiles.push(n);
         }
+        for (let i = 0; i < land.tileCount; i++) if (land.territory[i] === pl + 1 && land.canPlaceFlag(i, pl) && land.use[i] !== Use.Road) tiles.push(i);
       } else if (this.tool === "flag" || this.isBuilding(this.tool)) {
         const def = this.isBuilding(this.tool) ? BUILDINGS[BUILDING_INDEX.get(this.tool) as number] : undefined;
         for (let i = 0; i < land.territory.length; i++) {

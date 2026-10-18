@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Ambience, type WorkSound } from "./audio/ambience";
-import { BUILD, LATTICE_DEFAULT } from "./build";
+import { BUILD, LATTICE_DEFAULT, PREVIEW_SEED } from "./build";
 import { crash } from "./core/crash";
 import { log } from "./core/log";
 import { describeLeak, MemoryMonitor, type MemSample } from "./core/memory";
@@ -1700,7 +1700,7 @@ export class Game {
     this.rivals = rivals;
     this.stakes = stakes;
     this.difficulty = difficulty;
-    const seed = seedInput && seedInput.trim() ? normaliseSeed(seedInput) : randomSeedWord(Math.floor(Math.random() * 2 ** 32));
+    const seed = seedInput && seedInput.trim() ? normaliseSeed(seedInput) : (PREVIEW_SEED ?? randomSeedWord(Math.floor(Math.random() * 2 ** 32)));
     this.loading.hidden = false;
     (this.loading.firstChild as HTMLElement).textContent = seed;
     await new Promise((r) => setTimeout(r, 40));

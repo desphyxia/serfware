@@ -605,8 +605,6 @@ export class LandUse {
   }
 
   canPlaceFlag(t: number, owner = 0, foothold = false): boolean {
-    // On the lattice flags stand on tile corners: a tile centre is for a building.
-    if (this.lattice && t < this.tileCount) return false;
     if (!(this.roadable(t, owner, foothold) || this.use[t] === Use.Road)) return false;
     // Tiles reserved around the Hearthship are Blocked for buildings but may carry a flag; a lone
     // Blocked tile (a hamlet) may not.
