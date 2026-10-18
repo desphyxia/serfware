@@ -23,6 +23,8 @@ export interface ToolHost {
   toolChanged(id: ToolId): void;
   /** The side the next building's flag goes on changed (null: chosen automatically). */
   flagDirChanged(label: string | null): void;
+  /** Debug layer on: show why each spot beside the pointer works or not. */
+  placementDebug?(): boolean;
 }
 
 /** Compass sectors for the flag direction, clockwise from north (see LandUse.neighborInDirection). */
@@ -39,6 +41,7 @@ export class Tools {
   /** Touch placement: the tile the first tap put the ghost on, waiting for a second tap. -1 if none. */
   private pending = -1;
   private markerKey = "";
+  private spotsShown = false;
   private demolishArm = -1;
   private demolishTime = 0;
   /** Which side the flag of a building being placed goes on: -1 picks the best, else 0..5 (FLAG_DIRS). */
@@ -162,6 +165,37 @@ export class Tools {
     return land.buildBlocker(this.at(), def, pl, foothold, this.flagDir < 0 ? -1 : this.flagTileFor(this.at(), pl, foothold));
   }
 
+  /** Every spot a placement at the hovered spot depends on, with the reason it fails (null: fine). */
+  private debugSpots(): [number, string | null][] {
+    const t = this.at();
+    if (t < 0) return [];
+    const land = this.host.world().land;
+    const pl = this.host.player();
+    if (this.tool === "flag" || this.tool === "road") return [[t, land.use[t] === Use.Flag ? null : land.flagBlocker(t, pl)]];
+    const def = BUILDINGS[BUILDING_INDEX.get(this.tool) as number];
+    if (!def) return [];
+    const foothold = def.ferry !== undefined && land.territory[t] === 0;
+    const out: [number, string | null][] = [[t, land.buildBlocker(t, def, pl, foothold)]];
+    for (let d = 0; d < FLAG_DIRS.length; d++) {
+      const n = land.neighborInDirection(t, d);
+      if (n < 0) continue;
+      let why: string | null;
+      if (land.use[n] === Use.Flag) why = this.host.world().economy.flagAt(n)?.building !== undefined && (this.host.world().economy.flagAt(n)?.building ?? -1) >= 0 ? "a flag already serves another building" : null;
+      else why = land.flagBlocker(n, pl, foothold);
+      if (why === null && !land.canBuildDef(t, n, def, pl)) why = land.buildBlocker(t, def, pl, foothold, n) ?? "the building can't stand here with its flag on this side";
+      out.push([n, why]);
+    }
+    return out;
+  }
+
+  /** Debug rows for the inspector: the reason for the building or flag spot and for each flag side. */
+  debugRows(): [string, string][] {
+    const spots = this.debugSpots();
+    if (!spots.length) return [];
+    const isB = this.isBuilding(this.tool);
+    return spots.map(([, why], i): [string, string] => [isB ? (i === 0 ? "Building" : `Flag ${FLAG_DIRS[i - 1]}`) : "Flag", why ?? "fine"]);
+  }
+
   private isBuilding(id: ToolId): boolean {
     return BUILDING_INDEX.has(id);
   }
@@ -181,7 +215,13 @@ export class Tools {
     if (key !== this.markerKey) {
       this.markerKey = key;
       const tiles: number[] = [];
-      if (this.tool === "flag" || this.isBuilding(this.tool)) {
+      if (land.lattice && this.tool === "flag") {
+        const grid = land.planet.grid;
+        for (let c = 0; c < grid.cornerTiles.length / 3; c++) {
+          const n = land.tileCount + c;
+          if (land.ownerOf(n) === pl + 1 && land.canPlaceFlag(n, pl) && land.use[n] !== Use.Road) tiles.push(n);
+        }
+      } else if (this.tool === "flag" || this.isBuilding(this.tool)) {
         const def = this.isBuilding(this.tool) ? BUILDINGS[BUILDING_INDEX.get(this.tool) as number] : undefined;
         for (let i = 0; i < land.territory.length; i++) {
           const free = def?.ferry !== undefined && land.territory[i] === 0;
@@ -197,6 +237,9 @@ export class Tools {
       }
       ov.setMarkers(tiles, this.tool === "flag" ? "#f0d08a" : this.tool === "hedge" ? "#8fd07a" : this.tool === "causeway" ? "#c8c0b0" : this.tool === "bridge" ? "#d8b878" : "#b8f08c");
     }
+    const debug = this.host.placementDebug?.() ?? false;
+    if (debug || this.spotsShown) ov.setSpots(debug ? this.debugSpots().map(([node, why]) => ({ node, ok: why === null })) : []);
+    this.spotsShown = debug;
     if (t < 0) return;
 
     if (this.tool === "flag") {

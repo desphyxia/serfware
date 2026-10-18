@@ -1083,7 +1083,7 @@ export class Economy {
     const land = this.land;
     switch (cmd.t) {
       case "flag":
-        return land.use[cmd.tile] === Use.Flag ? "There is already a flag here." : land.canPlaceFlag(cmd.tile, p) ? null : "A flag can't go here.";
+        return land.use[cmd.tile] === Use.Flag ? "There is already a flag here." : land.canPlaceFlag(cmd.tile, p) ? null : `A flag can't go here: ${land.flagBlocker(cmd.tile, p) ?? "something is in the way"}.`;
       case "road":
         return this.checkRoad(cmd.tiles, p);
       case "build":
@@ -1103,7 +1103,7 @@ export class Economy {
   private cmdFlag(tile: number, p: number, foothold = false): CommandResult {
     const land = this.land;
     if (land.use[tile] === Use.Flag) return { ok: false, reason: "There is already a flag here." };
-    if (!land.canPlaceFlag(tile, p, foothold)) return { ok: false, reason: "A flag can't go here." };
+    if (!land.canPlaceFlag(tile, p, foothold)) return { ok: false, reason: `A flag can't go here: ${land.flagBlocker(tile, p, foothold) ?? "something is in the way"}.` };
     if (land.use[tile] === Use.Road) {
       if ((this.roads[land.ref[tile] as number] as Road).owner !== p) return { ok: false, reason: "That road isn't yours." };
       return this.splitRoad(tile);

@@ -185,6 +185,8 @@ export class Game {
   private readonly pointer = new THREE.Vector2(9, 9);
   private pointerDirty = false;
   private hoverTile = -1;
+  /** Debug layer: show why spots beside the pointer work or fail for the tool in hand. */
+  private placementDebug = false;
   get speed(): number {
     return this.session.speed;
   }
@@ -275,6 +277,12 @@ export class Game {
         "Pause": () => (this.speed = 0),
         "Grid (G)": () => this.view.setGrid(!this.view.grid),
         "Tile edges": () => this.setTileEdges(!this.tileEdges),
+        "Placement reasons": () => {
+          this.placementDebug = !this.placementDebug;
+          this.toasts.show(this.placementDebug ? "Placement reasons on: hover a spot with Flag or a building tool." : "Placement reasons off.", "info");
+          this.tools.refresh();
+          this.setHover(this.hoverTile);
+        },
         "Lattice spike": () => this.latticeSpike(!this.latticeOn, this.world.economy.flags[0]?.tile ?? -1),
         "Weather here": () => this.summonWeather(),
         "Skip 6 days": () => this.skipDays(6),
@@ -350,6 +358,7 @@ export class Game {
       select: (sel: Selection) => this.info.select(sel),
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
       flagDirChanged: (label) => this.buildBar.setFlagDir(label),
+      placementDebug: () => this.placementDebug,
     });
     this.buildBar = new BuildBar(
       (id) => this.tools.set(id),
@@ -2744,6 +2753,7 @@ export class Game {
     const land = this.world.land;
     this.tools.hoverTile(node);
     const blocker = this.tools.hoverBlocker();
+    if (this.placementDebug) rows.unshift(...this.tools.debugRows());
     if (blocker) rows.unshift(["Can't build here", blocker]);
     if (land.feature[tile] === Feature.Giant) rows.push(["Ancient tree", land.variety[tile] === 1 ? "marked for felling" : `${land.amount[tile]} logs · Demolish marks it`]);
     else if (land.feature[tile] === Feature.Hedge) rows.push(["Hedgerow", "shelters fields"]);
