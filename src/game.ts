@@ -1961,6 +1961,7 @@ export class Game {
     let creative: Creative | undefined = def?.kind === "custom" ? { custom: def } : !scenario && mods.length ? { mods } : undefined;
     if (!scenario && this.mapOptions) creative = { ...creative, map: this.mapOptions };
     if (rules) creative = { ...creative, rules };
+    if (!scenario && latticeRequested()) creative = { ...creative, lattice: true };
     this.useSession(lobby.start(seed, mode, scenario, creative));
     if (scenario) this.tellIntro();
     this.menu.hide();

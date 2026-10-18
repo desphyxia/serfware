@@ -74,7 +74,7 @@ export interface WorldOptions {
   air?: AirStart;
   /**
    * Experimental: flags stand on tile corners and roads run along tile borders and spokes (see
-   * HexLattice). One human, no AI rivals and no hamlets yet; the default is the tile-centre roads.
+   * HexLattice). Off by default: the tile-centre roads.
    */
   latticeRoads?: boolean;
   /** A painted world: brush strokes and Star Well places on top of the seed (the world painter). */
