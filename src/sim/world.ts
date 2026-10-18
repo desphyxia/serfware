@@ -74,7 +74,7 @@ export interface WorldOptions {
   air?: AirStart;
   /**
    * Experimental: flags stand on tile corners and roads run along tile borders and spokes (see
-   * HexLattice). One human, no AI rivals and no hamlets yet; the default is the tile-centre roads.
+   * HexLattice). Off by default: the tile-centre roads.
    */
   latticeRoads?: boolean;
   /** A painted world: brush strokes and Star Well places on top of the seed (the world painter). */
@@ -170,7 +170,7 @@ export class World implements WorldHost {
     this.brainFactory = opts.brain ?? defaultBrain;
     this.humans = Math.max(1, Math.min(8, opts.players ?? 1));
     const bare = opts.survey || opts.colony;
-    this.rivals = bare || opts.latticeRoads ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
+    this.rivals = bare ? 0 : Math.max(0, Math.min(8 - this.humans, opts.rivals ?? 0));
     this.players = this.humans + this.rivals;
     if (opts.teams) for (let p = 0; p < this.players; p++) this.economy.teams[p] = opts.teams[p] ?? p + 100;
     this.economy.goal = opts.goal ?? "conquest";
@@ -192,7 +192,7 @@ export class World implements WorldHost {
       const ai = this.ai.find((a) => a.player === p) ?? this.stewards.get(p);
       return ai ? answerOffer(this.economy, ai.personality, p, prop) : false;
     };
-    this.economy.wanderers.setup(seed, { hamlets: !bare && !opts.latticeRoads, creatures: !opts.survey && (!opts.barren || !!opts.native), native: !!opts.native });
+    this.economy.wanderers.setup(seed, { hamlets: !bare, creatures: !opts.survey && (!opts.barren || !!opts.native), native: !!opts.native });
     // Start the clock so it is early morning at the first Hearthship.
     const keep = this.economy.buildings[this.economy.keeps[0] ?? -1];
     if (keep) {

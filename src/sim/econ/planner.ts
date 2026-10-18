@@ -285,7 +285,9 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
     if (road && !(existing && existing.roads.length > 0)) {
       if (w.command({ t: "road", tiles: road, player }).ok && splitRoads) {
         // More flags on long roads mean more carriers and fewer queues.
-        if (road.length > 8) for (let i = 4; i < road.length - 3; i += 4) w.command({ t: "flag", tile: road[i] as number, player });
+        // Lattice nodes lie half as far apart, so the same walking distance takes twice the nodes.
+        const gap = land.lattice ? 8 : 4;
+        if (road.length > 2 * gap) for (let i = gap; i < road.length - (gap - 1); i += gap) w.command({ t: "flag", tile: road[i] as number, player });
       }
     }
     return t;

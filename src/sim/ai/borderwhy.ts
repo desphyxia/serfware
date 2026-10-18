@@ -87,7 +87,9 @@ export function diagnoseBorder(w: World, player: number, type: string, tiles: re
     if (land.roadable(x, player)) return true;
     if (!land.isLand(x) || !(lift.border || land.mayRoad(x, player))) return false;
     if (!lift.use && land.use[x] !== Use.Free && land.use[x] !== Use.Blocked) return false;
-    if (BLOCKS_ROAD.has(land.feature[x] as number) && !features.has(land.feature[x] as number)) return false;
+    // Features belong to tiles: a corner has none of its own.
+    const f = x < land.tileCount ? (land.feature[x] as number) : -1;
+    if (BLOCKS_ROAD.has(f) && !features.has(f)) return false;
     return !!lift.slope || land.slope(x) < ROAD_SLOPE;
   };
 

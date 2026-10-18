@@ -171,7 +171,7 @@ export class EconView {
   seen(t: number, owner: number, live = false): boolean {
     if (!this.fog || owner === this.viewer) return true;
     const arr = live ? this.eco.visible[this.viewer] : this.eco.explored[this.viewer];
-    return !arr || arr[t] === 1;
+    return !arr || arr[this.eco.land.pt(t)] === 1;
   }
 
   /** Flames and soft halos over lit lanterns and each Hearthship, in the owner's colour. */

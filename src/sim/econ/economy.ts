@@ -1207,10 +1207,9 @@ export class Economy {
   /** The same between two flag tiles, over at most `limit` steps of open water. */
   ferryRoute(fa: number, fb: number, limit: number): { tiles: number[]; steps: number } | null {
     const land = this.land;
-    const grid = land.planet.grid;
     const open = (t: number) => !land.isLand(t) && !land.isIce(t);
-    const targets = new Set(grid.neighborsOf(fb).filter(open));
-    const from = grid.neighborsOf(fa).filter(open);
+    const targets = new Set(Array.from(land.nbrs(fb)).filter(open));
+    const from = Array.from(land.nbrs(fa)).filter(open);
     if (!targets.size || !from.length) return null;
     const parent = new Map<number, number>();
     const depth = new Map<number, number>();
@@ -1230,7 +1229,7 @@ export class Economy {
         return { tiles: tiles.reverse(), steps: d };
       }
       if (d >= limit) continue;
-      for (const n of grid.neighborsOf(t)) {
+      for (const n of land.nbrs(t)) {
         if (parent.has(n) || !open(n)) continue;
         parent.set(n, t);
         depth.set(n, d + 1);
@@ -1403,6 +1402,7 @@ export class Economy {
   /** Engineers: a bridge over a shallow stretch of water inside your borders, joined to land. */
   private cmdBridge(p: number, tile: number): CommandResult {
     const land = this.land;
+    tile = land.pt(tile);
     const why = land.bridgeBlocked(tile, p);
     if (why) return { ok: false, reason: why };
     if (!this.takeGoods(p, BRIDGE_COST)) return { ok: false, reason: "A bridge needs 2 planks in your stores." };
@@ -1584,7 +1584,7 @@ export class Economy {
   }
 
   private clearShrub(t: number): void {
-    if (this.land.feature[t] === Feature.Shrub) {
+    if (t < this.land.tileCount && this.land.feature[t] === Feature.Shrub) {
       this.land.feature[t] = Feature.None;
       this.land.featureVersion++;
     }
@@ -3096,6 +3096,7 @@ export class Economy {
   /** Visit tiles within `radius` steps of `center` with their distance. */
   private flood(center: number, radius: number, visit: (t: number, d: number) => void): void {
     const grid = this.land.planet.grid;
+    center = this.land.pt(center);
     const dist = new Map<number, number>([[center, 0]]);
     const queue = [center];
     for (let i = 0; i < queue.length; i++) {
@@ -3231,7 +3232,7 @@ export class Economy {
     const b = s.path[s.pi + 1] as number;
     const onRoad = this.land.use[b] === Use.Road || this.land.use[b] === Use.Flag || this.land.ferry[b] === 1;
     // High water over the flats: wait on the shore for the ebb (causeways and stilts stay dry).
-    if (this.land.flooded[b] && !this.land.causeway[b] && this.land.use[b] !== Use.Building) return false;
+    if (this.land.tideBlocked(b) && this.land.use[b] !== Use.Building) return false;
     // Skystone is buoyant: its carriers walk as if empty-handed, and a little quicker.
     const light = s.carryGood >= 0 && this.goods[s.carryGood]?.type === goodId("skystone") ? 0.8 : 1;
     // People raised on heavier worlds stride easily on lighter ones (and the other way round).
@@ -3241,14 +3242,10 @@ export class Economy {
       s.prog -= 1000;
       s.pi++;
       if (!onRoad && this.land.use[b] !== Use.Building && !this.land.ferry[b]) {
-        this.land.wear[b] = Math.min(2000, (this.land.wear[b] as number) + 24);
-        this.land.wearVersion++;
+        this.land.trample(b, 24);
       }
       // Traffic clears blown sand off the road.
-      if (onRoad && (this.land.sand[b] as number) > 0) {
-        this.land.sand[b] = Math.max(0, (this.land.sand[b] as number) - 0.04);
-        this.land.sandVersion++;
-      }
+      if (onRoad) this.land.sweepSand(b, 0.04);
       if (s.pi >= s.path.length - 1) {
         s.prog = 0;
         return true;
@@ -4825,7 +4822,7 @@ export class Economy {
     land.warm.fill(0);
     for (const b of this.buildings) {
       if (!b.alive || !b.built || !b.def.warmth || b.stranded >= 0) continue;
-      const around = [b.tile, ...land.ring(b.tile, b.def.warmth)];
+      const around = [land.pt(b.tile), ...land.ring(b.tile, b.def.warmth)];
       if (b.def.heated && b.fuelUntil <= this.tick) {
         if ((b.stock[log] as number) <= 0 || !around.some((t) => land.chill[t])) continue;
         b.stock[log]!--;
@@ -4839,7 +4836,7 @@ export class Economy {
   private sinkIceRoads(): void {
     const land = this.land;
     const sunk = new Set<number>();
-    const thin = (t: number) => land.hydro.lake[t] === 1 && !land.frozen[t];
+    const thin = (t: number) => land.thinIce(t);
     for (const r of this.roads) {
       if (!r.alive || !r.tiles.some(thin)) continue;
       sunk.add(r.owner);
