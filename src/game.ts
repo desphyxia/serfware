@@ -187,6 +187,8 @@ export class Game {
   private hoverTile = -1;
   /** Debug layer: show why spots beside the pointer work or fail for the tool in hand. */
   private placementDebug = false;
+  /** Debug: add the spot's id, tiles, position and ground facts to refusal messages. */
+  private coordsInMessages = false;
   get speed(): number {
     return this.session.speed;
   }
@@ -283,6 +285,10 @@ export class Game {
           this.tools.refresh();
           this.setHover(this.hoverTile);
         },
+        "Coordinates in messages": () => {
+          this.coordsInMessages = !this.coordsInMessages;
+          this.toasts.show(this.coordsInMessages ? "Refusal messages now include the spot's coordinates." : "Coordinates in messages off.", "info");
+        },
         "Lattice spike": () => this.latticeSpike(!this.latticeOn, this.world.economy.flags[0]?.tile ?? -1),
         "Weather here": () => this.summonWeather(),
         "Skip 6 days": () => this.skipDays(6),
@@ -354,7 +360,7 @@ export class Game {
       player: () => this.session.player,
       overlays: () => this.view.overlays,
       command: (cmd) => this.command(cmd),
-      notify: (text, kind) => this.toasts.show(text, kind),
+      notify: (text, kind) => this.toasts.show(kind === "warn" && this.hoverTile >= 0 ? text + this.spotNote(this.hoverTile) : text, kind),
       select: (sel: Selection) => this.info.select(sel),
       toolChanged: (id: ToolId) => this.buildBar.setActive(id),
       flagDirChanged: (label) => this.buildBar.setFlagDir(label),
@@ -553,9 +559,26 @@ export class Game {
       cmd = { ...(cmd as Command), planet: this.visitIndex };
     }
     const r = this.session.submit(cmd as WorldCommand);
-    if (!r.ok && r.reason) this.toasts.show(r.reason, "warn");
+    if (!r.ok && r.reason) {
+      const c = cmd as { tile?: number; tiles?: number[] };
+      const at = c.tile ?? c.tiles?.[c.tiles.length - 1];
+      this.toasts.show(r.reason + (at !== undefined ? this.spotNote(at) : ""), "warn");
+    }
     else if (r.ok) log.debug(`cmd ${JSON.stringify(cmd)}`);
     return r.ok;
+  }
+
+  /** Debug suffix for a message: where a lattice node is and what the ground there is (empty when off). */
+  private spotNote(node: number): string {
+    if (!this.coordsInMessages || node < 0) return "";
+    const grid = this.world.planet.grid;
+    const land = this.world.land;
+    const corner = node >= grid.count;
+    const tiles = corner ? [...grid.cornerTiles.subarray((node - grid.count) * 3, (node - grid.count) * 3 + 3)] : [node];
+    const c = corner ? [grid.corners[(node - grid.count) * 3], grid.corners[(node - grid.count) * 3 + 1], grid.corners[(node - grid.count) * 3 + 2]] : grid.centerOf(node);
+    const ll = formatLatLon(new THREE.Vector3(c[0] as number, c[1] as number, c[2] as number));
+    const facts = `use ${land.use[node]}, slope ${land.slope(node).toFixed(2)}, owner ${land.ownerOf(node)}, land ${land.isLand(node)}, feature ${tiles.map((t) => land.feature[t]).join("/")}`;
+    return ` [${corner ? `corner ${node} of tiles ${tiles.join(", ")}` : `tile ${node}`} · ${ll} · ${facts}]`;
   }
 
   /** Start looking at the Hearthship. */
