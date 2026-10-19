@@ -141,6 +141,8 @@ node scripts/balance-flows.mjs --out balance-pilot3
   buildings and at most three, and the geologists look for a granite sign while that quota has none. Before, one granite mine
   was wanted only while the stores held under 8 stone, and relieveStone placed one or two when stone ran short.
 - `armed`: plays the armed-wardens rule (`armedWardens`, a match option; see the results below), not an `aiOptions` switch.
+- `lattice`: plays the Serf City road lattice (`latticeRoads`, a match option; `?lattice=1` in the game), not an `aiOptions`
+  switch. Flags and buildings sit on tile corners as well as tile centres. See "Result: the road lattice" below.
 - `turn`: a building takes the best of its flag sides, as a player turns it with the mouse wheel, not the flattest one: every
   side is planned (the new road to the network, the distance to the buildings it trades with, the height step) and the
   cheapest is taken (`BALANCE_TURN_WEIGHT` sets the weight on the distance, default 2). Issue #148.
@@ -727,6 +729,49 @@ noise). `large` was left out of these runs.
   ran clean. Sweeps ran at low concurrency (2 workers) and resumed (the sweep skips games already in `assess.jsonl`); one failed game
   was retried.
 
+### Result: the road lattice (`lattice`, PRs #159 and #162)
+
+Asked after #159 (the lattice) and #162 (AI rivals and hamlets on it) merged: did they change anything balance-wise? The lattice is
+off unless `?lattice=1`, so two questions.
+
+**1. The default game.** `hash.ts` on `377234d` (before #159), `20b350b` (#159) and `637273d` (#162), same games, 24 pairs
+(12 games a build: `A`, standard stack, no war, tiny, small and medium two seeds each for 80 days, large one seed for 40 days;
+`B`, peace 5 and `armed`, tiny and small two seeds each for 60 days, medium one seed for 40 days; days 1, 2, 4, 8, … and the last;
+the pairs are one build against the next): all 24 pairs gave equal lines, 90 distinct checksums. #159 and
+#162 leave the default game bit-identical, so an assessment from before them is still a valid baseline.
+
+**2. The lattice game** (standard stack, three rivals, no war, 80 days, 3 seeds a size, 9 games; the default baseline is
+`ab12-food`, 10 games). Per rival seat, default / lattice before the fix below / lattice after it:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| Buildings d60 | 44 / 31 / 86 | 54 / 35 / 72 | 103 / 46 / 80 |
+| People d60 | 95 / 80 / 171 | 116 / 85 / 155 | 196 / 108 / 178 |
+| Road tiles per finished building d60 | 3.6 / 6.6 / 3.9 | 3.6 / 7.2 / 4.4 | 3.9 / 8.0 / 5.8 |
+| Hungry seat-days from day 30 | 24% / 26% / 23% | 43% / 32% / 29% | 26% / 34% / 36% |
+| Open land at the end (share of held) | 0.11 / – / 0.16 | 0.20 / – / 0.31 | 0.21 / – / 0.37 |
+| Seats with a smelter | 33% / – / 56% | 22% / – / 44% | 89% / 0% / 56% |
+
+Land held is the same in all three (tiny 258 / – / 249 on day 60, medium 826 / – / 817), and no game had a war or a colony.
+
+- **Cause of the first result (before the fix), verified in a probe.** `planner.ts` read positions of lattice nodes from the
+  tile-only `grid.center`. A flag on a tile corner has an id past the end of that table, so its distance was NaN and the "6 nearest
+  flags" a new building's flag joins fell back to flag id order: far away or unreachable. Flag sides were also counted only over
+  neighbouring tile centres. In tiny `bal-001` on day 30, seat 1 had 136 tiles where a house fits and no road to any of them.
+  The AI's rings were not the cause: `land.ring()` is tile based on the lattice too.
+- **The fix** (`stepsBetween`, `planSide`, `flagSides` in `planner.ts` use `land.lattice.pos`, `land.pt`, `land.nbrs`,
+  `land.ownerOf`): tiny `bal-001` day 30, buildings of seats 1 to 3: 36 / 34 / 25 before, 164 / 98 / 65 after, 67 / 34 / 59 in the
+  default game. It touches the lattice only: the same 12 games, played with the fix, give checksum series equal to `637273d`'s.
+- **After the fix, the lattice is not like the default game.** Tiny grows about twice as fast (the same land holds more
+  buildings), small about a third faster, medium is 22% behind and has no smelter on 44% of seats against 11%. Why is not known
+  (#164). Medium's road tiles per building are still +49%.
+- **A rule break.** One lattice game (medium `bal-002`) had flag 97 hold 9 goods, 45 times in the record from day 36 (#163).
+  The default games had none.
+- **Not checked:** the other tile-indexed `grid.center` reads in the AI (`builder.ts`, `economy.ts`, `biome.ts`, `war.ts`,
+  `voyage.ts`, `planner.ts`), war and trade on the lattice, `large`. One sweep, so differences under about 15% are noise.
+- Node crashed at random under WSL2 here too (kernel log: signals 11, 5 and 4, 22 captures in 1 day 20 hours; the faulting address
+  of two SIGILLs lies outside the Node binary). The crashes were not traced; the sweeps ran at 2 workers with retries.
+
 ## Looking at the map
 
 Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
@@ -747,7 +792,13 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
 
 - `hash.ts <size> <seed> <days>`: plays three default-brain rivals and prints the world checksum at the end of days 1, 2, 4,
   8, 16. Run on two builds, equal lines mean they play identically. With every AI switch off, this branch and `master` at
-  `03bbc33` gave equal lines in 6 games (tiny and small, 3 seeds, 16 days).
+  `03bbc33` gave equal lines in 6 games (tiny and small, 3 seeds, 16 days). It also reads `BALANCE_AI` (the same tokens as
+  `run.ts`, those that are `aiOptions` switches, plus `armed`), `BALANCE_PEACE` (default 999) and plays the AI builder, so it can
+  compare two builds on the assess game; it prints the last day as well as the powers of two.
+- `latticewhy.ts <size> <seed> <days> [lattice]`: plays the assess game (standard stack, three rivals) on the road lattice with
+  `lattice` and on tile-centre roads without. Per seat: where the builder's last 10 days of thoughts stopped and what failed; the own
+  tiles where a house, farm or woodcutter fits, with a flag side and a road, and whether `placeConnected` places one within 9 and 16
+  steps. Places buildings at the end.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the

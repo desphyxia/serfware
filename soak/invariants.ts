@@ -41,7 +41,7 @@ export function invariants(w: World): string[] {
     if (!s.alive) continue;
     const p = eco.people[s.person];
     if (s.person >= 0 && (!p || !p.alive)) bad(`settler ${s.id} is a person who is gone`);
-    if (s.path.some((t) => t < 0 || t >= land.planet.grid.count)) bad(`settler ${s.id} walks off the world`);
+    if (s.path.some((t) => t < 0 || t >= land.nodes)) bad(`settler ${s.id} walks off the world`);
   }
   for (let p = 0; p < eco.keeps.length; p++) {
     if (eco.keeps[p] === undefined) continue;

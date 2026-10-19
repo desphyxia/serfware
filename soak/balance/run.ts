@@ -119,6 +119,8 @@ export function playGame(spec: GameSpec): GameRecord {
     fairStarts: spec.fairStarts,
     teams: spec.teams,
     armedWardens: ai.includes("armed"),
+    // "lattice" plays the Serf City road lattice (`?lattice=1` in the game): flags and buildings on tile corners.
+    ...(ai.includes("lattice") && { latticeRoads: true }),
     brain: (seat) => new AiBuilder(seat.player, seat.rng, seat.personality, seat.level),
   });
   w.command({ t: "steward", of: 0, on: true });

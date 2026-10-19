@@ -152,15 +152,18 @@ function partnerFlags(w: World, def: BuildingDef, player: number): number[] {
 
 /** Straight-line distance between two tiles in tile spacings (about the steps a settler walks). */
 function stepsBetween(w: World, a: number, b: number): number {
-  const grid = w.land.planet.grid;
-  const c = grid.center;
+  const land = w.land;
+  const grid = land.planet.grid;
+  // A node is a tile, or on the road lattice a tile corner: its position is the lattice's.
+  const c = land.lattice ? land.lattice.pos : grid.center;
   const d = (x: number, y: number) => {
     const dx = (c[x * 3] as number) - (c[y * 3] as number);
     const dy = (c[x * 3 + 1] as number) - (c[y * 3 + 1] as number);
     const dz = (c[x * 3 + 2] as number) - (c[y * 3 + 2] as number);
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   };
-  const unit = d(a, grid.neighborsOf(a)[0] as number) || 1;
+  const tile = land.pt(a);
+  const unit = d(tile, grid.neighborsOf(tile)[0] as number) || 1;
   return d(a, b) / unit;
 }
 
@@ -174,10 +177,10 @@ export function flagSides(w: World, t: number, def: BuildingDef, player: number)
   const first = land.bestFlagTile(t, player);
   const out: number[] = [];
   if (first >= 0 && land.canBuildDef(t, first, def, player)) out.push(first);
-  for (const n of land.planet.grid.neighborsOf(t)) {
+  for (const n of land.nbrs(t)) {
     if (n === first) continue;
     if (land.use[n] === Use.Flag) {
-      if (land.territory[n] !== player + 1 || land.flagServes?.(n)) continue;
+      if (land.ownerOf(n) !== player + 1 || land.flagServes?.(n)) continue;
     } else if (!land.canPlaceFlag(n, player)) continue;
     if (land.canBuildDef(t, n, def, player)) out.push(n);
   }
@@ -202,7 +205,8 @@ export interface SidePlan {
 function planSide(w: World, def: BuildingDef, t: number, flagTile: number, player: number, home: () => Set<number>, partners: number[] | null): SidePlan | null {
   const eco = w.economy;
   const land = w.land;
-  const c = land.planet.grid.center;
+  // A flag may stand on a tile corner on the road lattice: positions are the lattice's, not the grid's.
+  const c = land.lattice ? land.lattice.pos : land.planet.grid.center;
   const existing = eco.flagAt(flagTile);
   if (existing && existing.building >= 0) return null;
   const hold = heldTiles(w, player);
@@ -231,11 +235,11 @@ function planSide(w: World, def: BuildingDef, t: number, flagTile: number, playe
     cost = existing && existing.roads.length > 0 ? 0 : road ? road.length - 1 : 30;
     const steps = partners.map((pt) => stepsBetween(w, flagTile, pt)).sort((a, b) => a - b);
     for (let i = 0; i < Math.min(PARTNERS, steps.length); i++) cost += (aiOptions.turnPartnerWeight * (steps[i] as number)) / Math.min(PARTNERS, steps.length);
-    cost += Math.abs((land.planet.terrain.elevation[flagTile] as number) - (land.planet.terrain.elevation[t] as number)) * 0.1;
+    cost += Math.abs((land.planet.terrain.elevation[land.pt(flagTile)] as number) - (land.planet.terrain.elevation[land.pt(t)] as number)) * 0.1;
     // A new flag takes the free tiles beside it out of use for flags and, with them, for buildings; one on a flag that stands takes none.
     if (aiOptions.turnBlockWeight > 0 && !existing) {
       let blocked = 0;
-      for (const n of land.planet.grid.neighborsOf(flagTile)) if (n !== t && land.roadable(n, player) && land.use[n] === Use.Free) blocked++;
+      for (const n of land.nbrs(flagTile)) if (n !== t && land.roadable(n, player) && land.use[n] === Use.Free) blocked++;
       cost += aiOptions.turnBlockWeight * blocked;
     }
   }
