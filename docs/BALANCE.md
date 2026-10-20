@@ -769,6 +769,14 @@ Land held is the same in all three (tiny 258 / – / 249 on day 60, medium 826 /
   The default games had none.
 - **Not checked:** the other tile-indexed `grid.center` reads in the AI (`builder.ts`, `economy.ts`, `biome.ts`, `war.ts`,
   `voyage.ts`, `planner.ts`), war and trade on the lattice, `large`. One sweep, so differences under about 15% are noise.
+- **The 9-goods flag (#163), cause and fix.** In the medium `bal-002` game a flag held 6 goods and 1 promised place when
+  `recomputeTerritory` removed roads and two dismissed carriers put their goods down on it (`dropCarriedGoodAt` counts the goods,
+  not the promised places); the carrier the place was promised to then arrived and `dropAt` pushed the 9th. Not specific to the
+  lattice: drops that leave goods plus promised places over the capacity were counted in 1 of 6 default games (3 events) and 3 of 6
+  lattice games (6 events) of tiny and small, 60 days, seeds 001 to 003 (counts, not realised 9s; one realised in 19 games). Fix:
+  `dropAt` gives up the promise of a carrier arriving at a flag that already holds the capacity (one over with `breakRings`) and
+  takes the swap path or waits. The 12 default same-game series equal `637273d`; the replay of `bal-002` runs 80 days with no flag
+  over 8 goods.
 - Node crashed at random under WSL2 here too (kernel log: signals 11, 5 and 4, 22 captures in 1 day 20 hours; the faulting address
   of two SIGILLs lies outside the Node binary). The crashes were not traced; the sweeps ran at 2 workers with retries.
 
@@ -799,6 +807,12 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
   `lattice` and on tile-centre roads without. Per seat: where the builder's last 10 days of thoughts stopped and what failed; the own
   tiles where a house, farm or woodcutter fits, with a flag side and a road, and whether `placeConnected` places one within 9 and 16
   steps. Places buildings at the end.
+- `flag9.ts <size> <seed> <days> [lattice] [from=<day>]` (#163): plays the assess game and, from day `from` (default 20), watches the
+  flags that hold 5 goods or more. At the first flag over the capacity it prints the push that did it with its stack, the flag, its
+  roads, carriers and goods, and the last 40 events on the flag (pushes, splices, every change of `reserved`, `dropAt` calls).
+- `flagover.ts <size> <seed> <days> [lattice]` (#163): counts the goods a dismissed carrier puts down (`dropCarriedGoodAt`) and those
+  after which the flag's goods plus its reserved places exceed the capacity, with the callers, and the road removals by caller.
+  One JSON line.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the
