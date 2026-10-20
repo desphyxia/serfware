@@ -763,12 +763,13 @@ Land held is the same in all three (tiny 258 / – / 249 on day 60, medium 826 /
   `land.ownerOf`): tiny `bal-001` day 30, buildings of seats 1 to 3: 36 / 34 / 25 before, 164 / 98 / 65 after, 67 / 34 / 59 in the
   default game. It touches the lattice only: the same 12 games, played with the fix, give checksum series equal to `637273d`'s.
 - **After the fix, the lattice is not like the default game.** Tiny grows about twice as fast (the same land holds more
-  buildings), small about a third faster, medium is 22% behind and has no smelter on 44% of seats against 11%. Why is not known
-  (#164). Medium's road tiles per building are still +49%.
+  buildings), small about a third faster, medium is 22% behind and has no smelter on 44% of seats against 11%. Medium's road
+  tiles per building are +49%. (The medium deficit was a bug, see "Why the lattice differs (#164)" below: this table is from
+  before #166 and #167.)
 - **A rule break.** One lattice game (medium `bal-002`) had flag 97 hold 9 goods, 45 times in the record from day 36 (#163).
   The default games had none.
-- **Not checked:** the other tile-indexed `grid.center` reads in the AI (`builder.ts`, `economy.ts`, `biome.ts`, `war.ts`,
-  `voyage.ts`, `planner.ts`), war and trade on the lattice, `large`. One sweep, so differences under about 15% are noise.
+- **Not checked:** war and trade on the lattice, `large`. One sweep, so differences under about 15% are noise. (The other
+  `grid.center` reads in the AI were checked in #167: three were hit and fixed, the rest only get tile ids.)
 - **The 9-goods flag (#163), cause and fix.** In the medium `bal-002` game a flag held 6 goods and 1 promised place when
   `recomputeTerritory` removed roads and two dismissed carriers put their goods down on it (`dropCarriedGoodAt` counts the goods,
   not the promised places); the carrier the place was promised to then arrived and `dropAt` pushed the 9th. Not specific to the
@@ -779,6 +780,37 @@ Land held is the same in all three (tiny 258 / – / 249 on day 60, medium 826 /
   over 8 goods.
 - Node crashed at random under WSL2 here too (kernel log: signals 11, 5 and 4, 22 captures in 1 day 20 hours; the faulting address
   of two SIGILLs lies outside the Node binary). The crashes were not traced; the sweeps ran at 2 workers with retries.
+
+#### Why the lattice differs from the default game (#164)
+
+Nine lattice games again on master `7264f58` (planner fix, #166, #167), same seeds and settings, and the default baseline `ab12-food`.
+Per rival seat, default → lattice:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| Buildings d20 | 37.7 → 80 (+112%) | 52.1 → 69.1 (+33%) | 77.1 → 83 (+8%) |
+| Buildings d60 | 43.7 → 86.4 (+98%) | 54.1 → 78.7 (+45%) | 103 → 120 (+16%) |
+| People d60 | 95 → 174 (+82%) | 116 → 159 (+36%) | 196 → 235 (+20%) |
+| Land held d60 | 258 → 249 | 350 → 352 | 826 → 916 |
+| Land under buildings at the end (share of held) | 0.18 → 0.36 | 0.17 → 0.26 | 0.14 → 0.17 |
+| Road tiles per finished building d60 | 3.6 → 3.9 | 3.6 → 4.3 | 3.9 → 5.0 |
+| Hungry seat-days from day 30 | 24% → 24% | 43% → 40% | 26% → 38% |
+| Full flags d60 | 0 → 0 | 0.33 → 2.2 | 1.6 → 12.6 |
+| Goods stuck on flags d60 | 0.1 → 0 | 3.3 → 17 | 10 → 91 |
+
+- **Medium was a bug, now fixed.** In the sweep before #167 the lattice medium seats lost most of their buildings on days 10 to 15
+  (one seat 61 → 26). `lost.ts` on `fb3ffe8`, medium `bal-001`, lattice, 20 days: 308 buildings burned down (`scorchBuilding`: 105
+  houses, 39 beacons, 15 wells, 14 farms, …) from day 11, plus 108 AI `tidy` removals of sites. On master the same game loses 5
+  to fire in 30 days; the default game loses 0 to 4. The cause, read from #167 and not tested on its own: a kiln's spark lit a
+  tile corner and the fire code read tile-only arrays with a corner id. The lattice is now ahead at every size.
+- **Why tiny grows faster.** In the default game a flag and every road node use a tile centre. Tiny `bal-003` seat 1, day 5, of
+  about 270 dry tiles: 63 road, 37 flags and 37 buildings (137) in the default game; on the lattice 19 road nodes on centres (58 on
+  corners), 0 flags on centres (37 on corners) and 37 buildings (56). Tiny `bal-001`, day 20: 75 to 140 centres used by roads and
+  flags per seat in the default game, 25 to 55 on the lattice. Default seats freeze with 15 to 25 free tiles where a house fits and
+  no road to them (own roads, flags and buildings in the way); tiny `bal-003` seat 3 holds 23 buildings from day 3 to day 80.
+  Lattice seats freeze later and higher, and also have free tiles with no route. Not tested: that this is all of it.
+- **New: goods back up on the lattice** on small and medium (table above). Tiny has none. See #169.
+- Three games a size: indications, not settled results.
 
 ## Looking at the map
 
@@ -817,6 +849,13 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
   watches `grid.center`) and prints every place a corner id reaches a tile-only lookup, with callers and counts. Before the fixes
   7 games (tiny and small, 2 seeds, 40 days; tiny and small with war; medium, 30 days) showed reads in `clearForest`, the
   `diagnoseBorder` probe and `Ecology.ignite`/`fuel`/`stepFire` (a kiln lights a corner); after them, 0 places in all 7.
+- `roomwhy.ts <size> <seed> <day,day,...> [lattice]` (#164): plays the assess game and at each day counts, per rival seat, the tiles
+  inside the border by what holds them (water, building, flag, road, tree, rock, field, steep, free), the road and flag nodes on
+  tile centres against corners, and for the free tiles where a house fits (first 8) why a road cannot reach them
+  (`diagnoseBorder`'s road questions). Read-only.
+- `lost.ts <size> <seed> <days> [lattice]` (#164): wraps `Economy.removeBuilding` and counts every lost building by cause
+  (fire, stranding, a demolish command and the AI routine that gave it, a flag removed) with the first day, and the losses per
+  seat by day. Read-only.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the
