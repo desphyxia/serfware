@@ -3419,6 +3419,13 @@ export class Economy {
       const into = this.nextHopFrom(x, back) === -2 || (this.buildings[x.dest]?.flag ?? -1) === back;
       return into || s.back === back || bf.goods.length + bf.reserved < FLAG_CAPACITY;
     };
+    // A place promised to this good may have been taken since: goods put down by a carrier a removed road dismissed ignore the
+    // promises (#163). A flag that already holds the capacity (one over with `breakRings`, which promises places over it on
+    // purpose) takes nothing on a promise: it is given up and the swap rules below apply.
+    if (s.target >= 0 && flag.goods.length >= FLAG_CAPACITY + (transportOptions.breakRings ? 1 : 0)) {
+      flag.reserved = Math.max(0, flag.reserved - 1);
+      s.target = -1;
+    }
     let swap = -1;
     if (s.target < 0 && flag.goods.length + flag.reserved >= FLAG_CAPACITY) {
       swap = this.returnGood(road, at, s.id);

@@ -148,7 +148,7 @@ describe("a flag's last place (the old 9-good flags)", () => {
     const s = eco.settlers[road!.carrier]!;
     Object.assign(s, { carryGood: carried.id, carrying: carried.type, target: -1, back: -1, roadIdx: 0 });
     const drop = () => (eco as unknown as { dropAt(s: unknown, road: unknown, at: number): boolean }).dropAt(s, road, at);
-    return { flag, drop };
+    return { flag, drop, s, at };
   }
 
   it("a carrier with no place promised to it does not take the last one that is promised to another", () => {
@@ -161,5 +161,30 @@ describe("a flag's last place (the old 9-good flags)", () => {
     const { flag, drop } = carrierAt(FLAG_CAPACITY - 2, 1);
     expect(drop()).toBe(true);
     expect(flag.goods.length).toBe(FLAG_CAPACITY - 1);
+  }, 120000);
+
+  it("a carrier with a promised place uses it when the flag still has room (#163)", () => {
+    const { flag, drop, s, at } = carrierAt(FLAG_CAPACITY - 1, 1);
+    s.target = at;
+    expect(drop()).toBe(true);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY);
+    expect(flag.reserved).toBe(0);
+  }, 120000);
+
+  it("but gives the promise up and waits when goods put down since filled the flag (#163)", () => {
+    const { flag, drop, s, at } = carrierAt(FLAG_CAPACITY, 1);
+    s.target = at;
+    expect(drop()).toBe(false);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY);
+    expect(flag.reserved).toBe(0);
+    expect(s.target).toBe(-1);
+  }, 120000);
+
+  it("with breakRings on, a place promised over the capacity on purpose is still taken", () => {
+    transportOptions.breakRings = true;
+    const { flag, drop, s, at } = carrierAt(FLAG_CAPACITY, 1);
+    s.target = at;
+    expect(drop()).toBe(true);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY + 1);
   }, 120000);
 });
