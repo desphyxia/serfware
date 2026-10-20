@@ -180,6 +180,8 @@ export class Ecology {
 
   /** Light a fire on a tile if there is anything to burn. */
   ignite(t: number): boolean {
+    // Fire burns on tiles: a lattice corner (a kiln's neighbour on the road lattice) lights its first tile.
+    t = this.land.pt(t);
     if ((this.fire[t] as number) > 0 || this.fuel(t) <= 0.05) return false;
     this.fire[t] = 12 + Math.round(this.fuel(t) * 24);
     this.burning.push(t);

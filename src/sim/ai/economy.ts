@@ -112,7 +112,7 @@ export class EconPlanner {
     const grid = ctx.world.planet.grid;
     const keep = eco.buildings[eco.keeps[pl] ?? -1];
     if (!keep) return;
-    const c = grid.center;
+    const c = eco.land.lattice ? eco.land.lattice.pos : grid.center;
     const away = (b: Building) => (c[b.tile * 3]! - c[keep.tile * 3]!) ** 2 + (c[b.tile * 3 + 1]! - c[keep.tile * 3 + 1]!) ** 2 + (c[b.tile * 3 + 2]! - c[keep.tile * 3 + 2]!) ** 2;
     const far = stores.slice().sort((a, b) => away(b) - away(a) || a.id - b.id);
     const forward = far[0] as Building;
@@ -350,7 +350,7 @@ export class EconPlanner {
     const storehouse = (): boolean => {
       if (built.length >= 20 && count("storehouse") < 1 + Math.floor(built.length / 40) && stone >= 6 && (stock[goodId("plank")] ?? 0) >= 8 && this.can("storehouse") && unbuilt === 0) {
         const keep = eco.buildings[eco.keeps[pl] ?? -1];
-        const c = ctx.world.planet.grid.center;
+        const c = land.lattice ? land.lattice.pos : ctx.world.planet.grid.center;
         const from = (t: number) => (c[t * 3]! - c[(keep?.tile ?? t) * 3]!) ** 2 + (c[t * 3 + 1]! - c[(keep?.tile ?? t) * 3 + 1]!) ** 2 + (c[t * 3 + 2]! - c[(keep?.tile ?? t) * 3 + 2]!) ** 2;
         const tiles = land.ring(keep?.tile ?? 0, 14).filter((t) => land.territory[t] === pl + 1).sort((a, b) => from(b) - from(a) || a - b).slice(0, 200);
         if (placeOn(ctx.world, "storehouse", tiles, pl, true, 16) >= 0) return true;

@@ -67,7 +67,8 @@ export function diagnoseBorder(w: World, player: number, type: string, tiles: re
   };
 
   const flags = eco.flags.filter((f) => f.alive && f.owner === player);
-  const c = grid.center;
+  // A flag can sit on a tile corner on the road lattice: its position is the lattice's.
+  const c = land.lattice ? land.lattice.pos : grid.center;
   const nearest = (flagTile: number): number[] =>
     flags
       .filter((f) => f.tile !== flagTile)

@@ -180,7 +180,7 @@ export class Culture {
     // The season, where there are seasons.
     const climate = eco.climate;
     if (climate && !land.planet.params.locked) {
-      const y = land.planet.grid.center[keep.tile * 3 + 1] as number;
+      const y = land.planet.grid.center[land.pt(keep.tile) * 3 + 1] as number;
       const s = climate.season(eco.tick, y);
       this.firstSeason[p] ??= s;
       if (s !== this.firstSeason[p]) this.discover(p, "seasons", by());
