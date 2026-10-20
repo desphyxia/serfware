@@ -432,7 +432,9 @@ export function clearForBorder(w: World, player: number, tiles: readonly number[
   const eco = w.economy;
   const land = w.land;
   const grid = land.planet.grid;
-  const c = grid.center;
+  // A flag can sit on a tile corner on the road lattice: its position is the lattice's, and a corner has no feature of its own.
+  const c = land.lattice ? land.lattice.pos : grid.center;
+  const featureAt = (x: number) => (x < land.tileCount ? land.feature[x] : Feature.None);
   const lantern = BUILDINGS[buildingType("lantern")] as BuildingDef;
   const flags = eco.flags.filter((f) => f.alive && f.owner === player);
   if (!flags.length) return false;
@@ -445,7 +447,7 @@ export function clearForBorder(w: World, player: number, tiles: readonly number[
       .slice(0, n)
       .map(([, ft]) => ft);
   const open = (x: number) => land.roadable(x, player);
-  const throughTrees = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && land.feature[x] === Feature.Tree);
+  const throughTrees = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && featureAt(x) === Feature.Tree);
   for (const t of tiles.slice(0, 12)) {
     const ft = land.bestFlagTile(t, player);
     let blocker = -1;
@@ -459,7 +461,7 @@ export function clearForBorder(w: World, player: number, tiles: readonly number[
         const path = land.findPath(s, ft, (x) => throughTrees(x) && x !== t, 1500);
         if (path && (!best || path.length < best.length)) best = path;
       }
-      blocker = best?.find((x) => land.feature[x] === Feature.Tree) ?? -1;
+      blocker = best?.find((x) => featureAt(x) === Feature.Tree) ?? -1;
     }
     if (blocker < 0) continue;
     const reached = new Set(land.ring(blocker, 6));
@@ -480,7 +482,9 @@ export function clearForest(w: World, player: number): "built" | "forester" | nu
   const eco = w.economy;
   const land = w.land;
   const grid = land.planet.grid;
-  const c = grid.center;
+  // A flag can sit on a tile corner on the road lattice: its position is the lattice's, and a corner has no feature of its own.
+  const c = land.lattice ? land.lattice.pos : grid.center;
+  const featureAt = (x: number) => (x < land.tileCount ? land.feature[x] : Feature.None);
   const lantern = BUILDINGS[buildingType("lantern")] as BuildingDef;
   const flags = eco.flags.filter((f) => f.alive && f.owner === player);
   if (!flags.length) return null;
@@ -502,7 +506,7 @@ export function clearForest(w: World, player: number): "built" | "forester" | nu
   }
   targets.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const open = (x: number) => land.roadable(x, player);
-  const through = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && (land.feature[x] === Feature.Tree || land.feature[x] === Feature.Rock));
+  const through = (x: number) => open(x) || (land.isLand(x) && land.mayRoad(x, player) && land.use[x] === Use.Free && (featureAt(x) === Feature.Tree || featureAt(x) === Feature.Rock));
   for (const [, t, ft] of targets.slice(0, 12)) {
     const sources = nearestFlags(ft, 4);
     if (sources.some((s) => land.findPath(s, ft, (x) => open(x) && x !== t, 1500))) return null;
@@ -512,9 +516,9 @@ export function clearForest(w: World, player: number): "built" | "forester" | nu
       if (path && (!best || path.length < best.length)) best = path;
     }
     if (!best) continue;
-    const blocker = best.find((x) => land.feature[x] === Feature.Tree || land.feature[x] === Feature.Rock);
+    const blocker = best.find((x) => featureAt(x) === Feature.Tree || featureAt(x) === Feature.Rock);
     if (blocker === undefined) continue;
-    const type = land.feature[blocker] === Feature.Tree ? "woodcutter" : "quarry";
+    const type = featureAt(blocker) === Feature.Tree ? "woodcutter" : "quarry";
     // Close to the blocker first; a woodcutter reaches 6 tiles, so anything within 5 will do.
     const sites = land.ring(blocker, 5).filter((x) => land.territory[x] === player + 1).sort((a, b) => d2(a, blocker) - d2(b, blocker) || a - b);
     if (placeOn(w, type, sites, player, true, 40) >= 0) return "built";

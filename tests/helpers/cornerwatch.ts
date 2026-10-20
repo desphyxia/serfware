@@ -18,17 +18,19 @@ export function watchCornerIds(w: World): Map<string, number> {
       return orig(t, ...rest);
     };
   }
-  const wrap = (owner: object, key: string) => {
+  /** Wrap a typed array of `per` numbers a tile, so that an index past the tiles' own is noted. */
+  const wrap = (owner: object, key: string, per = 1) => {
     const arr = (owner as Record<string, unknown>)[key];
-    if (!ArrayBuffer.isView(arr) || (arr as unknown as { length: number }).length !== n) return;
+    if (!ArrayBuffer.isView(arr) || (arr as unknown as { length: number }).length !== n * per) return;
+    const past = (k: string | symbol) => typeof k === "string" && k.length > 0 && k.charCodeAt(0) >= 48 && k.charCodeAt(0) <= 57 && Number(k) >= n * per;
     const proxy = new Proxy(arr as object, {
       get(target, k) {
-        if (typeof k === "string" && k.length > 0 && k.charCodeAt(0) >= 48 && k.charCodeAt(0) <= 57 && Number(k) >= n) note(`${key}[corner]`);
+        if (past(k)) note(`${key}[corner]`);
         const v = Reflect.get(target, k, target);
         return typeof v === "function" ? v.bind(target) : v;
       },
       set(target, k, v) {
-        if (typeof k === "string" && k.length > 0 && k.charCodeAt(0) >= 48 && k.charCodeAt(0) <= 57 && Number(k) >= n) note(`${key}[corner]=`);
+        if (past(k)) note(`${key}[corner]=`);
         return Reflect.set(target, k, v, target);
       },
     });
@@ -36,6 +38,8 @@ export function watchCornerIds(w: World): Map<string, number> {
   };
   for (const key of Object.keys(land)) wrap(land, key);
   for (const key of Object.keys(w.planet.terrain)) wrap(w.planet.terrain, key);
+  // The tile centres: three numbers a tile. A lattice node (corner) past them has its position in `land.lattice.pos`.
+  wrap(w.planet.grid, "center", 3);
   return hits;
 }
 

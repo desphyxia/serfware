@@ -813,6 +813,10 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
 - `flagover.ts <size> <seed> <days> [lattice]` (#163): counts the goods a dismissed carrier puts down (`dropCarriedGoodAt`) and those
   after which the flag's goods plus its reserved places exceed the capacity, with the callers, and the road removals by caller.
   One JSON line.
+- `centerwatch.ts <size> <seed> <days> [war]` (#167): plays the assess game on the road lattice under `watchCornerIds` (which also
+  watches `grid.center`) and prints every place a corner id reaches a tile-only lookup, with callers and counts. Before the fixes
+  7 games (tiny and small, 2 seeds, 40 days; tiny and small with war; medium, 30 days) showed reads in `clearForest`, the
+  `diagnoseBorder` probe and `Ecology.ignite`/`fuel`/`stepFire` (a kiln lights a corner); after them, 0 places in all 7.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the

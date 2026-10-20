@@ -74,7 +74,8 @@ export class WarPlanner {
     if (!keep) return false;
     // Outriders need a mounted warden on a lantern's watch (a stable makes the mounts).
     if (!eco.settlers.some((x) => x.alive && x.owner === pl && x.role === "warden" && ((eco.people[x.person]?.arms ?? 0) & ARM_MOUNT) !== 0)) return false;
-    const c = ctx.world.planet.grid.center;
+    // An enemy flag can sit on a tile corner on the road lattice: its position is the lattice's.
+    const c = ctx.world.land.lattice ? ctx.world.land.lattice.pos : ctx.world.planet.grid.center;
     const away = (t: number) => (c[t * 3]! - c[keep.tile * 3]!) ** 2 + (c[t * 3 + 1]! - c[keep.tile * 3 + 1]!) ** 2 + (c[t * 3 + 2]! - c[keep.tile * 3 + 2]!) ** 2;
     const flags = eco.flags
       .filter((f) => f.alive && f.owner !== pl && f.building < 0 && !eco.allied(pl, f.owner) && !eco.diplomacy.truce(pl, f.owner) && !eco.defeated[f.owner])
