@@ -21,7 +21,7 @@ const TOKENS: Record<string, string> = {
 };
 const options = aiOptions as unknown as Record<string, boolean>;
 for (const [token, key] of Object.entries(TOKENS)) if (key in options) options[key] = ai.includes(token);
-transportOptions.breakRings = ai.includes("rings");
+transportOptions.breakRings = !ai.includes("norings");
 const peaceDays = Number(process.env.BALANCE_PEACE ?? 999);
 const w = new World(seed, {
   size,

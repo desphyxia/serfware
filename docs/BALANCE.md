@@ -155,8 +155,10 @@ node scripts/balance-flows.mjs --out balance-pilot3
   until the rail is placed there (`reserveRail`). Issue #147.
 - `block` (or `BALANCE_BLOCK_WEIGHT=<w>`; needs `turn`): a flag side costs `w` (1 for `block`) for each free tile beside its
   flag that it would take out of use (`turnBlockWeight`). Issue #148.
-- `rings`: a carrier may put a good on a full flag when the full flags make a ring, one good over the capacity at most
-  (`transportOptions.breakRings`, a transport rule, not an AI switch; the soak invariant then allows 9 goods on a flag). Issue #149.
+- `norings`: plays without the rule that lets a carrier put a good on a full flag when the full flags make a ring, one good over
+  the capacity at most (`transportOptions.breakRings`, a transport rule, not an AI switch; the soak invariant then allows 9
+  goods on a flag). The rule is **on by default since #169**; until then the switch was `rings`, which no longer does anything.
+  Issue #149.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -602,7 +604,7 @@ the AI did and why it could not do more, bundled like the other helpers. All are
 - `jamwhy.ts <size> <seed> <seat> <days> [turn] [wide]` (#148, #149): every 10 days, the flags of one seat holding the most goods,
   what stands on them, where each good is bound and the route length. `railwhy.ts <size> <seed> <days>` (#147): the questions the
   voyage planner asks before a launch rail, one by one, then a rail placed the way it places it (this one places a building).
-- `ringwhy.ts <size> <seed> <seat> <days> [turn] [wide] [rings] [w=<weight>]` (#149): every 10 days, the full flags of one seat that no good can leave (each good bound for another flag in the set, no good coming back to swap), their goods by next hop, and a cycle through them; `rings` plays `transportOptions.breakRings` and prints how many times it fired.
+- `ringwhy.ts <size> <seed> <seat> <days> [turn] [wide] [norings] [w=<weight>]` (#149): every 10 days, the full flags of one seat that no good can leave (each good bound for another flag in the set, no good coming back to swap), their goods by next hop, and a cycle through them; `norings` plays without `transportOptions.breakRings`; it prints how many times the rule fired.
 - `colonywhy.ts <size> <seed> <days> [population idle]` (#126): plays the assess game with a lowered colony threshold (default 30 people, 5 idle) and records, each day from day 10, the first voyage gate each seat fails (rail, probes, Hearthship), then the voyage events and, every 10 days, what a loading Hearthship's rail still lacks. `COLONY_FLAGS="early,railsites"` turns those two switches on for it.
 - `hungerwhy.ts <size> <seed> <days>` (#126): per seat and 10-day window, hungry days, people, idle adults, food, the days food cover was under 1 or nobody was idle, the food buildings standing and building, where the builder's thoughts stopped, and the food wishes placed or failed; at the end, the farm, orchard, fisher and hunter sites on the seat's land by reach, why placement fails (no road path), and the pockets of land that no road reaches with what blocks them.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
@@ -841,6 +843,35 @@ The nine lattice games on `7264f58` against the default baseline, then `jam.ts` 
   or more were 35% of flags on the lattice and 33% in the default game. Not tested: road lengths and carriers (road tiles per
   building are +21 to 27% on the lattice), flags that serve a building and a junction at once, the order goods are moved in.
 
+#### `breakRings` on by default (#169)
+
+Decided with the owner: the ring rule (`transportOptions.breakRings`, #149) is on in every game, default and lattice. Checked with
+three 9-game sweeps (tiny, small, medium, seeds 001 to 003, 80 days, the standard stack, master `d598b89` game code): the default
+game as it was, the default game with the rule, and the lattice with the rule against the lattice sweep without it (`ab19-lat`).
+Per rival seat, without → with:
+
+| | default tiny | default small | default medium | lattice tiny | lattice small | lattice medium |
+|---|---|---|---|---|---|---|
+| Buildings d60 | 43.7 → 43.7 | 54.1 → 53.6 | 103 → 101 | 86.4 → 86.3 | 78.7 → 81.4 | 120 → 132 |
+| People d60 | 95.4 → 95.4 | 116 → 116 | 196 → 193 | 174 → 173 | 159 → 161 | 235 → 263 |
+| Hungry seat-days from day 30 | 24% → 24% | 43% → 34% | 26% → 26% | 24% → 28% | 40% → 29% | 38% → 25% |
+| Full flags d60 | 0 → 0 | 0.33 → 1.61 | 1.56 → 1.98 | 0 → 0 | 2.18 → 0.11 | 12.6 → 3.49 |
+| Goods stuck on flags d60 | 0.11 → 0.11 | 3.33 → 5.44 | 10.4 → 9.48 | 0 → 0 | 16.8 → 0.03 | 90.5 → 15.5 |
+
+- The default game hardly changes (tiny identical, small and medium within 2% on buildings and people; the small hunger and
+  stuck-goods differences come from one or two seats). The lattice small and medium games gain: medium buildings +10%, people
+  +12%, hungry seat-days 38% → 25%, stuck goods −83%. No rule violations in any of the 27 games.
+- Seats with 30 or more goods stuck on 50 days or more (small and medium, 18 seats): lattice 4 → 1, default 0 → 0 (the earlier
+  default baseline `ab12-food` had one, medium `bal-002` seat 2). The one left is medium `bal-003` seat 3, lattice: still jammed
+  on days 25 to 50 (peak 211 stuck goods on 33 full flags, 333 on 49 without the rule) and 52 to 80; so the rule does not clear
+  every jam, and what holds that one is not known.
+- Wall time per game in the lattice sweeps rose (small 39 → 53 min, medium 59 → 134), but those games were played three sweeps
+  at a time against a sweep played alone, and the games are bigger; the default pair, played side by side, differ by −5% to +4%.
+  One lattice game timed on its own (medium `bal-002`, 40 days, `jam.ts`, the machine also running other work): 2081 s without the
+  rule, 1863 s with it, so the rule itself costs no visible time.
+- Existing saves and replays play differently from this change on, as for any change to the rules of the game.
+- Three games a size: indications, not settled results.
+
 ## Looking at the map
 
 Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
@@ -885,12 +916,12 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
 - `lost.ts <size> <seed> <days> [lattice]` (#164): wraps `Economy.removeBuilding` and counts every lost building by cause
   (fire, stranding, a demolish command and the AI routine that gave it, a flag removed) with the first day, and the losses per
   seat by day. Read-only.
-- `jam.ts <size> <seed> <days> [lattice] [rings] [dump=<day>,...]` (#169): plays the assess game; every 5 days prints per seat the
+- `jam.ts <size> <seed> <days> [lattice] [norings] [dump=<day>,...]` (#169): plays the assess game; every 5 days prints per seat the
   goods stuck on flags (waiting 6 game hours or more), the full flags and the buildings, and every 10 days the shape of the flag
   graph (flags, junctions, triangles, 4-cycles). On the dump days it opens each seat with 20 stuck goods or more: why each is
   stuck (carrier promised, no destination, bound for the building at this flag, no route, next flag full, next flag has room), the
   destination building types, the stores (flag fill, goods stored), the goods by type, the flags on corners, and the rings of full
-  flags. `rings` plays `transportOptions.breakRings`. Read-only.
+  flags. `norings` plays without `transportOptions.breakRings`. Read-only.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the

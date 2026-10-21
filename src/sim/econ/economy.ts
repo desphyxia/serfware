@@ -42,12 +42,13 @@ import { Deposit, DEPOSIT_IDS, Feature, fellable, FIELD_GROWTH_TICKS, FIELD_RIPE
 
 export const FLAG_CAPACITY = 8;
 /**
- * Transport rules the balance sweeps can try, off by default so every game and save plays as before (#149).
+ * Transport rules the balance sweeps can switch (#149).
  * `breakRings`: a carrier may put a good on a full flag when the full flags make a ring, each holding a good bound for the
  * next, which nothing else can move (swaps only help two flags facing each other). The flag takes one good over its
- * capacity for as long as the good that left behind it makes room again, so the ring turns one step at a time.
+ * capacity for as long as the good that left behind it makes room again, so the ring turns one step at a time. On by
+ * default since #169: without it a ring of three full flags can hold a seat's goods for weeks, most often on the road lattice.
  */
-export const transportOptions = { breakRings: false };
+export const transportOptions = { breakRings: true };
 /** A good must have waited this long on its flag (ticks, a fraction of a day) before the ring is looked for, and the ring is searched this often. */
 const RING_WAIT_DAY_PART = 8;
 const RING_EVERY = 16;
