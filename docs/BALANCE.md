@@ -809,8 +809,37 @@ Per rival seat, default → lattice:
   flags per seat in the default game, 25 to 55 on the lattice. Default seats freeze with 15 to 25 free tiles where a house fits and
   no road to them (own roads, flags and buildings in the way); tiny `bal-003` seat 3 holds 23 buildings from day 3 to day 80.
   Lattice seats freeze later and higher, and also have free tiles with no route. Not tested: that this is all of it.
-- **New: goods back up on the lattice** on small and medium (table above). Tiny has none. See #169.
+- **New: goods back up on the lattice** on small and medium (table above). Tiny has none. See #169 below.
 - Three games a size: indications, not settled results.
+
+#### Goods back up on the lattice (#169)
+
+The nine lattice games on `7264f58` against the default baseline, then `jam.ts` on three jammed seats. Few games: indications.
+
+- **Not just the bigger economy.** Seat-days from day 20 at the same number of finished buildings, mean goods stuck on flags,
+  default → lattice: medium 60 to 80 buildings 1 → 219, 100 to 120 buildings 8.7 → 39, 120 to 150 buildings 14 → 218; small 60 to
+  80 buildings 3.8 → 141 (other bands equal); tiny none. A few seats carry the means: seats with 30 or more goods stuck on 50 days
+  or more were 4 of 18 small and medium seats on the lattice (medium `bal-001` seat 1, `bal-002` seat 2, `bal-003` seat 3; small
+  `bal-001` seat 3; peaks 157 to 497) and 1 of 18 in the default game (medium `bal-002` seat 2, 45 days, peak 367). Lattice jams
+  start at 64 to 70 buildings (medium `bal-002` seat 2 on day 15, small `bal-001` seat 3 on day 25); the default jam starts on
+  day 35 at 129 buildings.
+- **A jam is a lock-up.** Small `bal-001` seat 3, lattice: 116 stuck goods on day 25, 133 on day 30, 157 on day 40, on about 20
+  flags, 16 to 19 full, all on corners; every stuck good waits because the next flag is full. Medium `bal-002` seat 2, lattice:
+  192 to 231 stuck on 29 flags, 28 to 30 full, the seat stays at 64 buildings. Both have a ring of 3 full flags, each holding a
+  good bound for the next.
+- **`breakRings` unlocks them.** Small `bal-001` seat 3: 0 stuck goods on every day, 79 to 81 buildings against 69 to 70. Medium
+  `bal-002` seat 2: 239 stuck on day 20, 16 on day 25, 14 to 20 after; 123 to 126 buildings against 64. The other seats changed
+  little.
+- **The default game locks up too, later.** Medium `bal-002` seat 2: 123 stuck on day 35, 323 on day 40, 51 full flags, 154
+  buildings. `jam.ts` finds no ring there, so what holds it is not known.
+- **Storage.** Stores have no stock limit (`storeAccepts` checks the mode only). Goods go to the nearest store, so they converge:
+  of 157 stuck goods 97 are bound for a store (Hearthship 89, storehouse 8), and both store flags hold 8 of 8. The number of
+  storehouses does not separate jammed seats from healthy ones (jammed seats ended with 0 to 5). More stores were not tested;
+  clearing the ring alone removed the jam.
+- **Why sooner on the lattice: not found.** Failed hypothesis, more loops in the road network: triangles and 4-cycles of the flag
+  graph per seat on days 10 to 40 were 0 to 3 and 0 to 2 on the lattice, 0 to 3 and 0 to 3 in the default game; flags with 3 roads
+  or more were 35% of flags on the lattice and 33% in the default game. Not tested: road lengths and carriers (road tiles per
+  building are +21 to 27% on the lattice), flags that serve a building and a junction at once, the order goods are moved in.
 
 ## Looking at the map
 
@@ -856,6 +885,12 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
 - `lost.ts <size> <seed> <days> [lattice]` (#164): wraps `Economy.removeBuilding` and counts every lost building by cause
   (fire, stranding, a demolish command and the AI routine that gave it, a flag removed) with the first day, and the losses per
   seat by day. Read-only.
+- `jam.ts <size> <seed> <days> [lattice] [rings] [dump=<day>,...]` (#169): plays the assess game; every 5 days prints per seat the
+  goods stuck on flags (waiting 6 game hours or more), the full flags and the buildings, and every 10 days the shape of the flag
+  graph (flags, junctions, triangles, 4-cycles). On the dump days it opens each seat with 20 stuck goods or more: why each is
+  stuck (carrier promised, no destination, bound for the building at this flag, no route, next flag full, next flag has room), the
+  destination building types, the stores (flag fill, goods stored), the goods by type, the flags on corners, and the rings of full
+  flags. `rings` plays `transportOptions.breakRings`. Read-only.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the
