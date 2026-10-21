@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { goodId } from "../src/sim/econ/defs";
 import { FLAG_CAPACITY, transportOptions, type Economy } from "../src/sim/econ/economy";
 import { World } from "../src/sim/world";
 
-afterEach(() => {
+/** What the game plays with when nothing sets it; each test starts with the rule off and turns it on where it needs it. */
+const DEFAULT_BREAK_RINGS = transportOptions.breakRings;
+beforeEach(() => {
   transportOptions.breakRings = false;
+});
+afterEach(() => {
+  transportOptions.breakRings = DEFAULT_BREAK_RINGS;
 });
 
 const SEED = "flag-rings-9";
@@ -94,8 +99,8 @@ function ring(perFlag = FLAG_CAPACITY) {
 const goodsOn = (g: { w: World; flagIds: number[] }) => g.flagIds.reduce((n, id) => n + (g.w.economy.flags[id]?.goods.length ?? 0), 0);
 
 describe("a ring of full flags (#149)", () => {
-  it("is off by default", () => {
-    expect(transportOptions.breakRings).toBe(false);
+  it("is on by default (#169)", () => {
+    expect(DEFAULT_BREAK_RINGS).toBe(true);
   });
 
   it("moves goods round a ring that has room (the carriers get there)", () => {

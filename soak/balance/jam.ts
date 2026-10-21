@@ -4,16 +4,16 @@ import { FLAG_CAPACITY, transportOptions, type Flag, type Good, type Building } 
 import { GOODS } from "../../src/sim/econ/defs";
 
 /**
- * Jams of goods on flags (#169): `node jam.mjs <size> <seed> <days> [lattice] [rings] [dump=<day>,<day>...]` plays the assess game (the
+ * Jams of goods on flags (#169): `node jam.mjs <size> <seed> <days> [lattice] [norings] [dump=<day>,<day>...]` plays the assess game (the
  * standard stack, three rivals, no war). Every 5 days it prints per seat the goods stuck on flags (waiting 6 game hours or more, as
  * the sweep counts them) and the full flags. On the dump days it opens up each seat with 20 stuck goods or more: the stuck goods by
  * what they wait for (no destination; the next flag full; the next flag with room; no route; the building at this very flag), by
- * good, how many sit on flags at tile corners, and the rings of full flags (each holding a good bound for the next). `rings` plays with
+ * good, how many sit on flags at tile corners, and the rings of full flags (each holding a good bound for the next). `norings` plays without
  * `transportOptions.breakRings`. Read-only: it only reads the economy.
  */
 const [size, seed, days, ...flags] = process.argv.slice(2) as ["tiny" | "small" | "medium", string, string, ...string[]];
 const lattice = flags.includes("lattice");
-transportOptions.breakRings = flags.includes("rings");
+transportOptions.breakRings = !flags.includes("norings");
 const dump = (flags.find((f) => f.startsWith("dump="))?.slice(5) ?? "").split(",").filter(Boolean).map(Number);
 aiOptions.relocateQuarries = aiOptions.stoneFallback = aiOptions.foodByNeed = aiOptions.stonePriority = true;
 aiOptions.toolsByDemand = aiOptions.oreMines = aiOptions.releaseStalled = aiOptions.toolsmithAnyway = aiOptions.forgeRoom = aiOptions.graniteFirst = true;

@@ -4,8 +4,8 @@ import { GOODS } from "../../src/sim/econ/defs";
 import { transportOptions } from "../../src/sim/econ/economy";
 
 /**
- * Is a jam a ring of full flags: `node ringwhy.mjs <size> <seed> <seat> <days> [turn] [wide] [w=<weight>]` plays the assess game
- * (full AI stack, no war, three rivals; `rings` plays `transportOptions.breakRings`) and, every 10 days, takes the full flags of one seat (8 goods with those reserved) and
+ * Is a jam a ring of full flags: `node ringwhy.mjs <size> <seed> <seat> <days> [turn] [wide] [norings] [w=<weight>]` plays the assess game
+ * (full AI stack, no war, three rivals; `norings` plays without `transportOptions.breakRings`) and, every 10 days, takes the full flags of one seat (8 goods with those reserved) and
  * keeps those where no good can move: each good's next hop is a flag in the same set, and the flag it goes to holds no good that
  * comes back (a swap). What is left is deadlocked as long as nothing else changes. Prints that set, each flag's goods by next hop,
  * and a cycle through it. Read-only.
@@ -15,7 +15,7 @@ aiOptions.relocateQuarries = aiOptions.stoneFallback = aiOptions.foodByNeed = ai
 aiOptions.toolsByDemand = aiOptions.oreMines = aiOptions.releaseStalled = aiOptions.toolsmithAnyway = aiOptions.forgeRoom = aiOptions.graniteFirst = true;
 aiOptions.turnBuildings = flags.includes("turn");
 aiOptions.widePlacement = flags.includes("wide");
-transportOptions.breakRings = flags.includes("rings");
+transportOptions.breakRings = !flags.includes("norings");
 for (const f of flags) if (f.startsWith("w=")) aiOptions.turnPartnerWeight = Number(f.slice(2));
 const seat = Number(seatArg);
 const w = new World(seed, {

@@ -102,7 +102,7 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.foodWithoutIdle = !ai.includes("nofoodidle");
   aiOptions.orderEarly = ai.includes("early");
   aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
-  transportOptions.breakRings = ai.includes("rings");
+  transportOptions.breakRings = !ai.includes("norings");
   if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);
   const foundEnv = (process.env.BALANCE_FOUND ?? "").split(",").map(Number);
   if (foundEnv.length === 2 && foundEnv.every(Number.isFinite)) VoyagePlanner.found = { population: foundEnv[0] as number, idle: foundEnv[1] as number };
