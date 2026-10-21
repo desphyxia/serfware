@@ -842,6 +842,23 @@ The nine lattice games on `7264f58` against the default baseline, then `jam.ts` 
   graph per seat on days 10 to 40 were 0 to 3 and 0 to 2 on the lattice, 0 to 3 and 0 to 3 in the default game; flags with 3 roads
   or more were 35% of flags on the lattice and 33% in the default game. Not tested: road lengths and carriers (road tiles per
   building are +21 to 27% on the lattice), flags that serve a building and a junction at once, the order goods are moved in.
+- **A keep flag with one road jams (two of the four seats), found after the ring rule went on.** `netshape.ts`, small and medium,
+  seeds 001 to 003, days 10, 15, 20: on the lattice the keep's flag has 1 road in 2 of 18 seats and both jam later (medium
+  `bal-002` seat 2, `bal-003` seat 3, peaks about 330 stuck goods); the other 16 have 2 to 5. The other two jam seats have 3 and 5
+  roads at the keep, so this is not all of it. In the default game every seat has 2 or more (mean 2.9). The free corners beside
+  that flag are roadable (`keepflag.ts`); the AI did not build there. The lone road is busy on day 10 (carrier worked 0.53 and
+  0.78 of the day). With the ring rule on, medium `bal-003` seat 3 on day 30: 153 stuck on 27 flags, 152 waiting on a full next
+  flag, 132 bound for the keep, no cycle, the keep's own flag holding 1 good: a queue into one road, not a ring.
+- **Test: three roads at the keep flag (`keeproad.ts`, day 8, medium, lattice, 45 days, the same game with and without).**
+  `bal-002` seat 2 (ring rule off): stuck goods on days 25 to 45 157 / 228 / 229 / 225 / 231 → 22 / 0 / 2 / 0 / 0, buildings d45
+  64 → 167. `bal-003` seat 3 (ring rule on): 80 / 153 / 143 / 166 / 177 → 0 / 0 / 16 / 5 / 7, buildings d45 124 → 108 (13% fewer;
+  not looked into). The other seats change by 3% or less. One game each, so an indication; the single road into the keep is a
+  cause of the jam in these two seats.
+- Carrier load (0.11 to 0.14 against 0.12 on day 20), helpers called and the share of flags that carry a building and join 3
+  roads or more (0.24 to 0.28 against 0.27 to 0.29) are the same in both modes. Roads are longer in nodes on the lattice (mean
+  4.3 to 5.3 against 3.6, longest 13 to 15 against 7), but a lattice step is a different distance, so that is not compared.
+  Not found: why the lattice AI leaves a keep flag with one road (untested guess: later roads end on the first road's nodes,
+  which splits it, instead of on the keep flag). No game code changed for this.
 
 #### `breakRings` on by default (#169)
 
@@ -922,6 +939,15 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
   stuck (carrier promised, no destination, bound for the building at this flag, no route, next flag full, next flag has room), the
   destination building types, the stores (flag fill, goods stored), the goods by type, the flags on corners, and the rings of full
   flags. `norings` plays without `transportOptions.breakRings`. Read-only.
+- `netshape.ts <size> <seed> <day>,<day>... [lattice] [norings]` (#169): per rival seat on those days, roads, mean and longest road
+  in tiles, carrier load, roads with helpers, flags that carry a building and join 3 roads or more, the roads out of each store's
+  flag, and the goods on flags bound for a store. Read-only.
+- `keepflag.ts <size> <seed> <day> [lattice] [norings]` (#169): per rival seat, the keep's flag, the roads out of it (length,
+  where they lead, the carrier's busy share) and every node beside it (use, feature, owner, whether a road may go there). Read-only.
+- `keeproad.ts <size> <seed> <fixDay> <days> [lattice] [norings] [nofix]` (#169): plays the assess game; on `fixDay` each seat
+  whose keep flag has fewer than 3 roads gets roads to its nearest unjoined flags until it has 3 (`nofix` plays the same game
+  without); every 5 days prints per seat stuck goods, full flags, buildings and the keep flag's roads. A probe that changes the
+  game it plays, not a rule.
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the
