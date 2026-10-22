@@ -3,8 +3,9 @@ import { aiOptions } from "../src/sim/ai/builder";
 import { DEFAULT_DISTRIBUTION, goodId } from "../src/sim/econ/defs";
 import { World } from "../src/sim/world";
 
+const DEFAULT_BOWS = aiOptions.bowsByNeed;
 afterEach(() => {
-  aiOptions.bowsByNeed = false;
+  aiOptions.bowsByNeed = DEFAULT_BOWS;
 });
 
 const BOW = goodId("bow");
@@ -19,8 +20,8 @@ const play = (w: World, steps: number): void => {
 };
 
 describe("the bowyer's planks follow the wardens' need for bows (bowsByNeed, #175)", () => {
-  it("is off by default", () => {
-    expect(aiOptions.bowsByNeed).toBe(false);
+  it("is on by default (#175)", () => {
+    expect(DEFAULT_BOWS).toBe(true);
   });
 
   it("gives the bowyer no planks while the stores hold enough bows, and its share again when they do not", () => {
@@ -36,6 +37,7 @@ describe("the bowyer's planks follow the wardens' need for bows (bowsByNeed, #17
   }, 120000);
 
   it("leaves the bowyer's share alone with the switch off", () => {
+    aiOptions.bowsByNeed = false;
     const w = new World("quiet-cairn-175", { rivals: 1 });
     play(w, 400);
     setBows(w, 1, 500);

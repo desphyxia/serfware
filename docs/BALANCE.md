@@ -162,8 +162,9 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `keeproads`: from 8 buildings, a seat whose keep flag has fewer than 3 roads gets one more, every 4 thoughts, to the nearest
   flag of its own the keep flag does not join yet (path up to 12 nodes on the lattice, 6 off it; `keepRoads`,
   planner.ts `connectKeepFlag`). Issue #169.
-- `bows`: the bowyer's share of planks is 0 while the stores hold a bow for every warden in the seat's lantern buildings who
-  lacks one, and 4 more (`bowsByNeed`, ai/economy.ts `settings`). Issue #175.
+- `nobows`: plays without the rule that gives the bowyer no planks while the stores hold a bow for every warden in the seat's
+  lantern buildings who lacks one, and 4 more (`bowsByNeed`, ai/economy.ts `settings`). The rule is **on by default since
+  #175**; until then the switch was `bows`, which no longer does anything. Issue #175.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -959,7 +960,31 @@ differences are the game taking another course):
   Seats with 30 or more goods stuck on 50 days or more: lattice 1 → 0, lattice + `keeproads` 0 → 0, default 0 → 1 (small
   `bal-001` seat 2, not a bowyer seat).
 - The bows are not needed in these games (no war, `peaceDays` 999); with war on, the 4 spare and the wardens' need decide how many
-  are kept. Not tested with war.
+  are kept. War: next section.
+
+#### `bowsByNeed` with war, and on by default (#175)
+
+Four 9-game sweeps with war from day 5 (`--peace 5`; tiny, small, medium, seeds 001 to 003, 80 days, the standard stack, master
+`7cd18cb`): the default game and the lattice, each without and with `bows`. Per game or per rival seat, without → with:
+
+| | default tiny | default small | default medium | lattice tiny | lattice small | lattice medium |
+|---|---|---|---|---|---|---|
+| Attacks ordered | 3 → 3 | 3.67 → 3.67 | 10 → 8.67 | 3 → 3 | 1.67 → 1.67 | 11.7 → 11 |
+| Buildings captured | 2 → 2 | 2.67 → 2.67 | 5 → 4.33 | 2 → 2 | 1 → 1 | 4.67 → 3.67 |
+| Rivals fallen | 1.33 → 1.33 | 1 → 1 | 1 → 1 | 1.33 → 1.33 | 0.67 → 0.67 | 0 → 0 |
+| Seats standing at the end | 67% → 67% | 78% → 78% | 67% → 67% | 78% → 78% | 78% → 78% | 100% → 100% |
+| Wardens d60 | 4.8 → 4.8 | 13.6 → 13.6 | 19.7 → 19.2 | 8.71 → 8.71 | 6.29 → 6.29 | 20.3 → 21.4 |
+| Buildings d60 | 36.8 → 36.8 | 58 → 58.1 | 73.1 → 81 | 59.7 → 61.2 | 77.6 → 66.3 | 126 → 134 |
+| Bows made, whole game | 1.67 → 1.67 | 7.56 → 7.11 | 209 → 23.3 | 248 → 8 | 154 → 3.11 | 208 → 19.3 |
+
+- War goes as before: the one game won (default tiny `bal-001`) is won by the same seat on the same day (12), the fallen rivals,
+  the seats standing and the day of the first attack are the same; medium has a few fewer attacks and captures. No rule
+  violations.
+- Seats with a bowyer (5 in each mode): buildings d79 93.8 → 107.4 (default) and 91.6 → 112.0 (lattice); days with under 5
+  planks in the stores 30.0 → 19.4 and 45.0 → 0.0 of 50; hungry days 18.4 → 22.2 and 15.6 → 17.8.
+- Lattice small −14% is one seat without a bowyer (`bal-002` seat 2, 212 → 113 buildings, stopping on day 30 with no war event
+  in the game): the game took another course; what stops it is not known.
+- **On by default since #175**, in the default game and on the lattice; `nobows` plays without it.
 
 ## Looking at the map
 
