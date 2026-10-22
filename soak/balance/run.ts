@@ -102,7 +102,8 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.foodWithoutIdle = !ai.includes("nofoodidle");
   aiOptions.orderEarly = ai.includes("early");
   aiOptions.keepRoads = ai.includes("keeproads");
-  aiOptions.bowsByNeed = ai.includes("bows");
+  // On by default since #175: "nobows" plays without it ("bows" no longer does anything).
+  aiOptions.bowsByNeed = !ai.includes("nobows");
   aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
   transportOptions.breakRings = !ai.includes("norings");
   if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);

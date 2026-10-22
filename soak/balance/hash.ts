@@ -17,10 +17,11 @@ const TOKENS: Record<string, string> = {
   quarry: "relocateQuarries", stone: "stoneFallback", food: "foodByNeed", priority: "stonePriority", reach: "borderReach", clear: "borderClear",
   tools: "toolsByDemand", ore: "oreMines", release: "releaseStalled", smith: "toolsmithAnyway", forge: "forgeRoom", survey: "surveyAgain",
   granite: "graniteFirst", turn: "turnBuildings", wide: "widePlacement", cand: "borderCandidates", wood: "woodByNeed", rail: "reserveRail",
-  railsites: "railWithSites", early: "orderEarly", keeproads: "keepRoads", bows: "bowsByNeed",
+  railsites: "railWithSites", early: "orderEarly", keeproads: "keepRoads",
 };
 const options = aiOptions as unknown as Record<string, boolean>;
 for (const [token, key] of Object.entries(TOKENS)) if (key in options) options[key] = ai.includes(token);
+if ("bowsByNeed" in options) options.bowsByNeed = !ai.includes("nobows");
 transportOptions.breakRings = !ai.includes("norings");
 const peaceDays = Number(process.env.BALANCE_PEACE ?? 999);
 const w = new World(seed, {
