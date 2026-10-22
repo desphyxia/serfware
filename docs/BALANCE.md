@@ -159,6 +159,9 @@ node scripts/balance-flows.mjs --out balance-pilot3
   the capacity at most (`transportOptions.breakRings`, a transport rule, not an AI switch; the soak invariant then allows 9
   goods on a flag). The rule is **on by default since #169**; until then the switch was `rings`, which no longer does anything.
   Issue #149.
+- `keeproads`: from 8 buildings, a seat whose keep flag has fewer than 3 roads gets one more, every 4 thoughts, to the nearest
+  flag of its own the keep flag does not join yet (path up to 12 nodes on the lattice, 6 off it; `keepRoads`,
+  planner.ts `connectKeepFlag`). Issue #169.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -888,6 +891,36 @@ Per rival seat, without → with:
   rule, 1863 s with it, so the rule itself costs no visible time.
 - Existing saves and replays play differently from this change on, as for any change to the rules of the game.
 - Three games a size: indications, not settled results.
+
+#### Three roads at the keep flag (`keeproads`, #169)
+
+The AI switch `keepRoads` (off by default) against the sweeps with the ring rule on (`ab20-latr`, `ab20-defr`): the same 9 games,
+tiny, small, medium, seeds 001 to 003, 80 days, the standard stack, master `0ee0f4e` game code. Per rival seat, without → with:
+
+| | default tiny | default small | default medium | lattice tiny | lattice small | lattice medium |
+|---|---|---|---|---|---|---|
+| Buildings d60 | 43.7 → 44.6 | 53.6 → 55.4 | 101 → 103 | 86.3 → 90.3 | 81.4 → 81.4 | 132 → 124 |
+| People d60 | 95.4 → 103 | 116 → 124 | 193 → 204 | 173 → 179 | 161 → 158 | 263 → 237 |
+| Hungry seat-days from day 30 | 24% → 32% | 34% → 38% | 26% → 32% | 28% → 35% | 29% → 32% | 25% → 30% |
+| Goods stuck on flags d20 | 0.03 → 0 | 3.26 → 1.64 | 10.1 → 8.1 | 5.12 → 0.48 | 7.09 → 0.11 | 30.3 → 3.4 |
+| Goods stuck on flags d60 | 0.11 → 1.89 | 5.44 → 2.56 | 9.48 → 10.6 | 0 → 0.06 | 0.03 → 0.4 | 15.5 → 10.2 |
+| Full flags d20 | 0 → 0.03 | 1.6 → 0.89 | 5.02 → 6.91 | 3.18 → 0.84 | 4.66 → 1.12 | 7.84 → 1.91 |
+
+- **Fewer goods stuck early on the lattice:** stuck goods on day 20 −89% to −98%, full flags −73% to −76%, on every size. Seat-days
+  with 30 or more goods stuck (small and medium, 18 seats): lattice 95 → 72, default 102 → 56. Seats with 50 such days or more:
+  lattice 1 → 0, default 0 → 0. No rule violations in the 18 games.
+- **The four seats that jammed on the lattice** (days with 30 or more stuck, buildings d60): medium `bal-002` seat 2 16 → 0, 123 →
+  167; medium `bal-001` seat 1 3 → 4, 165 → 170; small `bal-001` seat 3 0 → 0, 83 → 74; medium `bal-003` seat 3 55 → 40, 149 →
+  106. The last one (the queue into the keep above) still backs up and, as in the `keeproad.ts` test, builds fewer: why is not known.
+- **Growth does not follow.** Default: buildings +2% to +4%, people +6% to +8%. Lattice: tiny +5%, small 0%, medium buildings −6%,
+  people −10%. Single seats swing far both ways (lattice medium `bal-002` seat 1 203 → 146, tiny `bal-002` seat 1 91 → 148), so
+  with one game a seed most of this is noise.
+- **Hunger is up in all six columns** (+3 to +8 points of hungry seat-days). One direction in every column, so possibly real, not
+  looked into.
+- Wall time: the default games ran faster with the switch (they were played two sweeps at a time against three before); three of
+  the lattice games took about 9 hours each in a retry pass overnight, against 20 to 83 minutes for the other six. Not
+  measured whether that is the switch or the machine.
+- Not made the default: it clears the early backlog but costs one seat a third of its buildings and comes with more hunger.
 
 ## Looking at the map
 

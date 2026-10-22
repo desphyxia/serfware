@@ -67,5 +67,8 @@
  * its goods first; the launch rail then asks carriers for the craft and the cargo (voyages.ts `refreshWants`), as it does for any
  * order, and the founders board when the cargo is aboard and the window is open. Without it the planner orders only when the stores
  * hold everything, which the economy hardly ever allows (the sawmills empty the stores of logs).
+ * `keepRoads`: from 8 buildings, a seat whose keep flag has fewer than 3 roads gets one more, every few thoughts, to the nearest flag of
+ * its own that the keep flag does not join yet (planner.ts `connectKeepFlag`). The goods bound for a store go to the nearest one, so a
+ * keep flag with one road carries the whole seat's traffic on one carrier, which on the road lattice backs up for weeks (#169).
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false };
