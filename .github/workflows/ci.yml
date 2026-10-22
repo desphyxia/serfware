@@ -40,7 +40,8 @@ jobs:
 
   # Browser and multiplayer checks against the single-file build.
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.56 cannot install Chromium on ubuntu-latest since it became Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
