@@ -299,6 +299,41 @@ export function placeOn(w: World, type: string, tiles: readonly number[], player
   return -1;
 }
 
+/**
+ * `keepRoads`: one more road from the flag of `player`'s keep to the nearest flag of the seat's own that it does not join yet, over free
+ * ground, when the keep's flag has fewer than `want` roads. A road is at most `maxNodes` nodes (lattice nodes lie half as far apart). Every
+ * good bound for a store passes the flag of the nearest one, so a keep flag with one road carries the seat's whole traffic on one
+ * carrier. True when a road was placed.
+ */
+export function connectKeepFlag(w: World, player: number, want: number, maxNodes: number): boolean {
+  const eco = w.economy;
+  const land = w.land;
+  const keep = eco.buildings[eco.keeps[player] ?? -1];
+  const kf = keep?.alive ? eco.flags[keep.flag] : undefined;
+  if (!kf?.alive || kf.roads.length >= want) return false;
+  const joined = new Set<number>([kf.id]);
+  for (const id of kf.roads) {
+    const r = eco.roads[id];
+    if (r) joined.add(r.a === kf.id ? r.b : r.a);
+  }
+  const at = land.nodePos(kf.tile);
+  const dist = (t: number): number => {
+    const p = land.nodePos(t);
+    return (p[0] - at[0]) ** 2 + (p[1] - at[1]) ** 2 + (p[2] - at[2]) ** 2;
+  };
+  const hold = heldTiles(w, player);
+  const near = eco.flags
+    .filter((f) => f.alive && f.owner === player && !joined.has(f.id))
+    .map((f) => ({ f, d: dist(f.tile) }))
+    .sort((a, b) => a.d - b.d || a.f.id - b.f.id)
+    .slice(0, 12);
+  for (const { f } of near) {
+    const path = land.findPath(kf.tile, f.tile, (n) => land.roadable(n, player) && !hold?.has(n), 200);
+    if (path && path.length >= 2 && path.length <= maxNodes && w.command({ t: "road", tiles: path, player }).ok) return true;
+  }
+  return false;
+}
+
 /** The side `placeOn` would choose for `def` on tile `t` with `turnBuildings` on, with its score and the default side's (for tests and probes). */
 export function chooseSide(w: World, def: BuildingDef, t: number, player: number): { flagTile: number; cost: number; defaultSide: number; defaultCost: number } | null {
   const eco = w.economy;

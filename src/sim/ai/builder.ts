@@ -1,6 +1,6 @@
 import { BUILDINGS, buildingType, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { clearForBorder, clearForest, flagSides, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
+import { clearForBorder, clearForest, connectKeepFlag, flagSides, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
 import { goodId, goodsFor } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
@@ -56,6 +56,10 @@ const WOOD_SHORT = 4;
 const WOOD_FROM = 12;
 const WOOD_GAP = 30;
 const WOOD_PER_BUILT = 12;
+/** With `keepRoads`: the roads a keep flag should have, the buildings a seat needs before it is looked at, and thoughts between two tries. */
+const KEEP_ROADS = 3;
+const KEEP_ROADS_FROM = 8;
+const KEEP_ROADS_EVERY = 4;
 /** With `borderCandidates`: frontier tiles looked at for a lantern, and the ones that fit that are tried. */
 const BORDER_SCAN = 400;
 const BORDER_TRY = 40;
@@ -361,6 +365,7 @@ export class AiBuilder implements Brain {
     if (this.thoughts % 6 === 3) this.talk(w);
     if (this.thoughts % 4 === 1) this.tools(w);
     if (this.thoughts % 10 === 5) this.tidy(w);
+    if (aiOptions.keepRoads && this.thoughts % KEEP_ROADS_EVERY === 2 && mine.length >= KEEP_ROADS_FROM) connectKeepFlag(w, pl, KEEP_ROADS, w.land.lattice ? 12 : 6);
     if (aiOptions.foodByNeed) this.trackFood(stock, eco.peopleOf(pl).length);
     const retired = aiOptions.relocateQuarries ? this.retireQuarries(w, mine) : new Set<number>();
     if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
