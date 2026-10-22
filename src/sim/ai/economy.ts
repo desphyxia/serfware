@@ -1,6 +1,7 @@
 import { BUILDINGS, buildingType, DEFAULT_DISTRIBUTION, goodId } from "../econ/defs";
 import { DEFAULT_TRANSPORT, GOOD_COLLECT, STORE_OUT, type Building } from "../econ/economy";
 import { Feature, Use } from "../econ/landuse";
+import { ARM_BOW } from "../econ/people";
 import { placeConnected, placeOn } from "../econ/planner";
 import type { AiContext } from "./brain";
 import { aiOptions } from "./options";
@@ -29,6 +30,22 @@ const GRANITE_PER_BUILT = 30;
 const GRANITE_MAX = 3;
 /** The geologist sign (deposit + 1) each kind of mine digs. */
 const SIGN_FOR: Record<string, number> = { coalmine: 2, ironmine: 3, goldmine: 4, granitemine: 5 };
+/** With `bowsByNeed`: bows kept in the stores beyond one for every warden who lacks one. */
+const BOW_SPARE = 4;
+
+/** Wardens in the seat's lantern buildings who carry no bow. */
+const bowsLacking = (ctx: AiContext, mine: Building[]): number => {
+  const eco = ctx.eco;
+  let n = 0;
+  for (const b of mine) {
+    if (!b.built) continue;
+    for (const id of b.garrison) {
+      const p = eco.people[eco.settlers[id]?.person ?? -1];
+      if (p && !(p.arms & ARM_BOW)) n++;
+    }
+  }
+  return n;
+};
 
 /**
  * The scripted AI's land use and settings: it sends geologists where mountains stand, opens mines on
@@ -74,9 +91,11 @@ export class EconPlanner {
 
     // Planks go to the building sites first while they are short; otherwise the defaults stand.
     const short = sites >= 2 && plank < 4;
+    // With `bowsByNeed` the bowyer gets none while the stores hold a bow for every warden who lacks one and BOW_SPARE more.
+    const bowsEnough = aiOptions.bowsByNeed && (stock[goodId("bow")] ?? 0) >= bowsLacking(ctx, mine) + BOW_SPARE;
     for (const [target, base] of Object.entries(DEFAULT_DISTRIBUTION.plank ?? {})) {
       if (target === "site") continue;
-      const want = short ? Math.min(base, 0.1) : base;
+      const want = target === "bowyer" && bowsEnough ? 0 : short ? Math.min(base, 0.1) : base;
       if (Math.abs((prefs.dist.plank?.[target] ?? base) - want) > 0.01) ctx.act({ t: "prio", key: "plank", target, value: want });
     }
 

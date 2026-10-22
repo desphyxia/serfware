@@ -162,6 +162,8 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `keeproads`: from 8 buildings, a seat whose keep flag has fewer than 3 roads gets one more, every 4 thoughts, to the nearest
   flag of its own the keep flag does not join yet (path up to 12 nodes on the lattice, 6 off it; `keepRoads`,
   planner.ts `connectKeepFlag`). Issue #169.
+- `bows`: the bowyer's share of planks is 0 while the stores hold a bow for every warden in the seat's lantern buildings who
+  lacks one, and 4 more (`bowsByNeed`, ai/economy.ts `settings`). Issue #175.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -915,12 +917,49 @@ tiny, small, medium, seeds 001 to 003, 80 days, the standard stack, master `0ee0
 - **Growth does not follow.** Default: buildings +2% to +4%, people +6% to +8%. Lattice: tiny +5%, small 0%, medium buildings −6%,
   people −10%. Single seats swing far both ways (lattice medium `bal-002` seat 1 203 → 146, tiny `bal-002` seat 1 91 → 148), so
   with one game a seed most of this is noise.
-- **Hunger is up in all six columns** (+3 to +8 points of hungry seat-days). One direction in every column, so possibly real, not
-  looked into.
+- **Hunger is up in all six columns** (+3 to +8 points of hungry seat-days). Looked into afterwards (`seatwhy.ts`): a few seats
+  carry it, with large swings both ways (lattice 367 → 435 hungry seat-days, default 378 → 458), and the food buildings pooled
+  over all seats hardly change (farms 139 → 141 and 97 → 97). The two largest cases are seats out of land: default medium
+  `bal-003` seat 1 grew faster early (78 buildings on day 15 against 57) and then fed more people from the same few food
+  buildings, with no site left for more; lattice tiny `bal-002` seat 3 filled its land by day 10 with houses, a storehouse and a
+  quay instead of farms, and its keep flag had 3 roads on day 10 in both runs, so its game changed through the other seats. Not
+  tied to the rule with one game a seed.
+- **Why medium `bal-003` seat 3 builds less:** the warden seat's bowyer (#175). With the jam gone, planks reach the bowyer, which
+  turns all of them into bows nobody uses (1099 made, 1078 still in the stores on day 79); from day 30 the stores hold no plank,
+  houses drop off the wants list and the seat stays at 105 to 109 buildings at the room limit. The jam had kept planks from the
+  bowyer (200 to 750 in the stores). With `bows` the seat reaches 141 (next section).
 - Wall time: the default games ran faster with the switch (they were played two sweeps at a time against three before); three of
   the lattice games took about 9 hours each in a retry pass overnight, against 20 to 83 minutes for the other six. Not
   measured whether that is the switch or the machine.
 - Not made the default: it clears the early backlog but costs one seat a third of its buildings and comes with more hunger.
+
+#### Bows by need (`bows`, #175)
+
+The warden seat (seat 3 in the assess games) builds a bowyer, which makes a bow from every plank it gets; bows arm wardens and
+nothing else, and 97 to 98% of them were still in the stores on day 79. Seats with a bowyer had under 5 planks in the stores on
+41 to 50 of the 50 days from day 30, seats without one on 0 to 2. The AI switch `bowsByNeed` sets the bowyer's plank share to 0
+while bows are not wanted. Three 9-game sweeps (tiny, small, medium, seeds 001 to 003, 80 days, the standard stack, the
+`bow-limit` branch, which with the switch off plays as master `953d5ff`) against the same games without it. Seats with a bowyer only (the others play the same rules, and their
+differences are the game taking another course):
+
+| Seats with a bowyer | lattice (8) | lattice + `keeproads` (8) | default (4) |
+|---|---|---|---|
+| Days with under 5 planks in the stores, of 50 | 41.4 → 2.9 | 47.5 → 3.5 | 46.5 → 2.3 |
+| Bows made per seat | 1053 → 42 | 1228 → 39 | 703 → 40 |
+| Buildings d60 | 93.3 → 98.3 | 82.6 → 90.1 | 77.3 → 91.0 |
+| Buildings d79 | 94.5 → 102.3 | 82.4 → 90.1 | 77.5 → 97.0 |
+| People d60 | 206 → 222 | 181 → 201 | 163 → 196 |
+| Hungry days from day 30, of 50 | 10.4 → 10.1 | 12.1 → 13.0 | 10.0 → 21.8 |
+
+- The plank shortage is gone and the warden seats build more (+8% to +25% by day 79). Medium `bal-003` seat 3 with `keeproads`
+  goes 106 → 141 buildings on day 60; medium `bal-001` seat 3 in the default game 90 → 142.
+- Default-game hunger rises in two of the four seats (tiny `bal-001` seat 3 19 → 48 days, medium `bal-001` seat 3 16 → 33), the
+  latter the seat that grew by half. Not looked into.
+- Over all seats (all 27 per sweep) buildings d60 change by −1% to +8%, wardens are unchanged, and there are no rule violations.
+  Seats with 30 or more goods stuck on 50 days or more: lattice 1 → 0, lattice + `keeproads` 0 → 0, default 0 → 1 (small
+  `bal-001` seat 2, not a bowyer seat).
+- The bows are not needed in these games (no war, `peaceDays` 999); with war on, the 4 spare and the wardens' need decide how many
+  are kept. Not tested with war.
 
 ## Looking at the map
 
@@ -981,6 +1020,11 @@ Eight small helpers in `soak/balance/` bundle and run like the job (`node script
   whose keep flag has fewer than 3 roads gets roads to its nearest unjoined flags until it has 3 (`nofix` plays the same game
   without); every 5 days prints per seat stuck goods, full flags, buildings and the keep flag's roads. A probe that changes the
   game it plays, not a rule.
+- `seatwhy.ts <size> <seed> <days> [every=<d>] [seats=<n>,...]` (#169, #175): plays the assess game with the switches of
+  `BALANCE_AI` (the sweep tokens, `lattice` and `norings` included) and, per seat and window (5 days by default), prints buildings
+  and sites by type, adults and room, idle adults, hungry days, food in the stores and the builder's food cover, food buildings
+  standing and building, the keep flag's roads, full flags and stuck goods, and the builder's thoughts: where they stopped, what
+  was placed, failed and listed. Its day-60 building counts match the sweep records. Read-only (needs the aiTrace hook).
 - `sites.ts <size> <seed> <rivals> <days>`: four samples a day of every unfinished site with no material on site: what is
   missing and whether it is in a warehouse, has a route, a free flag, a claim, or is on its way (and where the oldest good
   lies); the AI's house want and whether any tile within 9 of the keep or a lit lantern would take a house; the goods the

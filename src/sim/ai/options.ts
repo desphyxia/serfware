@@ -70,5 +70,8 @@
  * `keepRoads`: from 8 buildings, a seat whose keep flag has fewer than 3 roads gets one more, every few thoughts, to the nearest flag of
  * its own that the keep flag does not join yet (planner.ts `connectKeepFlag`). The goods bound for a store go to the nearest one, so a
  * keep flag with one road carries the whole seat's traffic on one carrier, which on the road lattice backs up for weeks (#169).
+ * `bowsByNeed`: the bowyer's share of planks (the `prio` distribution setting) is 0 while the stores hold a bow for every warden in
+ * the seat's lantern buildings who lacks one and BOW_SPARE more (ai/economy.ts `settings`). Bows arm wardens and nothing else;
+ * without it the warden seat's bowyer turns every plank into bows that stay in the stores, and its building stops (#175).
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: false };
