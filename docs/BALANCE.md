@@ -1031,8 +1031,11 @@ against the same games without them; hungry seat-days / seats hungry 40+ days / 
 - Medium `bal-001` seat 3 (its start grows 32% of the year) ends with far fewer buildings in 4 of the 6 runs (167 → 60–118,
   lattice 211 → 53–54). Not looked into.
 - Not swept with war.
-- What the defaults changed in the test scenarios (fixed seeds): on `amber-fern-212` small the rival's new start has no level
-  ground left for a launch rail, so it never flies without `reserveRail` (#147; with it, the rail on day 3.4 as before); in
+- What the defaults changed in the test scenarios (fixed seeds): on `amber-fern-212` small the rival's new start lies between
+  the sea and the player's border (99 of its tiles within 9 steps of the keep, against 198 before). Slope is not the trouble: by day
+  8 seven tiles there still take a launch rail (three after digging), but each sits in a pocket of 2 to 4 tiles that trees, a rock,
+  steep ground, water and the border cut off from every road, so it never flies without `reserveRail` (#147; with it, the rail on
+  day 3.4 as before; with `widePlacement` instead, day 4); in
   `aibiome`'s mire game the rival grows faster and wins by the Star Wells on day 13, which ended its building (the test now plays
   conquest only); the war test's `amber-fern-212` no longer raids in 40 days (4 of 8 tiny seeds tried do, by day 3 to 6), so it
   plays `copper-wren-118`; and the deadlock check in `transport` caught a carrier idle for one tick between trips, so a road now

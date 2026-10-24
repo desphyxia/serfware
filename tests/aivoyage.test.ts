@@ -43,7 +43,7 @@ describe("the AI in space", () => {
 
   it("a rival seat flies, lands, and its colony is managed by a brain of its own", { timeout: 900000 }, () => {
     VoyagePlanner.found = { population: 20, idle: 0 };
-    // The rival keeps level ground for its launch rail (#147): from the start `avoidCold` picks on this seed, a full town has none (#179).
+    // The rival keeps a site for its launch rail (#147): from the start `avoidCold` picks on this seed, a full town leaves none a road can reach (#179).
     aiOptions.reserveRail = true;
     const w = new World("amber-fern-212", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99 });
     expect(w.humans).toBe(1);
