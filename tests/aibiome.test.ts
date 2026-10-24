@@ -3,9 +3,12 @@ import { Region } from "../src/sim/biomes/regions";
 import { goodId } from "../src/sim/econ/defs";
 import { World } from "../src/sim/world";
 
-/** Builds the AI on seat 1 gave, by type, after `days` on a world whose land is all one region. */
+/**
+ * Builds the AI on seat 1 gave, by type, after `days` on a world whose land is all one region. Only conquest wins (#179): with the
+ * stores topped up the rival can hold the Star Wells and win within the days, and a won game stops its building.
+ */
 function built(region: Region, days: number): Record<string, number> {
-  const w = new World("russet-heron-417", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99 });
+  const w = new World("russet-heron-417", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99, victory: "conquest" });
   w.recordAi = true;
   const eco = w.economy;
   // The land is taken to be one region throughout (the AI looks at its own territory).

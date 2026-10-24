@@ -1,7 +1,7 @@
 import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
 import type { AiLevel, Personality } from "../../src/sim/ai/personality";
 import { GOODS } from "../../src/sim/econ/defs";
-import { transportOptions } from "../../src/sim/econ/economy";
+import { startOptions, transportOptions } from "../../src/sim/econ/economy";
 import type { Difficulty } from "../../src/sim/econ/adversity";
 import { ORE_PRESETS, type MapOptions } from "../../src/sim/econ/landuse";
 import type { GridSize } from "../../src/sim/planet/grid";
@@ -104,8 +104,12 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.keepRoads = ai.includes("keeproads");
   // On by default since #175: "nobows" plays without it ("bows" no longer does anything).
   aiOptions.bowsByNeed = !ai.includes("nobows");
+  // On by default since #179: "nowarmfarms" plays without it ("warmfarms" no longer does anything).
+  aiOptions.warmFarms = !ai.includes("nowarmfarms");
   aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
   transportOptions.breakRings = !ai.includes("norings");
+  // Starts kept out of land that is cold most of the year, on by default since #179: "nocoldstart" plays without it.
+  startOptions.avoidCold = !ai.includes("nocoldstart");
   if (process.env.BALANCE_TURN_WEIGHT) aiOptions.turnPartnerWeight = Number(process.env.BALANCE_TURN_WEIGHT);
   const foundEnv = (process.env.BALANCE_FOUND ?? "").split(",").map(Number);
   if (foundEnv.length === 2 && foundEnv.every(Number.isFinite)) VoyagePlanner.found = { population: foundEnv[0] as number, idle: foundEnv[1] as number };

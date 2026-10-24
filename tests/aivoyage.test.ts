@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { goodId } from "../src/sim/econ/defs";
+import { aiOptions } from "../src/sim/ai/options";
 import { VoyagePlanner } from "../src/sim/ai/voyage";
 import { Rng } from "../src/sim/rng";
 import { World } from "../src/sim/world";
@@ -15,8 +16,10 @@ function tally(w: World): Record<string, number> {
 }
 
 const found = { ...VoyagePlanner.found };
+const RESERVE_RAIL = aiOptions.reserveRail;
 afterEach(() => {
   VoyagePlanner.found = { ...found };
+  aiOptions.reserveRail = RESERVE_RAIL;
 });
 
 describe("the AI in space", () => {
@@ -40,6 +43,8 @@ describe("the AI in space", () => {
 
   it("a rival seat flies, lands, and its colony is managed by a brain of its own", { timeout: 900000 }, () => {
     VoyagePlanner.found = { population: 20, idle: 0 };
+    // The rival keeps level ground for its launch rail (#147): from the start `avoidCold` picks on this seed, a full town has none (#179).
+    aiOptions.reserveRail = true;
     const w = new World("amber-fern-212", { size: "small", rivals: 1, personalities: ["builder"], peaceDays: 99 });
     expect(w.humans).toBe(1);
     const eco = w.economy;

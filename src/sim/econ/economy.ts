@@ -49,6 +49,16 @@ export const FLAG_CAPACITY = 8;
  * default since #169: without it a ring of three full flags can hold a seat's goods for weeks, most often on the road lattice.
  */
 export const transportOptions = { breakRings: true };
+/**
+ * `avoidCold` (on by default since #179): a start site whose land within 7 steps grows fields less than COLD_START of the year
+ * (`Climate.growingGuess`) loses COLD_START_WEIGHT for each whole share below it (up to 140 for land frozen all year, as much as
+ * 140 more flat tiles), so starts stay out of the tundra where there is warmer room at the right distance. Warmer sites are left
+ * as they were. A seat starting cold is hungry most of the game; preferring warmth everywhere instead crowded the starts
+ * together on the small maps (docs/BALANCE.md).
+ */
+export const startOptions = { avoidCold: true };
+const COLD_START = 0.35;
+const COLD_START_WEIGHT = 400;
 /** A good must have waited this long on its flag (ticks, a fraction of a day) before the ring is looked for, and the ring is searched this often. */
 const RING_WAIT_DAY_PART = 8;
 const RING_EVERY = 16;
@@ -707,6 +717,7 @@ export class Economy {
     let roomy = false;
     const hillDist = this.hills ? (this.hillField ??= this.hillDistances()) : null;
     const hillWant = this.hills ? HILLS[this.hills]!.steps : 0;
+    const cold = startOptions.avoidCold ? this.climate : null;
     for (let t = 0; t < grid.count; t++) {
       if (!land.isLand(t) || grid.degree(t) === 5 || land.territory[t] !== 0) continue;
       const e = terrain.elevation[t] as number;
@@ -717,8 +728,12 @@ export class Economy {
       let trees = 0;
       let rocks = 0;
       let water = 0;
+      let lands = 0;
+      let warmth = 0;
       for (const n of land.ring(t, 7)) {
         if (land.isLand(n)) {
+          lands++;
+          if (cold) warmth += cold.growingGuess(n);
           if (land.slope(n) < 1.2) flatLand++;
           if (land.feature[n] === Feature.Tree) trees++;
           if (land.feature[n] === Feature.Rock) rocks++;
@@ -741,7 +756,8 @@ export class Economy {
         fair +
         spread +
         flatLand * 1.0 + Math.min(trees, 40) * 0.8 + Math.min(rocks, 10) * 1.5 + (water > 0 && water < 40 ? 15 : 0) - lat * 30 - slope * 20 + rng.next() * 3 -
-        (hillDist ? Math.min(40, Math.abs((hillDist[t] as number) - hillWant)) * 25 : 0);
+        (hillDist ? Math.min(40, Math.abs((hillDist[t] as number) - hillWant)) * 25 : 0) -
+        (cold && lands ? Math.max(0, COLD_START - warmth / lands) * COLD_START_WEIGHT : 0);
       // The keep's flag stands on a neighbouring tile: a keep ringed by water (an islet in a lake) would get none. Checked after
       // the score so the random draws stay the same and every other start is chosen as before.
       if (!grid.neighborsOf(t).some((n) => land.isLand(n) && land.slope(n) < 2.2)) continue;

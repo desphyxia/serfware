@@ -9,6 +9,8 @@ import { sunHeight } from "../biomes/sun";
 export const YEAR_DAYS = 24;
 /** How often the weather moves, in ticks. */
 export const CLIMATE_STEP = 20;
+/** The steady rain `growingGuess` puts in place of the fronts (0.3 fit the weather best on the balance maps). */
+const GUESS_RAIN = 0.3;
 
 export type Season = "spring" | "summer" | "autumn" | "winter";
 
@@ -178,6 +180,53 @@ export class Climate {
   /** Can fields grow here right now? */
   growing(t: number): boolean {
     return (this.temp[t] as number) > 5 && (this.land.snowCover[t] as number) < 0.2;
+  }
+
+  private guesses: Float32Array | null = null;
+
+  /**
+   * The share of the year fields grow at a tile (0..1), guessed before any weather has happened: the tile's own temperature and the
+   * seasons, a steady light rain in place of the fronts, and snow lying and melting as in `step`. It runs a few points warm but ranks
+   * tiles almost exactly as the weather does (correlation 0.99 on the balance maps). Start sites use it (`startOptions`). No random draws.
+   */
+  growingGuess(t: number): number {
+    if (!this.guesses) {
+      const terrain = this.land.planet.terrain;
+      const c = this.land.planet.grid.center;
+      const PER_DAY = 4;
+      const year = YEAR_DAYS * PER_DAY;
+      const steps = this.dayTicks / PER_DAY / CLIMATE_STEP;
+      const locked = this.land.planet.params.locked;
+      const tilt = this.land.planet.params.axialTilt;
+      // The seasons' wave over the two years, worked out once: `seasonalOffset` is a tile's swing times this wave, so the
+      // sums below are the same as calling `offsetAt` for every sample, without a sine per tile and sample.
+      const wave = new Float64Array(2 * year);
+      for (let i = -year; i < year; i++) wave[i + year] = sin((this.yearPhase(Math.round(((i + 1) * this.dayTicks) / PER_DAY)) - 0.125) * TAU);
+      const guesses = new Float32Array(this.land.planet.grid.count);
+      for (let x = 0; x < guesses.length; x++) {
+        const y = c[x * 3 + 1] as number;
+        const rain = GUESS_RAIN * (0.45 + 0.8 * (terrain.moisture[x] as number));
+        const swing = 32 * (tilt / 0.48) * Math.abs(y) + 3;
+        const sign = y >= 0 ? 1 : -1;
+        // A locked planet has no seasons: its offset does not change with the time.
+        const fixed = locked ? this.offsetAt(0, x, y) : 0;
+        let snow = 0;
+        let n = 0;
+        // A year for the snow to settle, then a year counted.
+        for (let i = -year; i < year; i++) {
+          const offset = locked ? fixed : swing * (wave[i + year] as number) * sign;
+          const temp = (terrain.temperature[x] as number) + offset - rain * 4 + this.tempOffset;
+          if (temp < 0 && rain > 0.05) snow += rain * 0.04 * steps;
+          else if (temp < -4) snow += 0.002 * steps;
+          if (temp > 1) snow -= 0.004 * (1 + temp * 0.15) * steps;
+          snow = clamp(snow, 0, 1);
+          if (i >= 0 && temp > 5 && snow < 0.2) n++;
+        }
+        guesses[x] = n / year;
+      }
+      this.guesses = guesses;
+    }
+    return this.guesses[t] as number;
   }
 
   /**
