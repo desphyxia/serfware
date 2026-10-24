@@ -6,6 +6,8 @@ import { Feature, Use } from "./landuse";
 /** With `widePlacement`: lit lanterns tried as centres after the first search finds nothing, and how far from the Hearthship the last try reaches. */
 const WIDE_CENTRES = 3;
 const WIDE_REACH = 16;
+/** With `aiOptions.warmFarms`: what a farm or orchard site gains from land frozen all year to growing all year (ring k from the centre costs about k(k+1)/2). */
+const WARM_FARM = 30;
 
 /**
  * Simple site planner: finds a spot for a building near the keep and connects it with a road.
@@ -38,13 +40,26 @@ export function placeConnected(
     for (const x of land.ring(t, 4)) if (land.feature[x] === opts.near) n++;
     return -n;
   };
+  // With `aiOptions.warmFarms`: farms and orchards where the growing season is long (their fields and fruit wait in the cold).
+  const climate = aiOptions.warmFarms && (type === "farm" || type === "orchard") ? w.climate : null;
+  const warmth = (t: number) => {
+    if (!climate) return 0;
+    let sum = 0;
+    let n = 0;
+    for (const x of [land.pt(t), ...land.ring(t, 3)])
+      if (land.isLand(x)) {
+        sum += climate.growingGuess(x);
+        n++;
+      }
+    return n ? (WARM_FARM * sum) / n : 0;
+  };
   /** The tiles of a ring round `center`, best first: close to it, and (with `near`) with plenty of that feature about. */
   const rank = (center: number, maxDist: number, ownOnly: boolean): number[] => {
     const inner = new Set(land.ring(center, minDist - 1));
     const candidates = land.ring(center, maxDist).filter((t) => !inner.has(t) && (!ownOnly || land.territory[t] === player + 1) && (opts.near === undefined || !opts.need || reach(t) >= opts.need));
     // Prefer good spots close to home: each ring step away costs about one tree's worth.
     return candidates
-      .map((t, i) => [Math.max(score(t), -6) + i / 6, t] as const)
+      .map((t, i) => [Math.max(score(t), -6) - warmth(t) + i / 6, t] as const)
       .sort((a, b) => a[0] - b[0] || a[1] - b[1])
       .map(([, t]) => t);
   };

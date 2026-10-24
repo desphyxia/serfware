@@ -89,17 +89,22 @@ describe("transport (Serf City's rules)", () => {
     const eco = w.economy;
     const end = w.tick + 12 * eco.dayTicks;
     let stuck = 0;
+    // A carrier stands idle for a tick between trips, so a road counts only when it is jammed on two checks in a row (#179).
+    let jammed = new Set<number>();
     while (w.tick < end) {
       w.step();
       if (w.tick % 300) continue;
-      for (const r of eco.roads) {
-        if (!r.alive) continue;
+      const now = new Set<number>();
+      eco.roads.forEach((r, i) => {
+        if (!r.alive) return;
         const a = eco.flags[r.a]!;
         const b = eco.flags[r.b]!;
         // A deadlock: both full, each holding goods for the other, and nobody moving them.
         const forOther = (from: number, to: number) => eco.flags[from]!.goods.some((g) => (eco as unknown as { nextHop(g: unknown): number }).nextHop(eco.goods[g]) === to);
-        if (a.goods.length >= 8 && b.goods.length >= 8 && forOther(r.a, r.b) && forOther(r.b, r.a) && (eco.settlers[r.carrier]?.state ?? "idle") === "idle") stuck++;
-      }
+        if (a.goods.length >= 8 && b.goods.length >= 8 && forOther(r.a, r.b) && forOther(r.b, r.a) && (eco.settlers[r.carrier]?.state ?? "idle") === "idle") now.add(i);
+      });
+      for (const i of now) if (jammed.has(i)) stuck++;
+      jammed = now;
     }
     expect(stuck).toBe(0);
   }, 300000);

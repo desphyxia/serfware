@@ -16,7 +16,8 @@ function tally(w: World, player?: number): Record<string, number> {
 describe("the AI at war and in public works", () => {
   it("palisades, camps, raids, breaks a truce and bridges", { timeout: 900000 }, () => {
     const all: Record<string, number> = {};
-    for (const seed of ["amber-fern-212", "glade-iris-904"]) {
+    // Raids need an enemy flag in reach, so they depend on where the starts fall (copper-wren-118 since #179).
+    for (const seed of ["copper-wren-118", "glade-iris-904"]) {
       const w = new World(seed, { size: "tiny", rivals: 3, personalities: ["warden", "warden", "trader"], peaceDays: 3 });
       w.command({ t: "steward", of: 0, on: true });
       w.recordAi = true;

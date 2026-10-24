@@ -1,5 +1,5 @@
 import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
-import { transportOptions } from "../../src/sim/econ/economy";
+import { startOptions, transportOptions } from "../../src/sim/econ/economy";
 import { World } from "../../src/sim/world";
 
 /**
@@ -22,7 +22,9 @@ const TOKENS: Record<string, string> = {
 const options = aiOptions as unknown as Record<string, boolean>;
 for (const [token, key] of Object.entries(TOKENS)) if (key in options) options[key] = ai.includes(token);
 if ("bowsByNeed" in options) options.bowsByNeed = !ai.includes("nobows");
+if ("warmFarms" in options) options.warmFarms = !ai.includes("nowarmfarms");
 transportOptions.breakRings = !ai.includes("norings");
+startOptions.avoidCold = !ai.includes("nocoldstart");
 const peaceDays = Number(process.env.BALANCE_PEACE ?? 999);
 const w = new World(seed, {
   size,

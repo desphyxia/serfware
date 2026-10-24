@@ -1,6 +1,6 @@
 /**
- * Behaviours that are off unless a harness switches them on, so the AI plays as before by default (except `foodWithoutIdle` and
- * `bowsByNeed`, which are on).
+ * Behaviours that are off unless a harness switches them on, so the AI plays as before by default (except `foodWithoutIdle`,
+ * `bowsByNeed` and `warmFarms`, which are on).
  * `relocateQuarries`: a quarry with no rock left in reach stops counting against the quarry quota and is
  * pulled down (its worker and tool go back to the pool), and new quarries are looked for farther out.
  * `stoneFallback`: when the rock inside the border is nearly used up, start on granite (a geologist, a mine) before
@@ -74,5 +74,8 @@
  * `bowsByNeed` (on by default since #175): the bowyer's share of planks (the `prio` distribution setting) is 0 while the stores hold a bow for every warden in
  * the seat's lantern buildings who lacks one and BOW_SPARE more (ai/economy.ts `settings`). Bows arm wardens and nothing else;
  * without it the warden seat's bowyer turns every plank into bows that stay in the stores, and its building stops (#175).
+ * `warmFarms` (on by default since #179): farms and orchards are placed where the land within 3 steps has the longest growing season (`Climate.growingGuess`),
+ * worth WARM_FARM in the site ranking from frozen all year to growing all year, against the ranking's cost for distance from the centre
+ * (planner.ts `placeConnected`). Fields and orchard fruit wait while it is cold; hungry seats were found farming their coldest land.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true };
+export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true };

@@ -165,6 +165,10 @@ node scripts/balance-flows.mjs --out balance-pilot3
 - `nobows`: plays without the rule that gives the bowyer no planks while the stores hold a bow for every warden in the seat's
   lantern buildings who lacks one, and 4 more (`bowsByNeed`, ai/economy.ts `settings`). The rule is **on by default since
   #175**; until then the switch was `bows`, which no longer does anything. Issue #175.
+- `nocoldstart`: plays without the rule that keeps start sites out of land that grows fields less than 35% of the year
+  (`startOptions.avoidCold`, economy.ts `setupStart`, not an AI switch). On by default since #179.
+- `nowarmfarms`: plays without the rule that puts farms and orchards where the land within 3 steps has the longest growing
+  season (`warmFarms`, planner.ts `placeConnected`). On by default since #179.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -985,6 +989,62 @@ Four 9-game sweeps with war from day 5 (`--peace 5`; tiny, small, medium, seeds 
 - Lattice small −14% is one seat without a bowyer (`bal-002` seat 2, 212 → 113 buildings, stopping on day 30 with no war event
   in the game): the game took another course; what stops it is not known.
 - **On by default since #175**, in the default game and on the lattice; `nobows` plays without it.
+
+#### Hunger and the climate (`coldstart`, `warmfarms`, #179)
+
+Fields and orchard fruit grow only while a tile is above 5° with little snow (`Climate.growing`). `Climate.growingGuess` estimates
+the share of the year a tile grows from the climate model (seasons, the day's swing, rain from the tile's moisture, snow), without
+drawing from the weather's random stream; against the simulated weather of an 80-day game it correlates 0.99 and reads 3 to 5
+points high. Measured on the assess games (12 games, 80 days, the standard stack):
+
+- Borders stop growing by day 20 in 33 of 36 seats, so a seat farms the land it starts with.
+- Of 19 seats with a cold keep, 7 hold a lot of warmer land and 12 are cold almost everywhere.
+- Of the 9 seats hungry 40+ days, 5 farm much colder land than their open land (small `bal-003` seat 1: orchard trees grow 0%
+  of the year, its open land 97% at the median; tiny `bal-001` seat 3: fields .14, open land .59), 2 farm at their land's
+  median, and 2 (medium `bal-001` seat 2, both road modes) are cold everywhere.
+
+Tried first: weighing warmth into every start site (400 points from frozen to growing all year) cut hungry seat-days by 21% but
+crowded the starts on tiny and medium maps (buildings −10%, people −6%); comparing the starts' warmth in the fair-starts band did
+nothing, because `evenStarts` makes up for a cold start with soil and ore. Both were dropped for:
+
+- `startOptions.avoidCold`: a start site whose land within 7 steps grows less than 35% of the year loses 400 points for each
+  whole share below it (at most 140). On the 9 assess maps cold rival starts go 6 → 3, the closest keeps 10 → 12 steps apart,
+  and 5 maps keep the same starts.
+- `aiOptions.warmFarms`: farm and orchard sites gain up to 30 (frozen to growing all year) for the growing season of the land
+  within 3 steps, against the ranking's cost for distance from the centre.
+
+Six 9-game sweeps (tiny, small, medium, seeds 001 to 003, 80 days, no war, the standard stack), each switch alone and both,
+against the same games without them; hungry seat-days / seats hungry 40+ days / buildings at the end / people at the end:
+
+| Roads | without | `coldstart` | `warmfarms` | both |
+|---|---|---|---|---|
+| default | 594 / 7 / 1873 / 3869 | 587 / 7 / 1982 / 4133 | 493 / 4 / 1767 / 3636 | 482 / 3 / 1860 / 3827 |
+| lattice | 553 / 5 / 2801 / 5586 | 448 / 3 / 2928 / 5623 | 531 / 5 / 2935 / 5772 | 427 / 4 / 2955 / 5874 |
+
+- Both together: hungry seat-days 1147 → 909 (−21%), buildings +3%, people +3%.
+- `warmfarms` fixes the seats that farmed their cold land (small `bal-003` seat 1 62 → 1 hungry days, medium `bal-003` seat 2
+  48 → 14); `coldstart` the seats that started in the tundra (lattice medium `bal-001` seat 2 80 → 4, small `bal-001` seat 1
+  77–80 → 24–33). Maps with no cold start play as before.
+- Small `bal-003`: `coldstart` swaps seats 2 and 3, so the same tundra site (grows 5% of the year) goes to seat 3, hungry 62 to
+  72 days in every run with it. Not looked into; the seats are placed in turn, and the cold penalty (at most 140) is smaller
+  than the one for a site too close to another keep.
+- Medium `bal-001` seat 3 (its start grows 32% of the year) ends with far fewer buildings in 4 of the 6 runs (167 → 60–118,
+  lattice 211 → 53–54). Not looked into.
+- Not swept with war.
+- What the defaults changed in the test scenarios (fixed seeds): on `amber-fern-212` small the rival's new start lies between
+  the sea and the player's border (99 of its tiles within 9 steps of the keep, against 198 before). Slope is not the trouble: by day
+  8 seven tiles there still take a launch rail (three after digging), but each sits in a pocket of 2 to 4 tiles that trees, a rock,
+  steep ground, water and the border cut off from every road, so it never flies without `reserveRail` (#147; with it, the rail on
+  day 3.4 as before; with `widePlacement` instead, day 4); in
+  `aibiome`'s mire game the rival grows faster and wins by the Star Wells on day 13, which ended its building (the test now plays
+  conquest only); the war test's `amber-fern-212` no longer raids in 40 days (4 of 8 tiny seeds tried do, by day 3 to 6), so it
+  plays `copper-wren-118`; and the deadlock check in `transport` caught a carrier idle for one tick between trips, so a road now
+  counts only when it is jammed on two checks in a row.
+- **On by default since #179**, in the default game and on the lattice; `nocoldstart` and `nowarmfarms` play without them.
+
+Probes (read-only, `soak/balance`): `bordclimate.ts` (border size and warmth over the game), `seatclimate.ts` (the ground and weather
+each seat starts on), `fieldroom.ts` (open room round the farms and orchards), `farmclimate.ts` (fields against open land), `warmguess.ts` (`growingGuess` against
+the weather), `startclimate.ts` (starts with and without `avoidCold`).
 
 ## Looking at the map
 
