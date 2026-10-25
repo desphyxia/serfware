@@ -75,7 +75,7 @@ export function formatLatLon(p: THREE.Vector3): string {
 }
 
 /** Top-level runtime: owns the world, the view, the loop and the UI. */
-/** Experimental: `?lattice=1` builds solo worlds with Serf City style roads (flags on tile corners). Not saved. */
+/** New worlds get Serf City style roads (flags on tile corners too) unless `?lattice=0`; a save keeps the roads it was made with. */
 function latticeOption(): { latticeRoads?: boolean } {
   return latticeRequested() ? { latticeRoads: true } : {};
 }

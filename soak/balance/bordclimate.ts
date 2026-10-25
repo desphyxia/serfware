@@ -4,7 +4,7 @@ import { World } from "../../src/sim/world";
 
 /**
  * How much the climate varies inside a seat's border (hunger): `node bordclimate.mjs <size> <seed> <days> [cp=<day>,...]` plays the
- * assess game with the switches of `BALANCE_AI` (the sweep tokens; "lattice", "norings", "nobows", "nowarmfarms" included), counts for every tile the
+ * assess game with the switches of `BALANCE_AI` (the sweep tokens; "nolattice", "norings", "nobows", "nowarmfarms" included), counts for every tile the
  * samples (4 a day) on which fruit grows (`climate.growing`) and bees fly (8 degrees or more), and keeps each seat's border on the
  * checkpoint days (default 20, 40, 60 and the last). At the end it prints per seat and checkpoint, over the whole game's weather:
  * the land tiles held, the regions among them, and the growing and bee shares at the keep and across the held land (min, 10th
@@ -33,7 +33,7 @@ const w = new World(seed, {
   aiLevel: "normal",
   difficulty: "honest",
   peaceDays: 999,
-  ...(ai.includes("lattice") && { latticeRoads: true }),
+  ...(!ai.includes("nolattice") && { latticeRoads: true }),
   brain: (s: { player: number; rng: never; personality: never; level: never }) => new AiBuilder(s.player, s.rng, s.personality, s.level),
 } as never);
 w.command({ t: "steward", of: 0, on: true });

@@ -126,8 +126,9 @@ export function playGame(spec: GameSpec): GameRecord {
     fairStarts: spec.fairStarts,
     teams: spec.teams,
     armedWardens: ai.includes("armed"),
-    // "lattice" plays the Serf City road lattice (`?lattice=1` in the game): flags and buildings on tile corners.
-    ...(ai.includes("lattice") && { latticeRoads: true }),
+    // The Serf City road lattice (flags and buildings on tile corners too), as the game plays it by default since #181:
+    // "nolattice" plays the tile-centre roads ("lattice" no longer does anything).
+    ...(!ai.includes("nolattice") && { latticeRoads: true }),
     brain: (seat) => new AiBuilder(seat.player, seat.rng, seat.personality, seat.level),
   });
   w.command({ t: "steward", of: 0, on: true });

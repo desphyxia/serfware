@@ -141,8 +141,11 @@ node scripts/balance-flows.mjs --out balance-pilot3
   buildings and at most three, and the geologists look for a granite sign while that quota has none. Before, one granite mine
   was wanted only while the stores held under 8 stone, and relieveStone placed one or two when stone ran short.
 - `armed`: plays the armed-wardens rule (`armedWardens`, a match option; see the results below), not an `aiOptions` switch.
-- `lattice`: plays the Serf City road lattice (`latticeRoads`, a match option; `?lattice=1` in the game), not an `aiOptions`
-  switch. Flags and buildings sit on tile corners as well as tile centres. See "Result: the road lattice" below.
+- `nolattice`: plays the tile-centre roads. Since #181 a sweep plays the Serf City road lattice unless this is given, as the game
+  does unless it is opened with `?lattice=0` (`latticeRoads`, a match option, not an `aiOptions` switch): flags and buildings sit
+  on tile corners as well as tile centres. Before #181 the tile-centre roads were the default and `lattice` asked for the lattice,
+  so in the results below a run named `lattice` (or with `lattice` in its tokens) is the lattice and one without it is the
+  tile-centre roads; `lattice` no longer does anything. See "Result: the road lattice" below.
 - `turn`: a building takes the best of its flag sides, as a player turns it with the mouse wheel, not the flattest one: every
   side is planned (the new road to the network, the distance to the buildings it trades with, the height step) and the
   cheapest is taken (`BALANCE_TURN_WEIGHT` sets the weight on the distance, default 2). Issue #148.
@@ -743,8 +746,8 @@ noise). `large` was left out of these runs.
 
 ### Result: the road lattice (`lattice`, PRs #159 and #162)
 
-Asked after #159 (the lattice) and #162 (AI rivals and hamlets on it) merged: did they change anything balance-wise? The lattice is
-off unless `?lattice=1`, so two questions.
+Asked after #159 (the lattice) and #162 (AI rivals and hamlets on it) merged: did they change anything balance-wise? The lattice was
+off unless `?lattice=1` then (it is the default since #181), so two questions.
 
 **1. The default game.** `hash.ts` on `377234d` (before #159), `20b350b` (#159) and `637273d` (#162), same games, 24 pairs
 (12 games a build: `A`, standard stack, no war, tiny, small and medium two seeds each for 80 days, large one seed for 40 days;
@@ -1045,6 +1048,36 @@ against the same games without them; hungry seat-days / seats hungry 40+ days / 
 Probes (read-only, `soak/balance`): `bordclimate.ts` (border size and warmth over the game), `seatclimate.ts` (the ground and weather
 each seat starts on), `fieldroom.ts` (open room round the farms and orchards), `farmclimate.ts` (fields against open land), `warmguess.ts` (`growingGuess` against
 the weather), `startclimate.ts` (starts with and without `avoidCold`).
+
+#### Launch rails and the lattice under the shipped AI (#179, #181)
+
+The sweeps above play the standard stack, whose AI switches are all off in the game. Runs `ab26` and `ab27` play the switches the
+game ships with (no tokens apart from those named; both climate switches on), no war, 80 days, 3 seeds a size, 9 games each.
+
+**Launch rails.** With the shipped switches no seat builds a launch rail in 80 days, with or without the cold-start rule, so
+`avoidCold` costs the game no rails. `reserveRail` alone brings none either (and costs tiny and small 7 to 8% of their buildings);
+`widePlacement`, alone or with it, gives one medium seat a rail. On the standard stack (which has `wide`) `rail` raises the seats
+with a rail on the default roads from 0 / 33 / 44% to 33 / 44 / 56% (tiny / small / medium; one seat is 11%) and costs medium 10% of
+its buildings and people at day 60; on the lattice it changes no seat's rail (67% on each size before and after).
+
+**The lattice by default (#181).** `nolattice` replays the old default exactly (every line equal to `ab26-shp`). Per rival seat,
+tile-centre roads / lattice:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| Buildings d60 | 38.6 / 66.4 (+72%) | 49.4 / 66.6 (+35%) | 63.8 / 70.7 (+11%) |
+| People d60 | 81.6 / 135 (+66%) | 106 / 135 (+27%) | 143 / 149 (+4%) |
+| Hungry seat-days from day 30 | 88% / 86% | 79% / 64% | 67% / 82% |
+| Land held d60 | 264 / 242 | 356 / 336 | 771 / 857 |
+| Stalled seat-days | 89% / 76% | 85% / 83% | 69% / 70% |
+| Probes sent | 0 / 0 | 0 / 0.67 | 0 / 1.33 |
+
+The lattice builds more on every size, but medium seats go hungry on more days (67% to 82%), not looked into. Land held does not
+change between day 20 and day 60 in either mode: with the shipped switches the seats stop growing their borders by day 20.
+
+**Lattice by default since #181**: in the game unless it is opened with `?lattice=0`, and in sweeps unless `nolattice`. Saves keep
+the roads they were made with, campaign scenarios keep the tile-centre roads, `World` itself is tile-centre when `latticeRoads` is
+unset (the tests' games did not change), and colony worlds do not inherit the home world's roads.
 
 ## Looking at the map
 
