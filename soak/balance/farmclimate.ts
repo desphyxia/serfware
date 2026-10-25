@@ -5,7 +5,7 @@ import { World } from "../../src/sim/world";
 
 /**
  * Do farms and orchards stand on the seat's warm land (hunger)? `node farmclimate.mjs <size> <seed> <days>` plays the assess game with the
- * switches of `BALANCE_AI` (the sweep tokens; "lattice", "norings", "nobows" and "nowarmfarms" included), counts per tile the samples (4 a day) on which
+ * switches of `BALANCE_AI` (the sweep tokens; "nolattice", "norings", "nobows" and "nowarmfarms" included), counts per tile the samples (4 a day) on which
  * fields grow (`climate.growing`, which fields and orchard fruit both wait for), and on the last day prints per seat: hungry days; the
  * fields and orchard trees (count and mean growing share over the whole game); the growing share of the seat's open land (what a field could
  * be sown on: free, flat, no feature but shrub, six neighbours, living soil) as median and 90th percentile; and how much of that open land is
@@ -32,7 +32,7 @@ const w = new World(seed, {
   aiLevel: "normal",
   difficulty: "honest",
   peaceDays: 999,
-  ...(ai.includes("lattice") && { latticeRoads: true }),
+  ...(!ai.includes("nolattice") && { latticeRoads: true }),
   brain: (s: { player: number; rng: never; personality: never; level: never }) => new AiBuilder(s.player, s.rng, s.personality, s.level),
 } as never);
 w.command({ t: "steward", of: 0, on: true });

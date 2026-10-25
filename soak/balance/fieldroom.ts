@@ -5,7 +5,7 @@ import { World } from "../../src/sim/world";
 
 /**
  * Room to work round the farms and orchards (hunger): `node fieldroom.mjs <size> <seed> <day>,<day>...` plays the assess game with the
- * switches of `BALANCE_AI` (the sweep tokens; "lattice", "norings", "nobows" and "nowarmfarms" included) and on each day prints per seat, for every
+ * switches of `BALANCE_AI` (the sweep tokens; "nolattice", "norings", "nobows" and "nowarmfarms" included) and on each day prints per seat, for every
  * finished farm and orchard: the open tiles within its radius (what `findJobTarget` sows or plants on: free, flat, no feature but
  * shrub, six neighbours, and for a farm living soil) and its fields or orchard trees; and the seat's hungry days to date. Read-only.
  */
@@ -29,7 +29,7 @@ const w = new World(seed, {
   aiLevel: "normal",
   difficulty: "honest",
   peaceDays: 999,
-  ...(ai.includes("lattice") && { latticeRoads: true }),
+  ...(!ai.includes("nolattice") && { latticeRoads: true }),
   brain: (s: { player: number; rng: never; personality: never; level: never }) => new AiBuilder(s.player, s.rng, s.personality, s.level),
 } as never);
 w.command({ t: "steward", of: 0, on: true });

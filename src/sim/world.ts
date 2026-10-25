@@ -73,8 +73,8 @@ export interface WorldOptions {
   native?: boolean;
   air?: AirStart;
   /**
-   * Experimental: flags stand on tile corners and roads run along tile borders and spokes (see
-   * HexLattice). Off by default: the tile-centre roads.
+   * Flags stand on tile corners and roads run along tile borders and spokes (see HexLattice). Unset: the
+   * tile-centre roads. The game asks for it in every new world unless `?lattice=0` (build.ts `latticeRequested`).
    */
   latticeRoads?: boolean;
   /** A painted world: brush strokes and Star Well places on top of the seed (the world painter). */

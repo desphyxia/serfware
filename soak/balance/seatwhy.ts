@@ -5,7 +5,7 @@ import { World } from "../../src/sim/world";
 
 /**
  * What one seat does while it stops growing or goes hungry (#169): `node seatwhy.mjs <size> <seed> <days> [every=<d>] [seats=<n>,...]`
- * plays the assess game with the AI switches of `BALANCE_AI` (the tokens of run.ts; "lattice" plays the road lattice, "norings" plays
+ * plays the assess game with the AI switches of `BALANCE_AI` (the tokens of run.ts; "nolattice" plays the tile-centre roads, "norings" plays
  * without `transportOptions.breakRings`) and, per seat and window of `every` days (default 5), prints: finished buildings and sites
  * (by type), adults and room for people, idle adults, days the meal was missed, food in the warehouses, the builder's food cover, food
  * buildings standing and building, roads at the keep flag, full flags and stuck goods; then where the window's thoughts stopped,
@@ -37,7 +37,7 @@ const w = new World(seed, {
   difficulty: "honest",
   peaceDays: 999,
   armedWardens: ai.includes("armed"),
-  ...(ai.includes("lattice") && { latticeRoads: true }),
+  ...(!ai.includes("nolattice") && { latticeRoads: true }),
   brain: (s: { player: number; rng: never; personality: never; level: never }) => (brains[s.player] = new AiBuilder(s.player, s.rng, s.personality, s.level)),
 } as never);
 w.command({ t: "steward", of: 0, on: true });
