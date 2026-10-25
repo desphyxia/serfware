@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aiOptions } from "../src/sim/ai/options";
 import { BUILDINGS, buildingType, type BuildingDef } from "../src/sim/econ/defs";
 import { chooseSide, flagSides, placeOn, releaseSite, reservedSite, reserveSite, starterChain } from "../src/sim/econ/planner";
@@ -7,9 +7,14 @@ import { World } from "../src/sim/world";
 
 const def = (id: string) => BUILDINGS[buildingType(id)] as BuildingDef;
 
+// turnBuildings is on by default since #184; these tests start with it off and turn it on where they need it.
+const TURN = aiOptions.turnBuildings;
+beforeEach(() => {
+  aiOptions.turnBuildings = false;
+});
 afterEach(() => {
   aiOptions.reserveRail = false;
-  aiOptions.turnBuildings = false;
+  aiOptions.turnBuildings = TURN;
   aiOptions.turnBlockWeight = 0;
 });
 

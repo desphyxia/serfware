@@ -28,7 +28,8 @@ describe("people", () => {
     expect(skilled.some((p) => p.journal.length > 0)).toBe(true);
   });
 
-  it("households form in houses and children are born when fed", () => {
+  // About 3 s alone, but over 5 s while the whole suite runs on a loaded machine (one failed CI on #183).
+  it("households form in houses and children are born when fed", { timeout: 30000 }, () => {
     const w = new World("people-3", { size: "tiny" });
     const keep = w.economy.buildings[w.economy.keep]!;
     keep.stock[goodId("bread")] = 200;

@@ -83,7 +83,8 @@ describe("seeds", () => {
 });
 
 describe("World", () => {
-  it("advances ticks and checksums deterministically", () => {
+  // About 3 s alone, but over 5 s while the whole suite runs on a loaded machine (one failed CI on #183).
+  it("advances ticks and checksums deterministically", { timeout: 30000 }, () => {
     const a = new World("x");
     const b = new World("x");
     for (let i = 0; i < 100; i++) {

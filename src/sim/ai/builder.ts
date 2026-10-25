@@ -13,7 +13,7 @@ import { diagnoseBorder } from "./borderwhy";
 import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
 import { TerraPlanner } from "./terra";
-import { VoyagePlanner } from "./voyage";
+import { ARMED_CARGO, CARGO, VoyagePlanner } from "./voyage";
 import { WarPlanner } from "./war";
 import { WorksPlanner } from "./works";
 import { aiOptions } from "./options";
@@ -204,6 +204,11 @@ export class AiBuilder implements Brain {
     const stock = eco.storageTotals(pl);
     const need = new Map<string, number>();
     for (const b of eco.buildings) if (b.alive && b.owner === pl && b.def.tool && (!b.built || b.worker < 0)) need.set(b.def.tool, (need.get(b.def.tool) ?? 0) + 1);
+    // A seat with a launch rail wants the Hearthship's tools in the stores too: the voyage planner orders the ship only when its
+    // cargo is there, and with `toolsByDemand` nobody else waits for a shovel or a saw, so none was ever made (#184).
+    if (aiOptions.toolsByDemand && w.voyages && pl < w.players && eco.buildings.some((b) => b.alive && b.owner === pl && b.def.rail)) {
+      for (const [id, n] of Object.entries(eco.armedWardens ? ARMED_CARGO : CARGO)) if (TOOLS.includes(goodId(id))) need.set(id, (need.get(id) ?? 0) + n);
+    }
     const prefs = eco.prefs[pl];
     if (!prefs) return;
     for (const t of TOOLS) {

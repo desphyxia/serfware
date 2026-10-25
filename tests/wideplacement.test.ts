@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aiOptions } from "../src/sim/ai/options";
 import { placeConnected, starterChain } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
 
-afterEach(() => {
+// On by default since #184; the tests start with it off and turn it on where they need it.
+const DEFAULT = aiOptions.widePlacement;
+beforeEach(() => {
   aiOptions.widePlacement = false;
+});
+afterEach(() => {
+  aiOptions.widePlacement = DEFAULT;
 });
 
 function settled() {
@@ -21,8 +26,8 @@ function lastOf(w: World, id: string): number {
 }
 
 describe("wide placement (the AI looks past a full ring)", () => {
-  it("is off by default", () => {
-    expect(aiOptions.widePlacement).toBe(false);
+  it("is on by default (#184)", () => {
+    expect(DEFAULT).toBe(true);
   });
 
   it("places a building exactly where it was when the first ring has room", () => {

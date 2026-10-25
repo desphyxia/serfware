@@ -77,23 +77,25 @@ export interface GameRecord {
 /** Play a game to its end or its day limit, sampling every rival seat once a day. */
 export function playGame(spec: GameSpec): GameRecord {
   const t0 = Date.now();
-  // Experimental AI behaviours (see aiOptions in builder.ts): BALANCE_AI="quarry" turns one on; a record says which. "armed" plays the armed-wardens match rule.
+  // AI behaviours (see aiOptions in options.ts): BALANCE_AI="cand" turns one on, and "noquarry" turns off one that is on by default (the
+  // standard stack since #184: quarry, stone, food, priority, tools, ore, release, smith, forge, granite, turn and wide; those tokens
+  // no longer do anything). A record says which. "armed" plays the armed-wardens match rule.
   const ai = (process.env.BALANCE_AI ?? "").split(",").filter(Boolean);
-  aiOptions.relocateQuarries = ai.includes("quarry");
-  aiOptions.stoneFallback = ai.includes("stone");
-  aiOptions.foodByNeed = ai.includes("food");
-  aiOptions.stonePriority = ai.includes("priority");
+  aiOptions.relocateQuarries = !ai.includes("noquarry");
+  aiOptions.stoneFallback = !ai.includes("nostone");
+  aiOptions.foodByNeed = !ai.includes("nofood");
+  aiOptions.stonePriority = !ai.includes("nopriority");
   aiOptions.borderReach = ai.includes("reach");
   aiOptions.borderClear = ai.includes("clear");
-  aiOptions.toolsByDemand = ai.includes("tools");
-  aiOptions.oreMines = ai.includes("ore");
-  aiOptions.releaseStalled = ai.includes("release");
-  aiOptions.toolsmithAnyway = ai.includes("smith");
-  aiOptions.forgeRoom = ai.includes("forge");
+  aiOptions.toolsByDemand = !ai.includes("notools");
+  aiOptions.oreMines = !ai.includes("noore");
+  aiOptions.releaseStalled = !ai.includes("norelease");
+  aiOptions.toolsmithAnyway = !ai.includes("nosmith");
+  aiOptions.forgeRoom = !ai.includes("noforge");
   aiOptions.surveyAgain = ai.includes("survey");
-  aiOptions.graniteFirst = ai.includes("granite");
-  aiOptions.turnBuildings = ai.includes("turn");
-  aiOptions.widePlacement = ai.includes("wide");
+  aiOptions.graniteFirst = !ai.includes("nogranite");
+  aiOptions.turnBuildings = !ai.includes("noturn");
+  aiOptions.widePlacement = !ai.includes("nowide");
   aiOptions.borderCandidates = ai.includes("cand");
   aiOptions.woodByNeed = ai.includes("wood");
   aiOptions.reserveRail = ai.includes("rail");

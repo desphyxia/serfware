@@ -27,7 +27,8 @@ describe("ore for every start", () => {
     expect(checked).toBeGreaterThan(100);
   }, 240000);
 
-  it("most starts get all four kinds", () => {
+  // About 3 s alone, but over 5 s while the whole suite runs on a loaded machine (one failed CI on #183).
+  it("most starts get all four kinds", { timeout: 30000 }, () => {
     let full = 0;
     let all = 0;
     for (const seed of SEEDS) {

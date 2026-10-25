@@ -11,9 +11,9 @@ const RESERVE_FROM = 15;
  * Goods a Hearthship takes besides its founders (mass 3 each): materials, the tools the first trades need (a colony
  * with no hammer builds nothing), and some bread. The stores must hold them first.
  */
-const CARGO: Record<string, number> = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
+export const CARGO: Record<string, number> = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
 /** With the armed-wardens rule the colony's first lanterns need arms too (mass 4 more: the ship still fits). */
-const ARMED_CARGO: Record<string, number> = { ...CARGO, blade: 2, shield: 2 };
+export const ARMED_CARGO: Record<string, number> = { ...CARGO, blade: 2, shield: 2 };
 
 /**
  * The scripted AI's voyages, for any seat (people's, a steward's, or an AI rival's): a launch

@@ -1,6 +1,7 @@
 /**
- * Behaviours that are off unless a harness switches them on, so the AI plays as before by default (except `foodWithoutIdle`,
- * `bowsByNeed` and `warmFarms`, which are on).
+ * Behaviours a harness can switch. On by default: `foodWithoutIdle`, `bowsByNeed`, `warmFarms`, and since #184 the balance sweeps'
+ * standard stack: `relocateQuarries`, `stoneFallback`, `foodByNeed`, `stonePriority`, `toolsByDemand`, `oreMines`, `releaseStalled`,
+ * `toolsmithAnyway`, `forgeRoom`, `graniteFirst`, `turnBuildings` and `widePlacement`. The others are off.
  * `relocateQuarries`: a quarry with no rock left in reach stops counting against the quarry quota and is
  * pulled down (its worker and tool go back to the pool), and new quarries are looked for farther out.
  * `stoneFallback`: when the rock inside the border is nearly used up, start on granite (a geologist, a mine) before
@@ -18,6 +19,7 @@
  * `toolsByDemand`: the toolsmith's priorities follow demand: a tool is made only while a workplace or site that needs it has
  * none in the stores (and one spare of hammer, axe, pick, scythe and rod is kept), instead of topping every tool up to the
  * same stock, which spent the little iron there is on picks, saws and tongs that nobody waited for.
+ * With a launch rail standing, the Hearthship cargo's tools count as waited for too (#184): without them no Hearthship was ordered.
  * `oreMines`: see `EconPlanner` (ai/economy.ts): geologists do not wait for a toolsmith (a hammer in the stores is enough)
  * and go on while a kind the settlement wants shows no usable sign, starting from the flags with the most surveyable
  * ground near them; an exhausted mine is pulled down and no longer counts against its quota; and a coal or iron mine is
@@ -78,4 +80,4 @@
  * worth WARM_FARM in the site ranking from frozen all year to growing all year, against the ranking's cost for distance from the centre
  * (planner.ts `placeConnected`). Fields and orchard fruit wait while it is cold; hungry seats were found farming their coldest land.
  */
-export const aiOptions = { relocateQuarries: false, stoneFallback: false, foodByNeed: false, stonePriority: false, borderReach: false, borderClear: false, toolsByDemand: false, oreMines: false, releaseStalled: false, toolsmithAnyway: false, forgeRoom: false, surveyAgain: false, graniteFirst: false, turnBuildings: false, widePlacement: false, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true };
+export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true };

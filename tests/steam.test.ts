@@ -78,7 +78,8 @@ class FakeSteam {
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe("Steam lobbies and transport", () => {
-  it("host and two friends meet in a Steam lobby and play in lockstep", async () => {
+  // About 3 s alone, but over 5 s while the whole suite runs on a loaded machine (one failed CI on #183).
+  it("host and two friends meet in a Steam lobby and play in lockstep", { timeout: 30000 }, async () => {
     const steam = new FakeSteam();
     const host = new SteamHostLobby({ name: "Ada" }, steam.bridge("100", "Ada"));
     await host.open();

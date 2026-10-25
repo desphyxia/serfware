@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aiOptions } from "../src/sim/ai/options";
 import { BUILDINGS, buildingType, type BuildingDef } from "../src/sim/econ/defs";
 import { chooseSide, flagSides, placeOn, starterChain } from "../src/sim/econ/planner";
@@ -6,8 +6,13 @@ import { World } from "../src/sim/world";
 
 const def = (id: string) => BUILDINGS[buildingType(id)] as BuildingDef;
 
-afterEach(() => {
+// On by default since #184; the tests start with it off and turn it on where they need it.
+const DEFAULT = aiOptions.turnBuildings;
+beforeEach(() => {
   aiOptions.turnBuildings = false;
+});
+afterEach(() => {
+  aiOptions.turnBuildings = DEFAULT;
 });
 
 /** A tiny one-player world with the starter chain standing (woodcutter, forester, quarry, sawmill), and the tiles within 12 steps of the keep. */
@@ -20,8 +25,8 @@ function settled() {
 }
 
 describe("turning buildings (the AI chooses the flag side)", () => {
-  it("is off by default", () => {
-    expect(aiOptions.turnBuildings).toBe(false);
+  it("is on by default (#184)", () => {
+    expect(DEFAULT).toBe(true);
   });
 
   it("offers the default side first, and never a side the building cannot stand on", () => {
