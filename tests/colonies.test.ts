@@ -3,6 +3,7 @@ import { BUILDINGS, goodId, goodsArray } from "../src/sim/econ/defs";
 import { ROOTED_BUILDINGS } from "../src/sim/econ/economy";
 import { HEARTHSHIP_FRAME, PROBE_COST, SKYSHIP_FRAME, strideFor } from "../src/sim/system/voyages";
 import { ticksPerDay } from "../src/sim/clock";
+import { placeConnected } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
 
 const SEED = "russet-heron-417";
@@ -132,6 +133,30 @@ describe("colonisation", () => {
       return w.checksum();
     };
     expect(run()).toBe(run());
+  });
+
+  it("a colony has the home world's roads: the lattice there when home has it (#181)", { timeout: 120000 }, () => {
+    for (const lattice of [false, true]) {
+      const w = new World(SEED, { size: "tiny", latticeRoads: lattice });
+      const to = target(w);
+      const b = rail(w);
+      w.voyages!.surveyed[0] = (w.voyages!.surveyed[0] ?? 0) | (1 << to.index);
+      w.command({ t: "hearthship", from: w.system.home, to: to.index, settlers: 6, cargo: { plank: 16, stone: 12, bread: 6 } });
+      stock(b, HEARTHSHIP_FRAME);
+      stock(b, { plank: 16, stone: 12, bread: 6 });
+      const v = w.voyages!.list[0]!;
+      fly(w, () => v.state === "orbit");
+      const eco = w.colonize(to.index);
+      expect(eco.land.lattice !== null).toBe(lattice);
+      const site = Array.from({ length: eco.land.region.length }, (_, t) => t).find((t) => eco.landingProblem(t) === null)!;
+      expect(w.command({ t: "land", voyage: v.id, tile: site }).ok).toBe(true);
+      const colony = w.colonies[to.index]!;
+      // The colonists build and join it to the keep by road, on whichever roads they have.
+      expect(placeConnected(colony, "woodcutter", { minDist: 2, maxDist: 6 })).toBe(true);
+      expect(colony.economy.roads.some((r) => r.alive)).toBe(true);
+      for (let i = 0; i < 300; i++) w.step();
+      expect(colony.economy.keeps[0]).toBeDefined();
+    }
   });
 
   it("skyships run trade routes at each window; their calls slow the colony's drift from home", () => {

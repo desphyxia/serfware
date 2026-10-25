@@ -341,8 +341,9 @@ export class World implements WorldHost {
     if (existing) return existing.economy;
     const p = this.system.planets[planet];
     if (!p) throw new Error(`No planet ${planet}`);
-    // Every seat has a place on a colony world, rivals included; an AI seat gets a brain of its own there.
-    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, players: this.players, startTick: this.tick, mods: this.mods, brain: this.brainFactory, armedWardens: this.economy.armedWardens });
+    // Every seat has a place on a colony world, rivals included; an AI seat gets a brain of its own there. Its roads are
+    // the home world's: on the lattice there too (#181).
+    const w = new World(planetSeed(this.seed, p.name), { ...worldFor(p), colony: true, latticeRoads: this.land.lattice !== null, players: this.players, startTick: this.tick, mods: this.mods, brain: this.brainFactory, armedWardens: this.economy.armedWardens });
     this.colonies[planet] = w;
     w.economy.teams.push(...this.economy.teams);
     w.economy.names.push(...this.economy.names);
