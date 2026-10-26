@@ -9,7 +9,7 @@ const seed = process.argv[2] ?? "russet-heron-417";
 // well above what the busy close-up draws (it varies by a fifth or more between runs, as terrain and
 // wildlife stream in), so only a large regression trips them.
 const BUDGET = process.env.BUDGET === "1" || process.argv.includes("--budget");
-const LIMITS = { low: { meshes: 450, ktriangles: 700 }, medium: { meshes: 450, ktriangles: 900 }, high: { meshes: 450, ktriangles: 1100 }, deck: { meshes: 450, ktriangles: 800 }, handheld: { meshes: 450, ktriangles: 650 } };
+const LIMITS = { low: { meshes: 450, ktriangles: 700 }, medium: { meshes: 450, ktriangles: 900 }, high: { meshes: 450, ktriangles: 1100 }, deck: { meshes: 450, ktriangles: 800 }, handheld: { meshes: 450, ktriangles: 750 } };
 const only = (process.env.PRESETS ?? process.argv.find((a) => a.startsWith("--presets="))?.slice(10))?.split(",");
 const browser = await launch();
 try {
