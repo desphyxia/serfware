@@ -2,6 +2,7 @@ import { BUILDINGS, buildingType, goodId } from "../econ/defs";
 import { Feature, LandUse } from "../econ/landuse";
 import { landmassOf, placeConnected, placeOn } from "../econ/planner";
 import type { AiContext } from "./brain";
+import { spareTools } from "./voyage";
 import type { Personality } from "./personality";
 
 /** Land a pocket must hold before it is worth a bridge. */
@@ -51,7 +52,7 @@ export class WorksPlanner {
     if (unbuilt > 0 || built < 18 || count("toolsmith") < 1) return false;
     const manned = (type: string) => {
       const tool = BUILDINGS[buildingType(type)]?.tool;
-      return !tool || (stock[goodId(tool)] ?? 0) >= 1;
+      return !tool || spareTools(ctx.world, this.player, stock, tool) >= 1;
     };
     const sites: [boolean, string][] = [
       [this.personality !== "warden" && count("maypole") < 1 && plank >= 6, "maypole"],

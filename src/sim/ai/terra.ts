@@ -2,6 +2,7 @@ import { BUILDINGS, buildingType, goodId } from "../econ/defs";
 import { placeOn } from "../econ/planner";
 import { BLOOM } from "../climate/atmosphere";
 import type { AiContext } from "./brain";
+import { spareTools } from "./voyage";
 
 /**
  * The scripted AI's terraforming: on a world whose air, warmth, water or life fall short of a living
@@ -36,7 +37,7 @@ export class TerraPlanner {
     const stock = eco.storageTotals(pl);
     const affordable = (type: string) => {
       const def = BUILDINGS[buildingType(type)];
-      return !!def && Object.entries(def.cost).every(([g, n]) => (stock[goodId(g)] ?? 0) >= (n as number) + 2) && (!def.tool || (stock[goodId(def.tool)] ?? 0) >= 1);
+      return !!def && Object.entries(def.cost).every(([g, n]) => (stock[goodId(g)] ?? 0) >= (n as number) + 2) && (!def.tool || spareTools(w, pl, stock, def.tool) >= 1);
     };
     const wants: [boolean, string][] = [
       [!check.temp && atm.meanTemp() < BLOOM.temp[0] && count("mirrorworks") < 2, "mirrorworks"],

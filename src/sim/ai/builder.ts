@@ -13,7 +13,7 @@ import { diagnoseBorder } from "./borderwhy";
 import { EconPlanner } from "./economy";
 import { SeaPlanner } from "./sea";
 import { TerraPlanner } from "./terra";
-import { VoyagePlanner } from "./voyage";
+import { cargoTools, spareTools, VoyagePlanner } from "./voyage";
 import { WarPlanner } from "./war";
 import { WorksPlanner } from "./works";
 import { aiOptions } from "./options";
@@ -198,18 +198,40 @@ export class AiBuilder implements Brain {
   }
 
   /** Tools in demand for the buildings it has or is building, and their stock: set the toolsmith's priorities to match. */
+  /** A Hearthship tool was short at the last look at the tools (see `tools`). */
+  private cargoShort = false;
   private tools(w: World): void {
     const eco = w.economy;
     const pl = this.player;
     const stock = eco.storageTotals(pl);
     const need = new Map<string, number>();
     for (const b of eco.buildings) if (b.alive && b.owner === pl && b.def.tool && (!b.built || b.worker < 0)) need.set(b.def.tool, (need.get(b.def.tool) ?? 0) + 1);
+    // A seat with a launch rail wants the Hearthship's tools in the stores too: the voyage planner orders the ship only when its
+    // cargo is there, and with `toolsByDemand` nobody else waits for a shovel or a saw, so none was ever made (#184).
+    // Those tools in a toolsmith's tray or on the roads count as had: they reach the stores hours after they are made, and until the
+    // first one did the toolsmith kept making them (6 shovels and 4 saws where the cargo takes one of each). While one is short this
+    // runs every thought, not every fourth: the toolsmith makes one in less time, and 3 shovels came of the gap.
+    const afoot = new Map<number, number>();
+    this.cargoShort = false;
+    const cargo = cargoTools(w, pl);
+    if (cargo.size) {
+      for (const [t, n] of cargo) {
+        const id = GOODS[t]?.id ?? "";
+        need.set(id, (need.get(id) ?? 0) + n);
+        afoot.set(t, 0);
+      }
+      const count = (t: number): void => void (afoot.has(t) && afoot.set(t, (afoot.get(t) ?? 0) + 1));
+      for (const b of eco.buildings) if (b.alive && b.owner === pl && b.def.produces === "tool") for (const t of b.outputTypes) count(t);
+      for (const g of eco.goods) if (g.alive && eco.flags[g.flag]?.owner === pl) count(g.type);
+      for (const s of eco.settlers) if (s.alive && s.owner === pl && s.carrying >= 0) count(s.carrying);
+    }
     const prefs = eco.prefs[pl];
     if (!prefs) return;
     for (const t of TOOLS) {
       const id = GOODS[t]?.id ?? "";
-      const have = stock[t] ?? 0;
+      const have = (stock[t] ?? 0) + (afoot.get(t) ?? 0);
       const wanted = need.get(id) ?? 0;
+      if (afoot.has(t) && wanted > have) this.cargoShort = true;
       // Short of a tool somebody is waiting for: make it first. Out of a basic tool: keep one in hand.
       let value = wanted > have ? 1 : have < 1 ? 0.4 : 0.1;
       // With `toolsByDemand`, iron goes only to tools that someone waits for, plus one spare of the tools that man the food,
@@ -363,7 +385,7 @@ export class AiBuilder implements Brain {
     if (this.thoughts % lv.every !== 0) return;
     tally(pl, 0);
     if (this.thoughts % 6 === 3) this.talk(w);
-    if (this.thoughts % 4 === 1) this.tools(w);
+    if (this.thoughts % 4 === 1 || this.cargoShort) this.tools(w);
     if (this.thoughts % 10 === 5) this.tidy(w);
     if (aiOptions.keepRoads && this.thoughts % KEEP_ROADS_EVERY === 2 && mine.length >= KEEP_ROADS_FROM) connectKeepFlag(w, pl, KEEP_ROADS, w.land.lattice ? 12 : 6);
     if (aiOptions.foodByNeed) this.trackFood(stock, eco.peopleOf(pl).length);
@@ -522,7 +544,7 @@ export class AiBuilder implements Brain {
     const type = planters * 3 < cutters && planters < Math.ceil(cap / 3) ? "forester" : cutters < cap ? "woodcutter" : "";
     const tool = type ? BUILDINGS[buildingType(type)]?.tool : undefined;
     // The tool is in the stores, or a toolsmith stands to make it (the site then makes the toolsmith's priority follow).
-    if (!type || (tool && (stock[goodId(tool)] ?? 0) < 1 && !mine.some((b) => b.built && b.def.id === "toolsmith"))) return null;
+    if (!type || (tool && spareTools(w, this.player, stock, tool) < 1 && !mine.some((b) => b.built && b.def.id === "toolsmith"))) return null;
     return () => {
       const ok = placeConnected(w, type, { minDist: 2, maxDist: 9, near: Feature.Tree, need: 3, player: this.player, center: this.center(w), splitRoads: true });
       if (ok) this.woodAt = this.thoughts;

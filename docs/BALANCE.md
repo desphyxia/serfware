@@ -95,7 +95,7 @@ seats. Rates count only seats still standing.
 ## Trying an AI change
 
 Phase 1 plays the AI as it is. To measure a change to it without touching the baseline, a change is an option in
-`aiOptions` (`src/sim/ai/builder.ts`), off by default, and the sweep turns it on from the environment, with the
+`aiOptions` (`src/sim/ai/options.ts`), off by default, and the sweep turns it on from the environment, with the
 output going to its own folder (a record lists the options that were on in `ai`):
 
 ```sh
@@ -104,6 +104,11 @@ BALANCE_AI=quarry,stone node scripts/balance-sweep.mjs economy --seeds 2 --days 
 node scripts/balance-report.mjs --out balance-pilot3
 node scripts/balance-flows.mjs --out balance-pilot3
 ```
+
+**Since #184 the standard stack is on by default** (in the game and in sweeps): `quarry`, `stone`, `food`, `priority`, `tools`,
+`ore`, `release`, `smith`, `forge`, `granite`, `turn` and `wide`. A sweep plays without one with `no` before its token
+(`noquarry`, `nowide`, …), and the tokens themselves no longer do anything, so `BALANCE_AI=$STACK` in the results below is now
+the same as no tokens at all. Each switch below says what it does when on.
 
 - `quarry`: a quarry with no rock left in reach, seen three times in a row, is pulled down and no longer counts against
   the quarry quota, so the usual quarry wishes place a new one; they look 22 tiles from the centre, not 14.
@@ -1051,7 +1056,7 @@ the weather), `startclimate.ts` (starts with and without `avoidCold`).
 
 #### Launch rails and the lattice under the shipped AI (#179, #181)
 
-The sweeps above play the standard stack, whose AI switches are all off in the game. Runs `ab26` and `ab27` play the switches the
+The sweeps above play the standard stack, whose AI switches were all off in the game then (they are on since #184). Runs `ab26` and `ab27` play the switches the
 game ships with (no tokens apart from those named; both climate switches on), no war, 80 days, 3 seeds a size, 9 games each.
 
 **Launch rails.** With the shipped switches no seat builds a launch rail in 80 days, with or without the cold-start rule, so
@@ -1077,7 +1082,68 @@ change between day 20 and day 60 in either mode: with the shipped switches the s
 
 **Lattice by default since #181**: in the game unless it is opened with `?lattice=0`, and in sweeps unless `nolattice`. Saves keep
 the roads they were made with, campaign scenarios keep the tile-centre roads, `World` itself is tile-centre when `latticeRoads` is
-unset (the tests' games did not change), and colony worlds do not inherit the home world's roads.
+unset (the tests' games did not change), and colony and survey worlds take the home world's roads (#183).
+
+#### The standard stack by default (#184)
+
+The twelve stack switches are on by default since #184; the tokens of the stack now turn one off (`noquarry` ... `nowide`). One
+rule came with it: with `toolsByDemand` the toolsmith makes a tool only for a workplace that waits for one, and no workplace ever
+waits for a shovel or a saw, so the Hearthship's cargo (which lists them) was never all in the stores and no Hearthship was ordered
+(the steward test in `tests/aivoyage.test.ts` lost its Hearthship). A seat with a launch rail now counts the cargo's tools as
+wanted too; the steward's Hearthship comes on day 7.
+
+Runs `ab28` play the new defaults (no tokens, and `nolattice`) against `ab25-latcf` and `ab25-defcf` (the stack's tokens with both
+climate switches, before #184), no war, 80 days, 3 seeds a size, 9 games each. Per rival seat, before / after:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| Lattice: buildings d60 | 91.7 / 96.8 | 88.4 / 95 | 148 / 148 |
+| Lattice: hungry seat-days from day 30 | 18% / 28% | 24% / 17% | 21% / 19% |
+| Lattice: tools made | 18.8 / 24.7 | 22.6 / 30 | 38 / 43.7 |
+| Lattice: seats with a launch rail | 67% / 56% | 67% / 67% | 67% / 56% |
+| Lattice: games with a colony | 0% / 0% | 0% / 0% | 0% / 33% (day 53) |
+| Tile-centre: buildings d60 | 46 / 46 | 63.8 / 63.1 | 93.4 / 89.6 |
+| Tile-centre: hungry seat-days from day 30 | 31% / 31% | 36% / 32% | 14% / 9% |
+| Tile-centre: tools made | 4 / 4 | 13 / 15 | 29 / 24.6 |
+| Tile-centre: seats with a launch rail | 0% / 0% | 33% / 33% | 44% / 44% |
+| Tile-centre: games with a colony | 0% / 0% | 0% / 0% | 0% / 33% (day 18) |
+
+Tiny games on tile-centre roads, where no seat builds a rail, are equal line for line: the new defaults are the stack. Where rails
+stand the games part, and one medium game in three now sends a Hearthship and founds a colony on either road type (none did
+before; tiny and small still send none). Tiny lattice seats go hungry on more days (18% to 28%) and hold less food on day 60
+(423 to 130).
+
+Runs `ab29` to `ab31` look into that hunger: tiny lattice, seeds 1-10, 80 days, no war. `ab29-old` plays master before #184 with
+the stack's tokens, `ab29-new` the first cargo rule. Per rival seat:
+
+| | old | first rule | tools counted | cargo held back |
+|---|---|---|---|---|
+| hungry seat-days from day 30 | 26% | 32% | 33% | 30% |
+| food in the warehouses d60 | 860 | 685 | 739 | 763 |
+| tools made | 20.1 | 22.9 | 18.7 | 18.3 |
+
+Two things went wrong with the first rule:
+- **The smith made too many.** The toolsmith thinks about tools every fourth thought and counted only stored tools. Tools in the
+  smith's tray or on the roads did not count, and one seat made 6 shovels and 4 saws for a cargo of one each. Tools on flags,
+  carried, or in a toolsmith's tray now count as had. While a cargo tool is short, the tools are thought about every thought.
+  Tools made fell below the old code, but the hunger stayed (`ab30`, "tools counted").
+- **The cargo's tools were lent out.** A plan places a building only if its tool is in the stores, and the cargo's shovel passed
+  that check. By day 30 the 30 seats had 13 statues, 5 digsites and 4 fountains more than the old code, and 39 food buildings fewer
+  (19 farms, 8 orchards, 6 fishers, 6 hunters). Each digsite's worker took the shovel, so the smith made another. Plans now count
+  only the tools beyond the cargo (`spareTools` in `src/sim/ai/voyage.ts`, used by the economy, works, region, terraforming and
+  woodcutter plans). With that (`ab31`, "cargo held back") the extras by day 30 are 2 statues and 1 digsite.
+
+The 4 points left are not shown to come from the rule. Seats with a rail, the only ones the rule touches, had 38 more hungry days
+than the old code, against 90 before the fix. Seats without one had 29 more, and a game parts from day 5-10 on whichever seat
+changes. Half of the gap is one seat with no rail (`bal-005` seat 0, 15 to 50 hungry days). Per seat the change is about ±8
+hungry days, so a gap of 66 days over 30 seats is about 1.5 standard errors.
+
+The tests that set a switch now save its default and put it back. Those that changed with the new defaults: the boatyard test in
+`sea.test.ts` looks once the yard is finished (with `turnBuildings` it is finished early enough to chart everything by tick 6000);
+the woodcutter cap in `woodborder.test.ts` is checked against the most buildings the seat had (quarries and mines pulled down
+later lower the end count); the greenhouse and saltworks tests in `airegions.test.ts` play the seed `glade-iris-904` (the old seed
+brings neither with the stack; they came on 4 and 3 of 6 seeds tried); and the long AI games are shorter (`aieconomy` 40 days, the
+steward 30 days, terraforming 25 days), to stay inside their limits.
 
 ## Looking at the map
 

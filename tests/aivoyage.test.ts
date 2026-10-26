@@ -30,7 +30,9 @@ describe("the AI in space", () => {
     w.recordAi = true;
     const eco = w.economy;
     const keep = eco.buildings[eco.keeps[0]!]!;
-    for (let i = 0; i < 90 * eco.dayTicks; i++) {
+    // 30 days: with the standard stack on (#184) the rail comes on day 5, the probes on day 6 and the Hearthship on day 7, and
+    // the larger settlement made 90 days take over 15 minutes.
+    for (let i = 0; i < 30 * eco.dayTicks; i++) {
       if (i % eco.dayTicks === 0) for (const g of ["iron", "plank", "stone", "log", "bread"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 40);
       w.step();
     }
@@ -88,7 +90,9 @@ describe("the AI and terraforming", () => {
     expect(site).toBeGreaterThanOrEqual(0);
     eco.settleAt(site, new Rng("test-landing"), 0);
     const keep = eco.buildings[eco.keeps[0]!]!;
-    for (let i = 0; i < 70 * eco.dayTicks; i++) {
+    // 25 days: with the standard stack on (#184) the first work (a comet catcher) comes on day 13, and the 70 days this played
+    // took over 12 minutes.
+    for (let i = 0; i < 25 * eco.dayTicks; i++) {
       if (i % eco.dayTicks === 0) for (const g of ["iron", "plank", "stone", "log", "coal"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 40);
       w.step();
     }

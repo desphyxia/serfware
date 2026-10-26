@@ -21,7 +21,9 @@ const TOKENS: Record<string, string> = {
   railsites: "railWithSites", early: "orderEarly", keeproads: "keepRoads",
 };
 const options = aiOptions as unknown as Record<string, boolean>;
-for (const [token, key] of Object.entries(TOKENS)) if (key in options) options[key] = ai.includes(token);
+// The standard stack is on by default since #184: "noquarry" and the like turn one off.
+const STACK = new Set(["quarry", "stone", "food", "priority", "tools", "ore", "release", "smith", "forge", "granite", "turn", "wide"]);
+for (const [token, key] of Object.entries(TOKENS)) if (key in options) options[key] = STACK.has(token) ? !ai.includes(`no${token}`) : ai.includes(token);
 if ("bowsByNeed" in options) options.bowsByNeed = !ai.includes("nobows");
 if ("warmFarms" in options) options.warmFarms = !ai.includes("nowarmfarms");
 transportOptions.breakRings = !ai.includes("norings");

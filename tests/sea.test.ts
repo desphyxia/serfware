@@ -91,7 +91,8 @@ describe("exploring the sea", () => {
     expect(w.command({ t: "explore", building: yard.id, reach: 0 }).ok).toBe(true);
     expect(w.command({ t: "explore", building: yard.id, reach: 3 }).ok).toBe(false);
     expect(w.command({ t: "explore", building: w.economy.keep, reach: 1 }).ok).toBe(false);
-    run(w, 6000);
+    // What is charted when the yard is finished (with turnBuildings, #184, it is finished early enough to chart everything by tick 6000).
+    for (let i = 0; i < 6000 && !yard.built; i++) w.step();
     expect(yard.built).toBe(true);
     const base = Uint8Array.from(w.economy.explored[0]!);
     run(w, 10 * w.economy.dayTicks);

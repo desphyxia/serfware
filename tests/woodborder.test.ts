@@ -4,10 +4,12 @@ import { AiBuilder } from "../src/sim/ai/builder";
 import { goodId } from "../src/sim/econ/defs";
 import { World } from "../src/sim/world";
 
+// toolsByDemand is on by default since #184.
+const TOOLS = aiOptions.toolsByDemand;
 afterEach(() => {
   aiOptions.woodByNeed = false;
   aiOptions.borderCandidates = false;
-  aiOptions.toolsByDemand = false;
+  aiOptions.toolsByDemand = TOOLS;
 });
 
 const PLANK = goodId("plank");
@@ -35,15 +37,22 @@ function woodShortGame(on: boolean) {
   const woodSites = () => eco.buildings.filter((b) => b.alive && b.owner === 1 && !b.built && (b.def.id === "woodcutter" || b.def.id === "forester")).length;
   for (let i = 0; i < 8 * eco.dayTicks; i++) w.step();
   let peak = 0;
+  // The most finished buildings at any time: the cap is set when a woodcutter is ordered, and exhausted quarries and mines
+  // pulled down later (relocateQuarries, oreMines; on since #184) lower the count at the end.
+  let most = 0;
+  const built = () => eco.buildings.filter((b) => b.alive && b.owner === 1 && b.built).length;
   for (let i = 0; i < 8 * eco.dayTicks; i++) {
-    if (i % 50 === 0) drain();
+    if (i % 50 === 0) {
+      drain();
+      most = Math.max(most, built());
+    }
     w.step();
     peak = Math.max(peak, woodSites());
   }
   const mine = eco.buildings.filter((b) => b.alive && b.owner === 1);
   const finished = mine.filter((b) => b.built).length;
   const wood = mine.filter((b) => b.def.id === "woodcutter" || b.def.id === "forester").length;
-  return { wood, finished, peak };
+  return { wood, finished: Math.max(finished, most), peak };
 }
 
 describe("AI switches from #150", () => {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AiBuilder } from "../src/sim/ai/builder";
 import { AiContext } from "../src/sim/ai/brain";
 import { aiOptions } from "../src/sim/ai/options";
@@ -9,8 +9,13 @@ import { Rng } from "../src/sim/rng";
 import { World } from "../src/sim/world";
 
 const found = { ...VoyagePlanner.found };
-afterEach(() => {
+// foodByNeed is on by default since #184; these tests start with it off and turn it on where they need it.
+const FOOD = aiOptions.foodByNeed;
+beforeEach(() => {
   aiOptions.foodByNeed = false;
+});
+afterEach(() => {
+  aiOptions.foodByNeed = FOOD;
   aiOptions.foodWithoutIdle = true;
   aiOptions.railWithSites = false;
   aiOptions.orderEarly = false;
@@ -48,11 +53,11 @@ describe("the launch rail while other buildings are unfinished (railWithSites)",
     return s;
   }
 
-  it("keeps the rail and early-order switches off by default, and the food one on", () => {
+  it("keeps the rail and early-order switches off by default, and the food ones on (foodByNeed since #184)", () => {
     expect(aiOptions.railWithSites).toBe(false);
     expect(aiOptions.orderEarly).toBe(false);
     expect(aiOptions.foodWithoutIdle).toBe(true);
-    expect(aiOptions.foodByNeed).toBe(false);
+    expect(FOOD).toBe(true);
   });
 
   it("waits for every building to be finished with the switch off", () => {
