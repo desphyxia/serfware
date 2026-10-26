@@ -4,6 +4,7 @@ import { Feature, Use } from "../econ/landuse";
 import { ARM_BOW } from "../econ/people";
 import { placeConnected, placeOn } from "../econ/planner";
 import type { AiContext } from "./brain";
+import { spareTools } from "./voyage";
 import { aiOptions } from "./options";
 import type { Personality } from "./personality";
 
@@ -175,7 +176,7 @@ export class EconPlanner {
     };
     const manned = (type: string) => {
       const tool = BUILDINGS[buildingType(type)]?.tool;
-      return !tool || (stock[goodId(tool)] ?? 0) >= 1;
+      return !tool || spareTools(ctx.world, this.player, stock, tool) >= 1;
     };
     const stoneShort = stone < 6 && built.length >= 8;
     // The rock is nearly used up (`rockLow`, only ever set when the builder's option is on): start on granite before the stores are bare, one mine and a few surveys.
@@ -286,7 +287,7 @@ export class EconPlanner {
     const unbuilt = mine.filter((b) => !b.built).length;
     const manned = (type: string) => {
       const tool = BUILDINGS[buildingType(type)]?.tool;
-      return !tool || (stock[goodId(tool)] ?? 0) >= 1;
+      return !tool || spareTools(ctx.world, this.player, stock, tool) >= 1;
     };
     const open = (type: string, tiles: number[]) => tiles.length > 0 && placeOn(ctx.world, type, tiles, pl, true, 16) >= 0;
     /** Coal and iron mines allowed at once: one, and with `oreMines` one more for every ORE_PER_BUILT buildings. */

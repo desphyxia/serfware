@@ -1111,7 +1111,32 @@ climate switches, before #184), no war, 80 days, 3 seeds a size, 9 games each. P
 Tiny games on tile-centre roads, where no seat builds a rail, are equal line for line: the new defaults are the stack. Where rails
 stand the games part, and one medium game in three now sends a Hearthship and founds a colony on either road type (none did
 before; tiny and small still send none). Tiny lattice seats go hungry on more days (18% to 28%) and hold less food on day 60
-(423 to 130), not looked into.
+(423 to 130).
+
+Runs `ab29` to `ab31` look into that hunger: tiny lattice, seeds 1-10, 80 days, no war. `ab29-old` plays master before #184 with
+the stack's tokens, `ab29-new` the first cargo rule. Per rival seat:
+
+| | old | first rule | tools counted | cargo held back |
+|---|---|---|---|---|
+| hungry seat-days from day 30 | 26% | 32% | 33% | 30% |
+| food in the warehouses d60 | 860 | 685 | 739 | 763 |
+| tools made | 20.1 | 22.9 | 18.7 | 18.3 |
+
+Two things went wrong with the first rule:
+- **The smith made too many.** The toolsmith thinks about tools every fourth thought and counted only stored tools. Tools in the
+  smith's tray or on the roads did not count, and one seat made 6 shovels and 4 saws for a cargo of one each. Tools on flags,
+  carried, or in a toolsmith's tray now count as had. While a cargo tool is short, the tools are thought about every thought.
+  Tools made fell below the old code, but the hunger stayed (`ab30`, "tools counted").
+- **The cargo's tools were lent out.** A plan places a building only if its tool is in the stores, and the cargo's shovel passed
+  that check. By day 30 the 30 seats had 13 statues, 5 digsites and 4 fountains more than the old code, and 39 food buildings fewer
+  (19 farms, 8 orchards, 6 fishers, 6 hunters). Each digsite's worker took the shovel, so the smith made another. Plans now count
+  only the tools beyond the cargo (`spareTools` in `src/sim/ai/voyage.ts`, used by the economy, works, region, terraforming and
+  woodcutter plans). With that (`ab31`, "cargo held back") the extras by day 30 are 2 statues and 1 digsite.
+
+The 4 points left are not shown to come from the rule. Seats with a rail, the only ones the rule touches, had 38 more hungry days
+than the old code, against 90 before the fix. Seats without one had 29 more, and a game parts from day 5-10 on whichever seat
+changes. Half of the gap is one seat with no rail (`bal-005` seat 0, 15 to 50 hungry days). Per seat the change is about ±8
+hungry days, so a gap of 66 days over 30 seats is about 1.5 standard errors.
 
 The tests that set a switch now save its default and put it back. Those that changed with the new defaults: the boatyard test in
 `sea.test.ts` looks once the yard is finished (with `turnBuildings` it is finished early enough to chart everything by tick 6000);

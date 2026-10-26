@@ -2,6 +2,7 @@ import { BUILDINGS, buildingType, goodId } from "../econ/defs";
 import { placeOn } from "../econ/planner";
 import { Region } from "../biomes/regions";
 import type { AiContext } from "./brain";
+import { spareTools } from "./voyage";
 
 /** One building a region's land calls for, and when this settlement wants it. */
 interface Call {
@@ -70,7 +71,7 @@ export class BiomePlanner {
       if ((!basics && !call.early) || (this.rest.get(call.type) ?? 0) > this.thoughts || have(call.type) >= call.want(have, built)) continue;
       const def = BUILDINGS[buildingType(call.type)];
       if (!def || !Object.entries(def.cost).every(([g, n]) => (stock[goodId(g)] ?? 0) >= (n as number) + 1)) continue;
-      if (def.tool && (stock[goodId(def.tool)] ?? 0) < 1) continue;
+      if (def.tool && spareTools(w, pl, stock, def.tool) < 1) continue;
       const tiles = own.filter((t) => (call.where === "coast" ? land.isCoast(t) : land.region[t] === call.where)).sort((a, b) => away(a) - away(b) || a - b);
       this.rest.set(call.type, this.thoughts + (tiles.length ? 30 : 120));
       if (tiles.length && placeOn(w, call.type, tiles, pl, true, 30) >= 0) return true;

@@ -1,4 +1,4 @@
-import { BUILDINGS, buildingType, goodId, type BuildingDef } from "../econ/defs";
+import { BUILDINGS, buildingType, goodId, TOOLS, type BuildingDef } from "../econ/defs";
 import { flagSides, placeConnected, placeOn, releaseSite, reservedSite, reserveSite } from "../econ/planner";
 import { aiOptions } from "./options";
 import { MIN_FOUNDERS } from "../system/voyages";
@@ -14,6 +14,25 @@ const RESERVE_FROM = 15;
 export const CARGO: Record<string, number> = { plank: 12, stone: 8, log: 6, hammer: 2, axe: 2, pick: 1, saw: 1, shovel: 1, scythe: 1, bread: 8 };
 /** With the armed-wardens rule the colony's first lanterns need arms too (mass 4 more: the ship still fits). */
 export const ARMED_CARGO: Record<string, number> = { ...CARGO, blade: 2, shield: 2 };
+
+/**
+ * The tools a seat holds in its stores for the Hearthship's cargo, by good type: with `toolsByDemand`, from the time it has a launch
+ * rail (the toolsmith makes them then). A plan that asks whether a building's tool is in the stores counts only the tools beyond
+ * these: the cargo's shovel had the AI raise digsites, and statues for their relics, in place of farms (#185).
+ */
+export function cargoTools(w: AiContext["world"], pl: number): Map<number, number> {
+  const held = new Map<number, number>();
+  const eco = w.economy;
+  if (!aiOptions.toolsByDemand || !w.voyages || pl >= w.players || !eco.buildings.some((b) => b.alive && b.owner === pl && b.def.rail)) return held;
+  for (const [id, n] of Object.entries(eco.armedWardens ? ARMED_CARGO : CARGO)) if (TOOLS.includes(goodId(id))) held.set(goodId(id), n);
+  return held;
+}
+
+/** The tools of a kind in the stores that a building may take: those beyond the Hearthship's cargo (see `cargoTools`). */
+export function spareTools(w: AiContext["world"], pl: number, stock: readonly number[], tool: string): number {
+  const t = goodId(tool);
+  return (stock[t] ?? 0) - (cargoTools(w, pl).get(t) ?? 0);
+}
 
 /**
  * The scripted AI's voyages, for any seat (people's, a steward's, or an AI rival's): a launch
