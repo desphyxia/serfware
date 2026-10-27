@@ -16,15 +16,19 @@ function tally(w: World): Record<string, number> {
 describe("the AI's land use and settings", () => {
   it("surveys, mines, smelts, raises causeways, stages goods and sets priorities", { timeout: 900000 }, () => {
     const all: Record<string, number> = {};
-    for (const [seed, personality] of [["glade-9", "trader"], ["ferry-2", "warden"]] as const) {
+    // Days per game: glade-9 has all it shows (geologists, mines, causeways, turns) by day 12.3. ferry-2's storehouse waits for a
+    // day with no site open; since goods stopped jamming (#186) its town grows faster and keeps sites open longer, so the
+    // storehouse comes on day 54.3 and the goods staged in it on day 54.6 (day 30.5 and 31.1 before).
+    for (const [seed, personality, days] of [
+      ["glade-9", "trader", 40],
+      ["ferry-2", "warden", 58],
+    ] as const) {
       const w = new World(seed, { size: "small", rivals: 1, personalities: [personality], peaceDays: 99 });
       w.recordAi = true;
       const eco = w.economy;
       const keep = eco.buildings[eco.keeps[1]!]!;
       // The AI's stone runs dry early; top the Hearthship up each day so this tests what it does with materials.
-      // 40 days: with the standard stack on (#184) the last of these comes on day 30.5 (ferry-2's goods staged), and the larger
-      // settlements made 60 days take over 8 minutes a game.
-      for (let i = 0; i < 40 * eco.dayTicks; i++) {
+      for (let i = 0; i < days * eco.dayTicks; i++) {
         if (i % eco.dayTicks === 0) for (const g of ["stone", "log"]) (keep.stock as number[])[goodId(g)] = Math.max((keep.stock as number[])[goodId(g)] ?? 0, 20);
         w.step();
       }
