@@ -623,6 +623,26 @@ the AI did and why it could not do more, bundled like the other helpers. All are
   what stands on them, where each good is bound and the route length. `railwhy.ts <size> <seed> <days>` (#147): the questions the
   voyage planner asks before a launch rail, one by one, then a rail placed the way it places it (this one places a building).
 - `ringwhy.ts <size> <seed> <seat> <days> [turn] [wide] [norings] [w=<weight>]` (#149): every 10 days, the full flags of one seat that no good can leave (each good bound for another flag in the set, no good coming back to swap), their goods by next hop, and a cycle through them; `norings` plays without `transportOptions.breakRings`; it prints how many times the rule fired.
+- `jamwar.ts <size> <seed> <seat> <from> <to> [peace]` (#186): plays the assess game as the sweep does with war (the default AI,
+  lattice roads, peace 5 unless given). Each day from `from` to `to` it prints one seat's people (homeless too), settlers by
+  role and state, roads without a carrier, and its flags and goods. From 60 goods on its flags it also prints the full flags no
+  good can leave (as `ringwhy.ts` does, with a cycle through them if there is one) and the fullest flags, each good with its
+  destination and route.
+- `reswhy.ts <size> <seed> <from> <to> [peace]` (#186): the same game; every tick from day `from` to `to` it compares each
+  flag's `reserved` with the carriers alive that hold a place there. When the surplus grows it prints the tick, the flag, and
+  every settler, alive or dead, whose `target` or `back` is that flag. This is how the swap leak was found.
+- `promwhy.ts <size> <seed> <from> <to> [peace]` (#186): the same game; every tick it finds goods on flags promised to a carrier
+  that will not come for them (dead, no carrier, on another road, or idle without the good) and prints the first tick each goes
+  stale, with the carrier then and a tick before.
+- `idlewhy.ts <size> <seed> <seat> <day> [peace]` (#186): plays to `day` and, for each road of the seat with goods at its ends,
+  prints its carrier's state, what `chooseTransfer` would pick, and each good's next hop, whether that flag is full, and whether a
+  good would come back to swap.
+- `ringcheck.ts <size> <seed> <seat> <day> [peace]` (#186): plays to `day` and finds the seat's full flags no good can leave, what
+  frees the others (one flag after another), cycles in the next-hop graph among the stuck ones, and what the ring rule sees for
+  each stuck good (target over the capacity, a ring deeper than `RING_DEPTH`, or none).
+- `waitwhy.ts <size> <seed> <seat> <from> <to> [peace]` (#186): plays to `to` and prints each carrier of the seat waiting at a
+  full flag: since when, the good in hand, its places kept, and the goods promised to it with their next hops. This is how the
+  second swap jam was found.
 - `colonywhy.ts <size> <seed> <days> [population idle]` (#126): plays the assess game with a lowered colony threshold (default 30 people, 5 idle) and records, each day from day 10, the first voyage gate each seat fails (rail, probes, Hearthship), then the voyage events and, every 10 days, what a loading Hearthship's rail still lacks. `COLONY_FLAGS="early,railsites"` turns those two switches on for it.
 - `hungerwhy.ts <size> <seed> <days>` (#126): per seat and 10-day window, hungry days, people, idle adults, food, the days food cover was under 1 or nobody was idle, the food buildings standing and building, where the builder's thoughts stopped, and the food wishes placed or failed; at the end, the farm, orchard, fisher and hunter sites on the seat's land by reach, why placement fails (no road path), and the pockets of land that no road reaches with what blocks them.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
@@ -1144,6 +1164,70 @@ the woodcutter cap in `woodborder.test.ts` is checked against the most buildings
 later lower the end count); the greenhouse and saltworks tests in `airegions.test.ts` play the seed `glade-iris-904` (the old seed
 brings neither with the stack; they came on 4 and 3 of 6 seeds tried); and the long AI games are shorter (`aieconomy` 40 days, the
 steward 30 days, terraforming 25 days), to stay inside their limits.
+
+#### War on the new defaults (#184 merged)
+
+Runs `ab32` play the assess game with war from day 5 (`--peace 5`; tiny, small, medium, seeds 001 to 003, 80 days). `old` is the
+AI as it shipped before #184 (master `f13751a`, no tokens), `new` is master `7817f02` (no tokens). Per game or per rival seat, old / new:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| hungry seat-days from day 30 | 77% / 8% | 64% / 47% | 74% / 13% |
+| buildings d60 | 51.6 / 72 | 50.4 / 68.2 | 70.6 / 115 |
+| people d60 | 115 / 145 | 109 / 137 | 145 / 248 |
+| attacks ordered | 5.33 / 2 | 0.33 / 0.67 | 6.67 / 14.3 |
+| buildings captured | 2.33 / 1.33 | 0.33 / 0.67 | 3.33 / 6 |
+| rivals fallen | 1 / 1 | 0.33 / 0.67 | 0.67 / 1.67 |
+| attacks after day 40 | 0 / 0 | 0 / 0 | 0 / 1.67 |
+| seats still standing at the end | 78% / 78% | 89% / 78% | 78% / 56% |
+| blades made, whole game | 0 / 0 | 0 / 6 | 0 / 41.6 |
+| seats with a launch rail | 0% / 44% | 0% / 56% | 0% / 33% |
+| games with a colony | 0% / 0% | 0% / 33% (day 20) | 0% / 33% (day 72) |
+
+- **Same opening:** the warden takes a seat's keep within a day of the peace ending in 3 of 9 games (old) and 4 of 9 (new).
+  The same medium game (`bal-003`) is won by the warden in both: new on day 18, because it also takes the steward's keep. Old
+  plays on with the steward standing.
+- **Wars go on longer:** in new, other seats fight back: 11 of 51 attacks come from a seat other than the warden, against 2 of
+  37 in old. The steward retakes buildings from the warden (medium `bal-001`, to day 25). The trader takes the warden's keep on
+  day 70 (medium `bal-002`) and on day 21.8 (small `bal-001`).
+- **Hunger is down everywhere** but small. There the warden seats of `bal-002` and `bal-003` are hungry most days in both runs,
+  and the trader of `bal-001` is hungry every day from day 24. That trader is a road gridlock, #186: a carrier's swap promise that never happened kept one
+  more place at the flag behind each trip, until a fisher's flag held 0 goods and 8 places kept. Everything upstream of it backed
+  up (41 full flags, 327 goods stuck, 105 carriers idle), and the seat starved from 270 to 163 adults. The fix: a carrier gives up
+  its swap when its good goes into a building, and frees a promised good that is not the one going back.
+- **Not met:** the war targets (winners decided between day 40 and day 150, steady attacks to the end). Almost every attack still
+  comes before day 30. Blades are made on medium (42 a seat) but lie in the stores, since `armed` is off.
+
+**The second swap jam (#186).** With that first fix alone (`ab33-fwar`), the warden of medium `bal-002` froze from day 44 to the
+end: 470 goods on 58 full flags, every carrier idle but one. No place was kept without a carrier (`reswhy.ts`) and no promise was
+held by a carrier gone or dead (`promwhy.ts`). Every full flag drained, flag by flag, into one flag whose only movable good was
+promised to that one carrier (`ringcheck.ts`). The carrier had begun a swap, and on its way the promised good's next hop turned to
+another road (routes follow how busy the roads are). `returnGood` takes back only a good whose next hop is the carrier's road, so
+the carrier waited at the full flag with its good in hand for good, and the good promised to it stayed held (`waitwhy.ts`). The same
+was found in the trader's jams of medium `bal-001`, in war and in peace. The fix: the good promised to the carrier goes back
+though its route has turned, unless it now goes into the building at that flag.
+
+Runs `ab34` play both fixes (branch `swap-leak`) against master `7817f02` (`ab33-mpeace` in peace, `ab32-new` in war), the same 9
+games each. Per rival seat, master / fix:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| peace: goods stuck on flags d60 | 0.89 / 0 | 4.83 / 5.67 | 31.2 / 5.4 |
+| peace: full flags d60 | 0.03 / 0.07 | 0.7 / 0.73 | 6.07 / 1.36 |
+| peace: people d60 | 180 / 182 | 175 / 173 | 310 / 347 |
+| peace: hungry seat-days from day 30 | 22% / 31% | 28% / 22% | 18% / 21% |
+| war: goods stuck on flags d60 | 6.71 / 0.11 | 47.3 / 1.19 | 26.1 / 3.26 |
+| war: full flags d60 | 0.71 / 0 | 5.83 / 0.33 | 4.96 / 0.96 |
+| war: people d60 | 145 / 133 | 137 / 141 | 248 / 287 |
+| war: hungry seat-days from day 30 | 8% / 19% | 47% / 33% | 13% / 10% |
+
+- **The jams are gone:** goods stuck by day 60 fall 83% to 100%, but for small in peace (about 5 a seat in both). The trader of small `bal-001` (war), which
+  ended master with 335 goods stuck, ends with none; medium towns hold 12% (peace) and 16% (war) more people.
+- **Tiny hunger is up, and not from the roads** (a reading, not proven): the hungry tiny seats have no goods stuck. Most of the
+  war rise is one seat, the warden of tiny `bal-003`, hungry 48 of 50 days against none: both runs play the same to day 25 with
+  its three sites waiting for stone; on master one got stone near day 27 and it grew to 14 farms, with the fix none did and it
+  kept 2. In peace the seats move both ways (the trader of tiny `bal-001`: 16 hungry days on master, 0 with the first fix alone,
+  28 with both).
 
 ## Looking at the map
 

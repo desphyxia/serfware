@@ -3391,6 +3391,13 @@ export class Economy {
               (this.flags[s.target] as Flag).reserved--;
               s.target = -1;
             }
+            // The good goes into the building, so a swap begun for it is off: the place kept behind and the good promised back go.
+            if (s.back >= 0) {
+              const bf = this.flags[s.back] as Flag;
+              bf.reserved = Math.max(0, bf.reserved - 1);
+              s.back = -1;
+            }
+            this.dropPromises(s, road, -1);
             return;
           }
           if (!this.dropAt(s, road, atFlag)) s.state = "wait";
@@ -3473,11 +3480,25 @@ export class Economy {
     return true;
   }
 
+  /**
+   * Goods lying at either end of the carrier's road and promised to it for a swap (other than `keep`) are free again. A promise left
+   * behind would hold that good and, at each fetch, keep one more place at the flag behind (#186).
+   */
+  private dropPromises(s: Settler, road: Road, keep: number): void {
+    for (const f of [road.a, road.b])
+      for (const gid of (this.flags[f] as Flag).goods) {
+        const x = this.goods[gid] as Good;
+        if (x.carrier === s.id && gid !== keep) x.carrier = -1;
+      }
+  }
+
   /** Carry a good (already off its flag) back over the road to `back`. */
   private takeBack(s: Settler, road: Road, back: number, gid: number): void {
     const g = this.goods[gid] as Good;
     const into = this.nextHopFrom(g, back) === -2 || (this.buildings[g.dest]?.flag ?? -1) === back;
     const bf = this.flags[back] as Flag;
+    // A good promised for the swap that is not the one going back (rerouted since) is free again.
+    this.dropPromises(s, road, gid);
     g.carrier = s.id;
     if (s.back === back) {
       // The place kept since the swap began.
@@ -3517,8 +3538,13 @@ export class Economy {
       const g = this.goods[gid] as Good;
       if (g.carrier >= 0 && g.carrier !== carrier) continue;
       if (g.dest < 0) this.assignDestination(g);
-      if (this.nextHop(g) !== back) continue;
-      if (g.carrier === carrier && carrier >= 0) return gid;
+      const hop = this.nextHop(g);
+      // The good promised to this carrier for a swap goes back even if its route has turned another way since (routes follow
+      // how busy the roads are): the place behind is kept for it, and that road still brings it closer. Left lying, promised
+      // and never taken, it would hold the carrier at the full flag for good, and every flag behind it (#186). One that now
+      // goes into the building here stays.
+      if (g.carrier === carrier && carrier >= 0 && hop >= 0) return gid;
+      if (hop !== back) continue;
       if (best < 0 || this.transportRank(road.owner, g.type) < this.transportRank(road.owner, (this.goods[best] as Good).type)) best = gid;
     }
     return best;

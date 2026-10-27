@@ -153,7 +153,7 @@ describe("a flag's last place (the old 9-good flags)", () => {
     const s = eco.settlers[road!.carrier]!;
     Object.assign(s, { carryGood: carried.id, carrying: carried.type, target: -1, back: -1, roadIdx: 0 });
     const drop = () => (eco as unknown as { dropAt(s: unknown, road: unknown, at: number): boolean }).dropAt(s, road, at);
-    return { flag, drop, s, at };
+    return { flag, drop, s, at, eco, road: road!, away, carried };
   }
 
   it("a carrier with no place promised to it does not take the last one that is promised to another", () => {
@@ -183,6 +183,63 @@ describe("a flag's last place (the old 9-good flags)", () => {
     expect(flag.goods.length).toBe(FLAG_CAPACITY);
     expect(flag.reserved).toBe(0);
     expect(s.target).toBe(-1);
+  }, 120000);
+
+  it("a swap given up when the good goes into a building keeps no place and holds no good (#186)", () => {
+    // The carrier walks its good into the woodcutter at `at`. A swap was begun on the way: a place kept at the flag behind and a
+    // good on this flag promised to go back. Neither may outlast the trip.
+    const { s, at, eco, road, away } = carrierAt(0, 0);
+    const back = eco.buildings.find((b) => b.alive && b.flag === away)!;
+    const promised = inside(eco).spawnGood(PLANK, at);
+    promised.dest = back.id;
+    (promised as unknown as { carrier: number }).carrier = s.id;
+    const behind = eco.flags[away]!;
+    const before = behind.reserved;
+    behind.reserved++;
+    const end = road.tiles.length - 1;
+    // `carry` turns roadIdx round on arrival: start it at the far end so the carrier stands at `at`.
+    Object.assign(s, { state: "carry", back: away, roadIdx: at === road.a ? end : 0, path: [road.tiles[at === road.a ? 0 : end]], pi: 0 });
+    (eco as unknown as { stepCarrier(s: unknown): void }).stepCarrier(s);
+    expect(s.state).toBe("enter");
+    expect(s.back).toBe(-1);
+    expect(behind.reserved).toBe(before);
+    expect((promised as unknown as { carrier: number }).carrier).toBe(-1);
+  }, 120000);
+
+  it("a good promised for a swap but rerouted since is free when another goes back (#186)", () => {
+    // Two goods on `at`: one promised to the carrier but now bound for the woodcutter here, one bound back over the road. The
+    // carrier puts its good down and takes the second back; the first is no longer held for it.
+    const { s, at, eco, away, drop } = carrierAt(0, 0);
+    const own = eco.buildings.find((b) => b.alive && b.flag === at)!;
+    const back = eco.buildings.find((b) => b.alive && b.flag === away)!;
+    const stale = inside(eco).spawnGood(PLANK, at);
+    stale.dest = own.id;
+    (stale as unknown as { carrier: number }).carrier = s.id;
+    const going = inside(eco).spawnGood(PLANK, at);
+    going.dest = back.id;
+    expect(drop()).toBe(true);
+    expect(s.carryGood).toBe(going.id);
+    expect((stale as unknown as { carrier: number }).carrier).toBe(-1);
+  }, 120000);
+
+  it("a good promised for a swap goes back as promised though its route turned another way since (#186)", () => {
+    // The flag is full. The good promised to go back now routes through the flag's other road instead, and nothing else goes
+    // back: the carrier still swaps it, into the place kept behind, instead of waiting at the full flag for good.
+    const { s, at, eco, road, away, drop, flag } = carrierAt(FLAG_CAPACITY - 1, 0);
+    const side = eco.roads.find((x) => x.alive && x.id !== road.id && (x.a === at || x.b === at) && eco.flags[x.a === at ? x.b : x.a]!.building >= 0)!;
+    const third = side.a === at ? side.b : side.a;
+    expect(third).not.toBe(away);
+    const promised = inside(eco).spawnGood(PLANK, at);
+    promised.dest = eco.flags[third]!.building;
+    (promised as unknown as { carrier: number }).carrier = s.id;
+    expect((eco as unknown as { nextHop(g: unknown): number }).nextHop(promised)).toBe(third);
+    const behind = eco.flags[away]!;
+    behind.reserved++;
+    s.back = away;
+    expect(flag.goods.length).toBe(FLAG_CAPACITY);
+    expect(drop()).toBe(true);
+    expect(s.carryGood).toBe(promised.id);
+    expect(flag.goods.length).toBe(FLAG_CAPACITY);
   }, 120000);
 
   it("with breakRings on, a place promised over the capacity on purpose is still taken", () => {
