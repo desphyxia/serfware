@@ -1205,7 +1205,8 @@
     "territoryRadius": 9,
     "garrison": {
       "frontier": 0.6,
-      "inland": 0.2
+      "inland": 0.2,
+      "keep": 3
     }
   },
   "combat": {

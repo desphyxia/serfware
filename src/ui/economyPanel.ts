@@ -1,5 +1,5 @@
 import { BUILDINGS, GOODS, TOOLS } from "../sim/econ/defs";
-import type { Command, Economy } from "../sim/econ/economy";
+import { KEEP_PLACES, type Command, type Economy } from "../sim/econ/economy";
 import { swatch } from "./swatch";
 import { fullName, title, tradeName, type GlowParts } from "../sim/econ/people";
 import { h, Panel } from "./dom";
@@ -183,7 +183,7 @@ export class EconomyPanel extends Panel {
     }
     if (!full) {
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[data-g]")) {
-        if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "near" | "inland"] ?? (prefs.garrison.frontier + prefs.garrison.inland) / 2);
+        if (document.activeElement !== input) input.value = String(prefs.garrison[input.dataset.g as "frontier" | "near" | "inland" | "keep"] ?? (prefs.garrison.frontier + prefs.garrison.inland) / 2);
       }
       // Only update numbers of sliders not being dragged.
       for (const input of this.body.querySelectorAll<HTMLInputElement>("input[type=range]")) {
@@ -222,6 +222,15 @@ export class EconomyPanel extends Panel {
         garrison("frontier", "Frontier"),
         garrison("near", "Near"),
         garrison("inland", "Inland"),
+        (() => {
+          // The Hearthship's reserve: a count of wardens, not a share.
+          const input = h("input", { type: "range", id: "eco-g-keep", min: 0, max: KEEP_PLACES, step: 1, "data-g": "keep" }) as HTMLInputElement;
+          input.value = String(prefs.garrison.keep ?? 0);
+          const out = h("output", {}, String(prefs.garrison.keep ?? 0));
+          input.addEventListener("input", () => (out.textContent = input.value));
+          input.addEventListener("change", () => this.command({ t: "garrison", zone: "keep", value: Number(input.value) }));
+          return h("div", { class: "row", title: "Wardens kept at the Hearthship. They take no work and never join an attack, and they are its only defence: once none is left on watch, the next attacker takes it." }, h("label", { for: "eco-g-keep" }, "Hearthship"), input, out);
+        })(),
         h("div", { class: "btn-row" }, h("button", { class: "btn small", title: "For half a day, lanterns near a border swap their weakest warden for a stronger free one.", onclick: () => this.command({ t: "rotate" }) }, "Rotate wardens")),
         h("h3", { class: "sub" }, "Toolsmith"),
         h("p", { class: "hint" }, "The toolsmith makes whichever tool has the highest priority for how many you already have. A tool decides who can take up a trade."),

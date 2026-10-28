@@ -87,7 +87,7 @@ export interface BuildingDef {
 
 export const GOODS: readonly GoodDef[] = content.goods as GoodDef[];
 export const BUILDINGS: readonly BuildingDef[] = content.buildings as BuildingDef[];
-export const START = content.start as { settlers: number; stock: Record<string, number>; armedStock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number } };
+export const START = content.start as { settlers: number; stock: Record<string, number>; armedStock: Record<string, number>; territoryRadius: number; garrison: { frontier: number; inland: number; keep: number } };
 export const COMBAT = content.combat as {
   ranks: string[];
   reach: number;

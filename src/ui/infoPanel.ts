@@ -184,11 +184,11 @@ export class InfoPanel extends Panel {
         body.push(h("p", { class: "status warn" }, `Belongs to ${eco.playerName(b.owner)}.`));
         if (b.stranded >= 0) body.push(h("p", { class: "hint" }, "Cut off and standing idle."));
         else if (b.def.light) {
-          const isKeep = eco.keeps.includes(b.id);
-          body.push(h("p", { class: "hint" }, isKeep ? "Their Hearthship. Take it and their settlement falls." : b.lit ? "Its lantern is lit." : "Its lantern is dark."));
+          const isKeep = eco.keeps[b.owner] === b.id;
+          body.push(h("p", { class: "hint" }, isKeep ? "Their Hearthship. Take it and their settlement falls." : eco.keeps.includes(b.id) ? "A Hearthship they took from another settlement." : b.lit ? "Its lantern is lit." : "Its lantern is dark."));
           const defs = eco.defendersOf(b);
           if (defs.length) body.push(h("p", { class: "hint" }, `${defs.length} warden${defs.length === 1 ? "" : "s"} on watch inside.`));
-          else if (isKeep) body.push(h("p", { class: "hint" }, "No wardens: its people will take up arms."));
+          else if (isKeep) body.push(h("p", { class: "hint" }, "No wardens on watch: the first to reach its door takes it."));
           if (b.palisade) body.push(h("p", { class: "hint" }, "Behind a palisade: its defenders fight stronger."));
           body.push(...this.attackUi(b.id));
         }
@@ -200,6 +200,29 @@ export class InfoPanel extends Panel {
         body.push(h("p", { class: "status warn" }, `Cut off. Win the land back within ${Math.ceil(left / (this.dayTicks(eco) / 24))} hours or it falls to ruin.`));
       }
       body.push(h("p", { class: "lede" }, b.def.description));
+      const ownKeep = eco.keeps[b.owner] === b.id;
+      if (eco.keeps.includes(b.id)) {
+        // The Hearthship's reserve, as at a Settlers 2 headquarters; one taken from another settlement is held like a lantern building.
+        const on = b.garrison.filter((id) => eco.settlers[id]?.state === "guard").length;
+        const coming = b.garrison.length - on;
+        const want = eco.garrisonWant(b);
+        const policy = b.threat >= 2 ? "frontier" : b.threat === 1 ? "near" : "inland";
+        if (!ownKeep) body.push(h("p", { class: "hint" }, `Taken from another settlement. ${on} of ${eco.wardenPlaces(b)} wardens on watch${coming ? `, ${coming} on the way` : ""}. Wants ${want} (${policy} policy).`));
+        else body.push(h("p", { class: want || on ? "hint" : "hint warn" }, `${on} warden${on === 1 ? "" : "s"} on watch${coming ? `, ${coming} on the way` : ""}. Reserve ${want} (set it under Economy, Tools). ${on ? "They defend it and never join an attack." : "With none on watch, the first attacker to reach the door takes it."}`));
+        const roster = eco.defendersOf(b).reverse();
+        if (roster.length)
+          body.push(
+            h(
+              "ul",
+              { class: "journal roster" },
+              ...roster.map((s) => {
+                const p = eco.people[s.person] as Person;
+                return h("li", {}, h("a", { href: "#", onclick: (e: Event) => (e.preventDefault(), this.select({ kind: "person", id: p.id })) }, fullName(p)), ` · ${rankTitle(p.rank)}${armsText(p.arms)}`);
+              }),
+            ),
+          );
+        if (b.siege.length) body.push(h("p", { class: "status warn" }, `Under attack: ${b.siege.length} at the door.`));
+      }
       if (b.def.slots) {
         const on = b.garrison.filter((id) => eco.settlers[id]?.state === "guard").length;
         const coming = b.garrison.length - on;

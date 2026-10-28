@@ -643,6 +643,10 @@ the AI did and why it could not do more, bundled like the other helpers. All are
 - `waitwhy.ts <size> <seed> <seat> <from> <to> [peace]` (#186): plays to `to` and prints each carrier of the seat waiting at a
   full flag: since when, the good in hand, its places kept, and the goods promised to it with their next hops. This is how the
   second swap jam was found.
+- `keepwhy.ts <size> <seed> <from> <to> [peace] [armed]` (#126, war pacing): plays the assess game with war (`armed` plays the
+  armed-wardens rule) and, from day `from` to `to`, prints each time wardens march on a Hearthship and when one changes hands:
+  its wardens on watch and its reserve, the owner's adults (free or by role and state), lanterns and wardens, and the attackers.
+  It showed that keeps fell at day 5.6 to 5.9 with no one in them, which led to the Hearthship's reserve.
 - `colonywhy.ts <size> <seed> <days> [population idle]` (#126): plays the assess game with a lowered colony threshold (default 30 people, 5 idle) and records, each day from day 10, the first voyage gate each seat fails (rail, probes, Hearthship), then the voyage events and, every 10 days, what a loading Hearthship's rail still lacks. `COLONY_FLAGS="early,railsites"` turns those two switches on for it.
 - `hungerwhy.ts <size> <seed> <days>` (#126): per seat and 10-day window, hungry days, people, idle adults, food, the days food cover was under 1 or nobody was idle, the food buildings standing and building, where the builder's thoughts stopped, and the food wishes placed or failed; at the end, the farm, orchard, fisher and hunter sites on the seat's land by reach, why placement fails (no road path), and the pockets of land that no road reaches with what blocks them.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
@@ -1228,6 +1232,55 @@ games each. Per rival seat, master / fix:
   its three sites waiting for stone; on master one got stone near day 27 and it grew to 14 farms, with the fix none did and it
   kept 2. In peace the seats move both ways (the trader of tiny `bal-001`: 16 hungry days on master, 0 with the first fix alone,
   28 with both).
+
+### Result: the Hearthship's reserve (war pacing, #126)
+
+**Why keeps fell in the first days.** In `ab34-fwar` 6 of the 9 rival falls come before day 10, all within a day and a half of the
+peace ending (days 5.6 to 6.3). `keepwhy.ts` shows each one: the keep had no warden places, so `defendersOf` found nobody, and the
+militia drew only adults with no job, of whom there are none in the first days (all 36 are at work or carrying). The first
+warden to reach the door took the keep, and the settlement with it.
+
+**The change** (as in The Settlers II, where the headquarters is held by soldiers inside it):
+
+- The Hearthship has up to 10 warden places (`KEEP_PLACES`). Its reserve is a policy, 3 by default, set under Economy → Tools
+  (`garrison.keep`). The reserve is posted like any garrison, and sent home when the setting is lowered, to 0 if asked.
+- The militia is gone (`militia`, `raiseMilitia`, `standDown` and the building's `levy`).
+- Reserve wardens never join an attack (a keep has no `slots`, so it is no attack source), and nobody new is posted to a keep
+  while it is besieged or a duel is on at its door. Without that, the reserve refilled from the town during a siege (23 adults
+  posted during one attack in a trial run).
+- Each settlement starts with 3 more people, on watch at the Hearthship, so the 36 who start the economy are not taken from it.
+  A trial that took the reserve from the 36 slowed the opening (the AI test seed in the Canopy Deeps had 53 buildings by day 10
+  instead of 64). A colony's Hearthship keeps no reserve unless the player sets one.
+- Only the loser's own Hearthship ends a settlement. Before this, `capture` checked whether the building was any keep, so losing
+  a Hearthship taken from someone else ended its new holder. With that fixed, a captured Hearthship had no places either, so two
+  seats of small `bal-001` traded an empty one 486 times. A captured Hearthship is now held like a lantern building (up to 10
+  wardens, by the frontier or inland policy), and the winners of a capture stay in it as its garrison.
+
+Runs: `ab34-fwar` (master `3a26fa9`) against `ab38-keep`, the same 9 assess games of 80 days in war. Per rival seat, except war
+counts per game, master / reserve:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| buildings d60 | 65.8 / 80 | 72.4 / 92.8 | 127 / 150 |
+| people d60 | 133 / 167 | 141 / 188 | 287 / 316 |
+| hungry seat-days from day 30 | 19% / 24% | 33% / 31% | 10% / 12% |
+| wardens d60 | 8.43 / 11.8 | 6.86 / 12.4 | 22 / 19.7 |
+| attacks ordered | 2 / 6.33 | 0.67 / 2.33 | 13 / 5 |
+| buildings captured | 1.33 / 3 | 0.67 / 2 | 5.67 / 3 |
+| rivals fallen | 1 / 0.67 | 0.67 / 0.33 | 1.33 / 0 |
+| games with a winner | 0% / 0% | 0% / 0% | 33% (day 18) / 0% |
+| attacks after day 40 | 0 / 0.33 | 0 / 0.33 | 0.67 / 0 |
+| seats still standing at the end | 78% / 89% | 78% / 89% | 67% / 100% |
+
+- **No keep falls in the opening:** falls before day 10 go from 6 to 0, and falls in all from 9 to 3 (small `bal-001` on day
+  11.1, tiny `bal-001` on days 11.2 and 44.0; master: six on days 5.6 to 6.3, then days 17.9, 21.8 and 42.0).
+- **Towns grow more:** 19% to 28% more buildings and 10% to 33% more people by day 60, since fewer seats are taken in the
+  opening. Hunger moves by 5 points or less (tiny up, small down).
+- **Not met:** no game has a winner by day 80 (master: one medium game, on day 18), and attacks still come early: 33 of 41
+  attacks are in days 0 to 19, 6 in days 20 to 39, 2 in days 40 to 59 and none after (master: 43, 2, 2, 0 of 47). Steady attacks
+  to the end are the next war-pacing problem.
+- **Not explained:** tiny seats hold more goods stuck on flags (21.7 a seat on day 20 against 0.8, 3.63 on day 60 against 0.11).
+  This was not traced.
 
 ## Looking at the map
 
