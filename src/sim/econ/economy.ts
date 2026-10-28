@@ -220,8 +220,6 @@ export interface Building {
   /** Attackers waiting at the door, and the duel being fought there. */
   siege: number[];
   duel: { attacker: number; defender: number; until: number } | null;
-  /** Hearthships: militia raised today (at most five a day). */
-  levy: number;
   /** Weathering 0..1: rain and years wear it; at half, it asks for a plank (or stone) of upkeep. */
   wear: number;
   /** Soot on forge walls and moss on damp roofs, 0..1 (looks only). */
@@ -240,8 +238,8 @@ export interface Building {
 export interface Prefs {
   dist: Record<string, Record<string, number>>;
   tools: Record<string, number>;
-  /** Share of warden places to fill, near other players' borders and further inside. */
-  garrison: { frontier: number; inland: number; near?: number };
+  /** Share of warden places to fill, near other players' borders and further inside; and the wardens kept at the Hearthship (a count). */
+  garrison: { frontier: number; inland: number; near?: number; keep: number };
   /** Transport priority: goods carriers pick up first, first in the list first (good ids). */
   transport: string[];
 }
@@ -322,7 +320,7 @@ export type Command = (
   | { t: "unferry"; from: number; to: number }
   | { t: "upgrade"; building: number }
   | { t: "rotate" }
-  | { t: "garrison"; zone: "frontier" | "near" | "inland"; value: number }
+  | { t: "garrison"; zone: "frontier" | "near" | "inland" | "keep"; value: number }
   | { t: "attack"; target: number; count: number; order?: "strongest" | "weakest" }
   | { t: "hedge"; tile: number }
   | { t: "causeway"; tile: number }
@@ -353,6 +351,8 @@ export interface Founder {
 
 /** Pairs of blades and shields the weaponsmith keeps in the stores, beyond what vacant lantern places need (armed-wardens rule). */
 const ARMS_RESERVE = 6;
+/** Warden places at a Hearthship: its reserve, as at a Settlers 2 headquarters. */
+export const KEEP_PLACES = 10;
 
 /** Does a person carry both a blade and a shield (what the armed-wardens rule asks of a warden)? */
 const isArmed = (p: Person): boolean => (p.arms & (ARM_BLADE | ARM_SHIELD)) === (ARM_BLADE | ARM_SHIELD);
@@ -860,10 +860,23 @@ export class Economy {
       keep.residents = START.settlers;
       keep.stock = goodsArray(START.stock);
       if (this.armedWardens) for (const [g, n] of Object.entries(START.armedStock)) keep.stock[goodId(g)]! += n;
+      // The Hearthship's reserve starts on watch, on top of the settlers, as a Settlers 2 headquarters starts with its soldiers
+      // (under the armed-wardens rule they bring their own blade and shield).
+      for (let i = 0; i < START.garrison.keep; i++) {
+        const p = this.addPerson(player, randomFirst(r), randomFamily(r), -r.int(18, 30) * this.dayTicks, r);
+        if (this.armedWardens) p.arms |= ARM_BLADE | ARM_SHIELD;
+        const s = this.spawnSettler("warden", keep, [], p);
+        s.building = keep.id;
+        s.state = "guard";
+        keep.garrison.push(s.id);
+        note(p, "Keeps watch at the Hearthship.");
+      }
     }
     for (const n of land.planet.grid.neighborsOf(best)) if (n !== flagTile && land.use[n] === Use.Free) land.use[n] = Use.Blocked;
     this.keeps[player] = keep.id;
     this.prefs[player] = JSON.parse(JSON.stringify({ dist: DEFAULT_DISTRIBUTION, tools: DEFAULT_TOOL_PRIORITY, garrison: START.garrison, transport: DEFAULT_TRANSPORT })) as Prefs;
+    // A colony's few founders are all needed at work: its Hearthship keeps no reserve unless the player sets one.
+    if (founders) (this.prefs[player] as Prefs).garrison.keep = 0;
     this.glow[player] = 60;
     this.glowParts[player] = { nourishment: 0.8, shelter: 0.6, belonging: 0.4, beauty: 0.5, rest: 1, variety: 0.6, joy: 0.5, wonder: 0.4 };
     this.hungry[player] = false;
@@ -1050,6 +1063,10 @@ export class Economy {
       case "send":
         return this.cmdSend(p, cmd.to, cmd.good, cmd.count);
       case "garrison":
+        if (cmd.zone === "keep") {
+          (this.prefs[p] as Prefs).garrison.keep = Math.max(0, Math.min(KEEP_PLACES, Math.round(cmd.value)));
+          return { ok: true };
+        }
         if (cmd.zone !== "frontier" && cmd.zone !== "near" && cmd.zone !== "inland") return { ok: false, reason: "Unknown zone." };
         (this.prefs[p] as Prefs).garrison[cmd.zone] = Math.max(0, Math.min(1, cmd.value));
         return { ok: true };
@@ -1576,7 +1593,6 @@ export class Economy {
       camp: 0,
       siege: [],
       duel: null,
-      levy: 0,
       wear: 0,
       soot: 0,
       moss: 0,
@@ -2448,9 +2464,11 @@ export class Economy {
         s.building = b.id;
         s.tool = tool;
         b.worker = s.id;
-      } else if (b.built && b.def.slots) {
+      } else if (b.built && this.wardenPlaces(b) > 0) {
         const want = this.garrisonWant(b);
         if (b.garrison.length < want) {
+          // A Hearthship's doors are shut while attackers are at them: it fights with the reserve it has, not with recruits.
+          if (!b.def.slots && (b.siege.length || b.duel)) continue;
           const pick = this.pickWarden(b);
           if (!pick) continue;
           const p = this.roadPath(pick.origin.flag, b.flag);
@@ -2460,7 +2478,7 @@ export class Economy {
           note(this.people[pick.person.id] as Person, `Took up the watch at a ${b.def.name.toLowerCase()}.`);
           s.building = b.id;
           b.garrison.push(s.id);
-        } else if (b.garrison.length > want && b.garrison.length > 1) {
+        } else if (b.garrison.length > want && (b.garrison.length > 1 || this.keeps[b.owner] === b.id)) {
           const id = [...b.garrison].reverse().find((g) => (this.settlers[g] as Settler).state === "guard");
           if (id !== undefined) this.sendHome(this.settlers[id] as Settler);
         } else if (b.threat >= 1 && (this.rotateUntil[b.owner] ?? -1) > this.tick) {
@@ -2484,10 +2502,19 @@ export class Economy {
     }
   }
 
-  /** Wardens a lantern building should have under its owner's garrison policy (at least one). */
+  /** Warden places in a building: a lantern building's, or a Hearthship's (its owner's own, or one taken from another settlement). */
+  wardenPlaces(b: Building): number {
+    return b.def.slots || (this.keeps.includes(b.id) ? KEEP_PLACES : 0);
+  }
+
+  /**
+   * Wardens a lantern building should have under its owner's garrison policy (at least one); at the owner's own Hearthship, its
+   * reserve. A Hearthship taken from another settlement is held like a lantern building.
+   */
   garrisonWant(b: Building): number {
-    const slots = b.def.slots ?? 0;
     const g = (this.prefs[b.owner] as Prefs).garrison;
+    if (this.keeps[b.owner] === b.id) return Math.max(0, Math.min(KEEP_PLACES, g.keep ?? 0));
+    const slots = this.wardenPlaces(b);
     // Three levels, as in Serf City (which has four): the middle one defaults to halfway.
     const share = b.threat >= 2 ? g.frontier : b.threat === 1 ? (g.near ?? (g.frontier + g.inland) / 2) : g.inland;
     return Math.max(1, Math.min(slots, Math.ceil(slots * share - 1e-9)));
@@ -2690,19 +2717,13 @@ export class Economy {
     const ra = this.resolve(player);
     const rd = this.resolve(target.owner);
     const ground = this.groundFor(target);
-    const defs = [...(this.keeps.includes(target.id) ? this.militia(target) : []), ...this.defendersOf(target).map((s) => this.fighter(s))];
+    const defs = this.defendersOf(target).map((s) => this.fighter(s));
     const morale = this.warMorale(player);
     const a = att.map(({ s, d }) => strength(this.fighter(s, fatigueFor(d, this.people[s.person]?.arms ?? 0)), ra * morale, 1));
     const dd = defs.map((f) => strength(f, rd, ground)).reverse();
     const bowsA = att.filter(({ s }) => hasBow(this.fighter(s))).length;
     const bowsD = defs.filter((f) => hasBow(f)).length;
     return captureOdds(a, dd, bowsA, bowsD);
-  }
-
-  /** A Hearthship without wardens is defended by up to five of its idle adults. */
-  private militia(keep: Building): Fighter[] {
-    const n = Math.min(5 - keep.levy, this.people.filter((p) => p.alive && p.owner === keep.owner && p.stage === "adult" && p.settler < 0 && p.woundedUntil <= this.tick).length);
-    return new Array<Fighter>(n).fill({ rank: 0, arms: 0, fatigue: 0 });
   }
 
   private cmdAttack(targetId: number, count: number, p: number, order?: "strongest" | "weakest"): CommandResult {
@@ -2793,8 +2814,8 @@ export class Economy {
       const a = b.siege.map((id) => this.settlers[id] as Settler).find((s) => s.state === "siege");
       if (!a) continue;
       if (b.owner === a.owner) continue;
-      let defenders = this.defendersOf(b);
-      if (!defenders.length && this.keeps.includes(b.id)) defenders = this.raiseMilitia(b);
+      // A Hearthship is held by the wardens of its reserve; with none left on watch it falls, as a Settlers 2 headquarters does.
+      const defenders = this.defendersOf(b);
       if (!defenders.length) {
         this.capture(b, a.owner);
         continue;
@@ -2812,34 +2833,6 @@ export class Economy {
 
   private heard(kind: "clash" | "volley", tile: number): void {
     if (this.combatEvents.length < 64) this.combatEvents.push({ kind, tile });
-  }
-
-  /** Militia go back to their lives once no attack is under way. */
-  private standDown(): void {
-    for (const k of this.keeps) {
-      if (k === undefined) continue;
-      const keep = this.buildings[k] as Building;
-      if (!keep.garrison.length || keep.siege.length || keep.duel) continue;
-      if (this.settlers.some((s) => s.alive && s.role === "attacker" && s.building === keep.id)) continue;
-      for (const id of [...keep.garrison]) {
-        const s = this.settlers[id] as Settler;
-        if (s.alive && s.state === "guard") this.sendHome(s);
-      }
-    }
-  }
-
-  /** Idle adults of a Hearthship take up arms when no warden is left to defend it. */
-  private raiseMilitia(keep: Building): Settler[] {
-    if (keep.levy >= 5) return [];
-    const pick = this.people.find((p) => p.alive && p.owner === keep.owner && p.stage === "adult" && p.settler < 0 && p.woundedUntil <= this.tick);
-    if (!pick) return [];
-    keep.levy++;
-    const s = this.spawnSettler("warden", keep, [], pick);
-    s.building = keep.id;
-    s.state = "guard";
-    keep.garrison.push(s.id);
-    note(pick, "Took up arms to defend the Hearthship.");
-    return [s];
   }
 
   private resolveDuel(b: Building): void {
@@ -2901,7 +2894,8 @@ export class Economy {
   /** A building falls: the winners move in, the land shifts. */
   private capture(b: Building, owner: number): void {
     const old = b.owner;
-    const isKeep = this.keeps.includes(b.id);
+    // Only the loser's own Hearthship ends them; one they had taken from someone else is just a building lost.
+    const isKeep = this.keeps[old] === b.id;
     for (const id of b.garrison) {
       const s = this.settlers[id] as Settler;
       if (s.alive) this.sendHome(s);
@@ -2922,7 +2916,8 @@ export class Economy {
     b.lit = true;
     const winners = b.siege.map((id) => this.settlers[id] as Settler).filter((s) => s.alive && s.owner === owner);
     b.siege = [];
-    const room = isKeep ? 0 : b.def.slots ?? 0;
+    // The winners stay as its garrison, at a Hearthship too (which then holds wardens like a lantern building).
+    const room = this.wardenPlaces(b);
     winners.forEach((s, i) => {
       if (i < room) {
         s.role = "warden";
@@ -3188,7 +3183,7 @@ export class Economy {
     // Threat to lanterns: how near another player's land is (within 3 steps of their light is the
     // frontier, within 7 is near).
     for (const b of sources) {
-      if (!b.def.slots) continue;
+      if (!this.wardenPlaces(b)) continue;
       let threat = 0;
       this.flood(b.tile, (b.def.light as number) + 7, (t, d) => {
         const o = land.territory[t] as number;
@@ -3800,7 +3795,7 @@ export class Economy {
   /**
    * Weaponsmith: blades, and with the armed-wardens rule shields too, whichever the stores hold fewer of (blades on a tie).
    * With the rule on it stops (-1) once the stores hold a reserve of ARMS_RESERVE pairs plus one for every vacant place at a
-   * lantern building, so the iron is not spent on arms nobody will carry.
+   * lantern building or in the Hearthship's reserve, so the iron is not spent on arms nobody will carry.
    */
   private chooseArms(owner: number): number {
     const blade = goodId("blade");
@@ -3809,7 +3804,7 @@ export class Economy {
     const shield = goodId("shield");
     const fewer = (stock[shield] as number) < (stock[blade] as number) ? shield : blade;
     let vacant = 0;
-    for (const b of this.buildings) if (b.alive && b.built && b.owner === owner && b.def.slots) vacant += Math.max(0, this.garrisonWant(b) - b.garrison.length);
+    for (const b of this.buildings) if (b.alive && b.built && b.owner === owner && this.wardenPlaces(b) > 0) vacant += Math.max(0, this.garrisonWant(b) - b.garrison.length);
     return (stock[fewer] as number) >= ARMS_RESERVE + vacant ? -1 : fewer;
   }
 
@@ -4485,7 +4480,6 @@ export class Economy {
     const hourIndex = Math.floor(this.tick / hour);
     if (daily) {
       this.closeDay();
-      for (const k of this.keeps) if (k !== undefined) (this.buildings[k] as Building).levy = 0;
       this.restSoil();
       this.weather();
     }
@@ -4996,7 +4990,6 @@ export class Economy {
     this.stepSieges();
     if (tick % 50 === 0) {
       this.stepStranded();
-      this.standDown();
     }
     if (tick % 100 === 0) this.stepVictory();
     this.stepFrontiers(tick);

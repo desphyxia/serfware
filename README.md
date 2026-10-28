@@ -213,7 +213,12 @@ chance to take it. Wardens march cross-country (mounts tire them less), loose a 
 carry bows, then duel at the door one at a time. Rank, blades, fatigue, resolve (gold, Glow,
 full bellies) and the defenders' home ground decide each duel. Take a building and the border
 redraws; buildings cut off are stranded, not burned, and come back if the land is won back
-within a season. Take a Hearthship and that settlement falls. You can also win by holding 7 of
+within a season. Take a Hearthship and that settlement falls. As at a Settlers 2 headquarters,
+the Hearthship is held by a reserve of wardens (3 by default, up to 10; set under Economy → Tools).
+A settlement starts with its 3 on watch, on top of its 36 settlers; a colony keeps none unless you
+set it. They take no work and never join an attack. While attackers are at its door no one new joins them,
+and once none is left on watch the next attacker takes it. A Hearthship you take from another
+settlement is held like a lantern building (up to 10 wardens); losing it again does not end you. You can also win by holding 7 of
 the 12 Star Wells for a day. Battle stakes (Settings → World) are Wounded by default, or Mortal.
 Weaponsmiths make blades, bowyers bows, and stables mounts; gold in storage pays for promotions.
 

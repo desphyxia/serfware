@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { captureOdds, duelChance, strength } from "../src/sim/econ/combat";
 import { goodId } from "../src/sim/econ/defs";
 import { placeOn } from "../src/sim/econ/planner";
+import { KEEP_PLACES } from "../src/sim/econ/economy";
 import { World } from "../src/sim/world";
 
 const run = (w: World, n: number, until?: () => boolean) => {
@@ -238,5 +239,56 @@ describe("war rules from Serf City", () => {
       }
     });
     expect(flipped).toBeGreaterThan(0);
+  });
+});
+
+describe("the Hearthship's reserve", () => {
+  it("losing a Hearthship taken from someone else does not end a settlement", () => {
+    const w = new World("keep-retaken", { size: "small", players: 3, peaceDays: 0 });
+    const eco = w.economy;
+    const capture = (b: unknown, owner: number) => (eco as unknown as { capture(b: unknown, owner: number): void }).capture(b, owner);
+    const keep1 = eco.buildings[eco.keeps[1]!]!;
+    capture(keep1, 0);
+    expect(eco.defeated[1]).toBe(true);
+    // Held like a lantern building: the garrison policy wants wardens there.
+    expect(eco.wardenPlaces(keep1)).toBe(KEEP_PLACES);
+    expect(eco.garrisonWant(keep1)).toBeGreaterThanOrEqual(1);
+    capture(keep1, 2);
+    expect(keep1.owner).toBe(2);
+    expect(eco.defeated[0]).toBe(false);
+    // Its own Hearthship still ends it.
+    capture(eco.buildings[eco.keeps[0]!]!, 2);
+    expect(eco.defeated[0]).toBe(true);
+  });
+
+  it("keeps the reserve on watch at the Hearthship, sends them home when it is lowered and caps it at the places there", () => {
+    const w = new World("keep-reserve", { size: "small", players: 2, peaceDays: 5 });
+    const eco = w.economy;
+    const keep = eco.buildings[eco.keeps[0]!]!;
+    const onWatch = () => eco.defendersOf(keep).length;
+    run(w, 600);
+    expect(eco.garrisonWant(keep)).toBe(3);
+    expect(onWatch()).toBe(3);
+    w.command({ t: "garrison", zone: "keep", value: 0 });
+    run(w, 50);
+    expect(onWatch()).toBe(0);
+    expect(w.command({ t: "garrison", zone: "keep", value: 99 }).ok).toBe(true);
+    expect(eco.garrisonWant(keep)).toBe(KEEP_PLACES);
+  });
+
+  it("is the Hearthship's only defence and never joins an attack", { timeout: 60000 }, () => {
+    const w = battleWorld({});
+    const eco = w.economy;
+    const enemy = eco.buildings[eco.keeps[1]!]!;
+    run(w, 200);
+    expect(eco.defendersOf(enemy).length).toBe(3);
+    // Nothing in player 0's attack comes from its own Hearthship.
+    expect(eco.attackersFor(0, enemy).every(({ from }) => from.id !== eco.keeps[0])).toBe(true);
+    const held = eco.attackOdds(0, enemy, 3);
+    w.command({ t: "garrison", zone: "keep", value: 0, player: 1 });
+    run(w, 100);
+    expect(eco.defendersOf(enemy).length).toBe(0);
+    expect(eco.attackOdds(0, enemy, 3)).toBeGreaterThan(held);
+    expect(eco.attackOdds(0, enemy, 1)).toBe(1);
   });
 });

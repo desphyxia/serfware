@@ -16,12 +16,12 @@ function tally(w: World): Record<string, number> {
 describe("the AI's land use and settings", () => {
   it("surveys, mines, smelts, raises causeways, stages goods and sets priorities", { timeout: 900000 }, () => {
     const all: Record<string, number> = {};
-    // Days per game: glade-9 has all it shows (geologists, mines, causeways, turns) by day 12.3. ferry-2's storehouse waits for a
-    // day with no site open; since goods stopped jamming (#186) its town grows faster and keeps sites open longer, so the
-    // storehouse comes on day 54.3 and the goods staged in it on day 54.6 (day 30.5 and 31.1 before).
+    // Days per game: glade-9 has all it shows (geologists, mines, causeways, turns) by day 12.3. russet-4 has geologists, a
+    // causeway, a coal mine, a storehouse (day 7.6) and the goods staged in it (day 7.8). ferry-2 had the storehouse until the
+    // Hearthship's reserve (#126) moved it past day 60; a storehouse waits for a day with no site open, so its day is fragile.
     for (const [seed, personality, days] of [
       ["glade-9", "trader", 40],
-      ["ferry-2", "warden", 58],
+      ["russet-4", "warden", 12],
     ] as const) {
       const w = new World(seed, { size: "small", rivals: 1, personalities: [personality], peaceDays: 99 });
       w.recordAi = true;

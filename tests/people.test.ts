@@ -14,7 +14,9 @@ describe("people", () => {
   it("founders have names, families and ages", () => {
     const w = new World("people-1", { size: "tiny" });
     const people = w.economy.peopleOf(0);
-    expect(people.length).toBe(36);
+    // 36 settlers, and the 3 wardens of the Hearthship's reserve.
+    expect(people.length).toBe(39);
+    expect(people.filter((p) => p.settler >= 0).length).toBe(3);
     expect(new Set(people.map((p) => p.family)).size).toBeGreaterThan(3);
     expect(people.every((p) => p.stage === "adult" && p.first.length > 1)).toBe(true);
   });
