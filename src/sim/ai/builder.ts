@@ -554,6 +554,7 @@ export class AiBuilder implements Brain {
 
   /** Diplomacy: offer what this temperament wants, and get its prisoners home. */
   private talk(w: World): void {
+    if (!aiOptions.diplomacy) return;
     const eco = w.economy;
     const pl = this.player;
     const dip = eco.diplomacy;
