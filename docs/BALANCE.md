@@ -1384,6 +1384,43 @@ wardens per rival seat, keep / final:
 - **Still not met:** 2 games of 9 have a winner. The same three games have no attack, and the same two early falls (day 8.1 and 9.7)
   happen. Medium seats still have fewer buildings by day 60 (110 against 150) and more goods stuck on flags (not traced).
 
+### Result: six switches that are off, on together (#126)
+
+Runs: `ab41-final` (master `ffa9969`, the same sim code as `bc544ad`) against `ab42-six`, the same 9 assess games of 80 days in
+war, with `BALANCE_AI="clear,wood,rail,railsites,early,keeproads"` (`borderClear`, `woodByNeed`, `reserveRail`, `railWithSites`,
+`orderEarly`, `keepRoads`). All six were on at once, so a change cannot be put down to one of them from this run; the split runs
+below do that. Games that end early drop their seats from the later means, which moves small most (one game ends on day 13).
+Per game, wardens and the rest per rival seat, now / six:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| games with a winner | 33% (day 26) / 33% (day 41) | 0% / 33% (day 13) | 33% (day 63) / 33% (day 25) |
+| attacks ordered | 7.33 / 6.33 | 2.67 / 4.33 | 76.7 / 73.3 |
+| attacks after day 40 | 2.67 / 2.33 | 0 / 0 | 44 / 19 |
+| wardens d60 | 18.6 / 13 | 18.4 / 9 | 41.5 / 32.8 |
+| Hearthships sent | 0.67 / 2.67 | 0 / 2.67 | 0 / 3.33 |
+| Hearthships that landed | 0.67 / 1.67 | 0 / 1 | 0 / 2.33 |
+| games with a colony | 33% / 100% | 0% / 67% | 0% / 67% |
+| hungry seat-days from day 30 | 4% / 47% | 31% / 25% | 17% / 30% |
+| food in the warehouses d60 | 316 / 62.5 | 939 / 493 | 1229 / 856 |
+| room for people d60 | 214 / 190 | 218 / 191 | 344 / 268 |
+| land held d60 | 315 / 265 | 432 / 269 | 1399 / 1283 |
+| lit lantern buildings d60 | 5 / 4 | 6.29 / 3.83 | 16.5 / 13.6 |
+| buildings d60 | 88.3 / 90 | 83.3 / 95 | 110 / 110 |
+| stalled seat-days | 51% / 50% | 62% / 54% | 18% / 29% |
+| goods stuck on flags d20 | 15.7 / 4.28 | 2.9 / 3.13 | 45.1 / 25.4 |
+| workplaces with no worker d60 | 2.76 / 0 | 2.14 / 0.33 | 1 / 0.2 |
+
+- **War:** 252 attacks against 260, by 20-day block 98/90/19/45 against 52/68/65/75: earlier, and fewer late. 11 Hearthships
+  taken either way, two before day 10 either way, and the same three games without an attack. Three winners against two, but
+  two of them before day 40 (medium `bal-003`: the warden seat takes the third Hearthship on day 25, where now it never does).
+- **Colonies:** Hearthships are sent and land on every size (7 games of 9 found a colony against 1), and the medium games send 212
+  skyships a game. The colonies stay small (at most 20 colonists and 10 buildings by day 80) and build no terraforming works.
+- **Costs:** seats are hungrier on tiny and medium, hold less land, have fewer lit lantern buildings and fewer wardens, and less
+  room for people (more houses wait for stone that nobody sent: on small 47% of site-samples against 31%). Not traced; the
+  Hearthship's cargo and founders, and the land the rail site keeps free, would fit.
+- **Wood:** woodcutters with no tree in reach become the first idle reason on every size; tiny makes 22% more logs.
+
 ### Result: new sites join only roads that reach the Hearthship (#126)
 
 `planSide` (planner.ts) kept, as flags a new site's road may start from, those that reach the Hearthship and those on other land.
