@@ -1359,7 +1359,30 @@ road is above -1 °C (`warnThinIce`), when it closes and when it opens. A closed
 over a lake are left alone (going by the code, the old thaw removed them too; not seen in a game). `rejoinRoads` leaves a building that only a closed ice road cuts off to the frost:
 with it laying roads round the lake, the Canopy Deeps game in `tests/airegions.test.ts` stopped at 94 buildings instead of 105 and
 built no tree house (the 36 buildings a closed road cut off on day 15 were joined again by day 18; why the town then grew less was not
-traced). Without the detours it matches the game without `rejoinRoads`. Not yet run in a sweep.
+traced). Without the detours it matches the game without `rejoinRoads`.
+
+Runs: `ab38-keep` against `ab41-final` (`bc544ad`: `rejoinRoads` on by default, ice roads that close), the same 9 games. Per game,
+wardens per rival seat, keep / final:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| attacks ordered | 6.33 / 7.33 | 2.33 / 2.67 | 5 / 76.7 |
+| buildings captured | 3 / 4 | 2 / 2.33 | 3 / 39.3 |
+| rivals fallen | 0.67 / 1.33 | 0.33 / 0.67 | 0 / 1.67 |
+| games with a winner | 0% / 33% (day 26) | 0% / 0% | 0% / 33% (day 63) |
+| attacks after day 40 | 0.33 / 2.67 | 0.33 / 0 | 0 / 44 |
+| wardens d60 | 11.8 / 18.6 | 12.4 / 18.4 | 19.7 / 41.5 |
+| buildings d60 | 80 / 88.3 | 92.8 / 83.3 | 150 / 110 |
+| goods stuck on flags d60 | 3.63 / 1.2 | 0.32 / 0.23 | 12.1 / 22.4 |
+
+- **Attacks go on to the end:** 260 attacks in all against 41 (`ab40-rejoin`: 166), by 20-day block 52/68/65/75 against 33/6/2/0.
+  Hearthships taken: 11 against 3, the same as `ab40-rejoin`.
+- **What changed from `ab40-rejoin`:** medium `bal-001` has 69 attacks to day 80.8 against 7 that stopped on day 17.7, and no
+  Hearthship falls; medium `bal-002` ends on day 63 against 55; tiny `bal-003` has attacks to day 51.3 against 15.0. The other six
+  play as before (tiny `bal-001`: 9 attacks against 10). Why those three changed was not traced; the code differs only in the ice
+  change and in `rejoinRoads` leaving ice-only cut-offs to the frost.
+- **Still not met:** 2 games of 9 have a winner. The same three games have no attack, and the same two early falls (day 8.1 and 9.7)
+  happen. Medium seats still have fewer buildings by day 60 (110 against 150) and more goods stuck on flags (not traced).
 
 ## Looking at the map
 
