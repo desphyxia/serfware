@@ -44,8 +44,10 @@ export class Climate {
   private readonly count: number;
   /** Bumped each climate step; renderers follow it. */
   version = 0;
-  /** Some lake ice broke up since the economy last looked (roads over it sink). */
+  /** Some lake ice broke up since the economy last looked (roads over it close). */
   thawed = false;
+  /** Some lake froze over since the economy last looked (closed roads over it may open again). */
+  froze = false;
   /** The planet's moons, and the tide they raise now (-1 low .. 1 high). */
   readonly moons: Moon[];
   tide = 0;
@@ -162,6 +164,7 @@ export class Climate {
         if (land.frozen[t] !== was) {
           land.iceVersion++;
           this.thawed ||= !!was;
+          this.froze ||= !was;
         }
       }
       if (!land.isLand(t)) continue;

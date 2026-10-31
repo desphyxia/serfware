@@ -177,6 +177,13 @@ the same as no tokens at all. Each switch below says what it does when on.
   (`startOptions.avoidCold`, economy.ts `setupStart`, not an AI switch). On by default since #179.
 - `nowarmfarms`: plays without the rule that puts farms and orchards where the land within 3 steps has the longest growing
   season (`warmFarms`, planner.ts `placeConnected`). On by default since #179.
+- `nodiplomacy`: AI seats offer no treaty (truce, trade pact, shared road, prisoner exchange) and decline every offer (`diplomacy`,
+  ai/personality.ts `answerOffer`, ai/builder.ts `talk`). A test tool: diplomacy is on in the game. Issue #126.
+- `norejoin`: plays without the rule that lays a road from a building no road route joins to the Hearthship to the nearest joined
+  flag, every 4 thoughts, lantern buildings first, the most threatened first, in legs of up to 8 steps on the lattice (4 off it) with a flag at each end
+  (`rejoinRoads`, planner.ts `rejoinCutOff`). A building no road is found for is not tried again for a day, and one that only a
+  closed ice road cuts off is left to the next hard frost. On by default since
+  #126; until then the switch was `rejoin`, which no longer does anything.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -647,6 +654,20 @@ the AI did and why it could not do more, bundled like the other helpers. All are
   armed-wardens rule) and, from day `from` to `to`, prints each time wardens march on a Hearthship and when one changes hands:
   its wardens on watch and its reserve, the owner's adults (free or by role and state), lanterns and wardens, and the attackers.
   It showed that keeps fell at day 5.6 to 5.9 with no one in them, which led to the Hearthship's reserve.
+- `attackwhy.ts <size> <seed> <to> [every] [peace] [armed]` (#126): every `every` days, per seat, the enemy lantern buildings it
+  cannot attack and why (a truce, out of reach, not lit), the ones in reach with the wardens it could send, those holding them and
+  the odds, the truces standing, and each attack ordered.
+- `wardenwhy.ts <size> <seed> <to> [every] [peace] [armed]` (#126): every `every` days, per seat, its lantern buildings by kind
+  (built, on the front, sites, warden places, wanted, on watch, spare for an attack), adults and free adults, wardens, the lantern
+  buildings no road route joins to the Hearthship (cut off) with their wanted and on-watch wardens, planks and stone.
+- `garrisonwhy.ts <size> <seed> <day> <seat> [peace] [armed]` (#126): at `day`, each of the seat's lantern buildings with its
+  garrison entries, its flag's roads, the road route from the Hearthship and whether `pickWarden` finds anyone to post.
+- `splitwhy.ts <size> <seed> <to> <seat> [peace] [armed]` (#126): each time the set of the seat's cut-off lantern buildings changes,
+  with the buildings that changed hands and the road count; `WATCH_FROM`/`WATCH_TO` (days) print a stack for each of the seat's
+  roads removed in that window.
+- `rejoinwhy.ts <size> <seed> <day> <seat> [peace] [armed]` (#126): at `day`, each of the seat's cut-off buildings, the nearest
+  joined flags and the road path from each (its length and what `checkRoad` says, or none) next to a path over any ground.
+- The traces play with `rejoinRoads` on; `REJOIN=0` plays without it (`attackwhy` and `garrisonwhy` follow the default).
 - `colonywhy.ts <size> <seed> <days> [population idle]` (#126): plays the assess game with a lowered colony threshold (default 30 people, 5 idle) and records, each day from day 10, the first voyage gate each seat fails (rail, probes, Hearthship), then the voyage events and, every 10 days, what a loading Hearthship's rail still lacks. `COLONY_FLAGS="early,railsites"` turns those two switches on for it.
 - `hungerwhy.ts <size> <seed> <days>` (#126): per seat and 10-day window, hungry days, people, idle adults, food, the days food cover was under 1 or nobody was idle, the food buildings standing and building, where the builder's thoughts stopped, and the food wishes placed or failed; at the end, the farm, orchard, fisher and hunter sites on the seat's land by reach, why placement fails (no road path), and the pockets of land that no road reaches with what blocks them.
 - `BALANCE_FOUND="population,idle"` changes when the AI founds a colony (`VoyagePlanner.found`); the record lists it in `found`.
@@ -1281,6 +1302,87 @@ counts per game, master / reserve:
   to the end are the next war-pacing problem.
 - **Not explained:** tiny seats hold more goods stuck on flags (21.7 a seat on day 20 against 0.8, 3.63 on day 60 against 0.11).
   This was not traced.
+
+### Result: why attacks stop, and rejoining cut-off buildings (war pacing, #126)
+
+**Truces are not what stops the war.** `attackwhy.ts` on four games (medium `bal-001` and `bal-003`, small and tiny `bal-002`) found
+most seat pairs under a truce all game (5 or 6 of 6 pairs in small and tiny `bal-002`, which never see an attack); where there is
+no truce, a seat could send 2 wardens at most against 1 to 3 holding, at odds of 0.03 to 0.57 (the AI attacks at 0.7, 0.6 on hard).
+`nodiplomacy` (`ab39-nodip` against `ab38-keep`, the same 9 games) gave no winner either, attacks 48/5/0/0 by 20-day block, and
+towns 10% to 20% smaller (not traced).
+
+**Why so few wardens can attack** (`wardenwhy.ts`, `garrisonwhy.ts`, `splitwhy.ts`, all 9 games):
+
+- **Cut-off lantern buildings.** On day 40 the warden seat (seat 3) has lantern buildings no road route joins to its Hearthship
+  in 5 of 9 games: medium `bal-001` 10 (want 35 wardens, 23 on watch), `bal-002` 2 (10/5), `bal-003` 3 (15/5), tiny `bal-001`
+  6 (29/10), `bal-003` 2 (10/2); about 54 empty places on the front while the same seats have 6 to 24 free adults. `pickWarden`
+  posts only by road, so nobody reaches them. `splitwhy` on medium `bal-001`: the beacons the seat captures are never joined to
+  its roads (days 6.95, 9.47, 18.45), and on day 15.18 the thaw sank four of its ice roads (5 to 14 tiles), which cut off seven
+  more. The AI had no code that joins a cut-off building again (#188 is the same for a storehouse site).
+- **Thin garrisons in the other seats.** The Builder, the Trader and the steward hold their front at 0.3 to 0.4 of the places, so
+  a beacon has 2 of 5 and can spare one warden for an attack. Not changed yet.
+- **The lantern buildings stop at about day 20**: the land runs out (counts per seat are flat from then on).
+
+**The change: `rejoinRoads`** (switch `norejoin` above). The first version took only paths that fit one road (24 nodes) and
+missed many; the second lays a long path in legs with flags. `rejoinwhy.ts` on tiny `bal-001`, day 40, first version: of seat 3's 24
+cut-off buildings, 5 had a path that fits one road (not laid yet), 5 only a longer one (the captured Hearthship among them), and 14
+no path over free ground at all, 8 of the 10 lantern buildings among them (enemy land, water, buildings or slopes in the way; not
+told apart).
+
+Runs: `ab38-keep` (master `9f58ed1`) against `ab40-rejoin` (second version), the same 9 assess games of 80 days in war, with ice
+roads that sink at the thaw (before the ice change below). Per game, wardens per rival seat, keep / rejoin:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| attacks ordered | 6.33 / 6.67 | 2.33 / 2.67 | 5 / 46 |
+| buildings captured | 3 / 4 | 2 / 2.33 | 3 / 23.3 |
+| rivals fallen | 0.67 / 1.33 | 0.33 / 0.67 | 0 / 1.67 |
+| games with a winner | 0% / 33% (day 26) | 0% / 0% | 0% / 33% (day 55) |
+| attacks after day 40 | 0.33 / 0 | 0.33 / 0 | 0 / 19 |
+| wardens d60 | 11.8 / 19.6 | 12.4 / 18.4 | 19.7 / 40 |
+| buildings d60 | 80 / 93.5 | 92.8 / 86.8 | 150 / 96.5 |
+| goods stuck on flags d60 | 3.63 / 0 | 0.32 / 0.11 | 12.1 / 57.5 |
+
+- **Attacks go on to the end:** 166 attacks in all against 41, by 20-day block 57/52/39/18 against 33/6/2/0. Hearthships taken: 11
+  against 3. Most of it is the medium games (46 attacks a game against 5).
+- **Not met:** 2 games of 9 have a winner (target 80%). Tiny `bal-002` and small `bal-002` and `bal-003` have no attack at all
+  either way. Two Hearthships fall before day 10 (small `bal-001` day 9.7, tiny `bal-001` day 8.1; keep: none), and in medium
+  `bal-003` the warden seat takes two by day 12.5 and never the third.
+- **Not explained:** medium seats have a third fewer buildings and people by day 60 and five times the goods stuck on flags. Seats
+  being taken down would fit, but this was not traced.
+
+**Ice roads close instead of sinking.** A lake tile freezes below -3 °C and thaws above 1 °C, tile by tile, and rain and cold snaps
+move the temperature, so a road could sink in midwinter, with a notice only after it was gone, and nothing joined what it cut off.
+Now a road over thawed ice stays with its flags but is closed (`Road.iceClosed`, economy.ts `closeIceRoads`): its carriers go home,
+no route uses it, and it opens again when its lake is all frozen (`openIceRoads`). The owner is told once when the ice under an open
+road is above -1 °C (`warnThinIce`), when it closes and when it opens. A closed road is drawn grey over the open water. Ferry links
+over a lake are left alone (going by the code, the old thaw removed them too; not seen in a game). `rejoinRoads` leaves a building that only a closed ice road cuts off to the frost:
+with it laying roads round the lake, the Canopy Deeps game in `tests/airegions.test.ts` stopped at 94 buildings instead of 105 and
+built no tree house (the 36 buildings a closed road cut off on day 15 were joined again by day 18; why the town then grew less was not
+traced). Without the detours it matches the game without `rejoinRoads`.
+
+Runs: `ab38-keep` against `ab41-final` (`bc544ad`: `rejoinRoads` on by default, ice roads that close), the same 9 games. Per game,
+wardens per rival seat, keep / final:
+
+| | tiny | small | medium |
+|---|---|---|---|
+| attacks ordered | 6.33 / 7.33 | 2.33 / 2.67 | 5 / 76.7 |
+| buildings captured | 3 / 4 | 2 / 2.33 | 3 / 39.3 |
+| rivals fallen | 0.67 / 1.33 | 0.33 / 0.67 | 0 / 1.67 |
+| games with a winner | 0% / 33% (day 26) | 0% / 0% | 0% / 33% (day 63) |
+| attacks after day 40 | 0.33 / 2.67 | 0.33 / 0 | 0 / 44 |
+| wardens d60 | 11.8 / 18.6 | 12.4 / 18.4 | 19.7 / 41.5 |
+| buildings d60 | 80 / 88.3 | 92.8 / 83.3 | 150 / 110 |
+| goods stuck on flags d60 | 3.63 / 1.2 | 0.32 / 0.23 | 12.1 / 22.4 |
+
+- **Attacks go on to the end:** 260 attacks in all against 41 (`ab40-rejoin`: 166), by 20-day block 52/68/65/75 against 33/6/2/0.
+  Hearthships taken: 11 against 3, the same as `ab40-rejoin`.
+- **What changed from `ab40-rejoin`:** medium `bal-001` has 69 attacks to day 80.8 against 7 that stopped on day 17.7, and no
+  Hearthship falls; medium `bal-002` ends on day 63 against 55; tiny `bal-003` has attacks to day 51.3 against 15.0. The other six
+  play as before (tiny `bal-001`: 9 attacks against 10). Why those three changed was not traced; the code differs only in the ice
+  change and in `rejoinRoads` leaving ice-only cut-offs to the frost.
+- **Still not met:** 2 games of 9 have a winner. The same three games have no attack, and the same two early falls (day 8.1 and 9.7)
+  happen. Medium seats still have fewer buildings by day 60 (110 against 150) and more goods stuck on flags (not traced).
 
 ## Looking at the map
 

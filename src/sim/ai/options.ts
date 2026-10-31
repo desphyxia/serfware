@@ -1,7 +1,7 @@
 /**
  * Behaviours a harness can switch. On by default: `foodWithoutIdle`, `bowsByNeed`, `warmFarms`, and since #184 the balance sweeps'
  * standard stack: `relocateQuarries`, `stoneFallback`, `foodByNeed`, `stonePriority`, `toolsByDemand`, `oreMines`, `releaseStalled`,
- * `toolsmithAnyway`, `forgeRoom`, `graniteFirst`, `turnBuildings` and `widePlacement`. The others are off.
+ * `toolsmithAnyway`, `forgeRoom`, `graniteFirst`, `turnBuildings` and `widePlacement`; also `diplomacy` and `rejoinRoads`. The others are off.
  * `relocateQuarries`: a quarry with no rock left in reach stops counting against the quarry quota and is
  * pulled down (its worker and tool go back to the pool), and new quarries are looked for farther out.
  * `stoneFallback`: when the rock inside the border is nearly used up, start on granite (a geologist, a mine) before
@@ -79,5 +79,11 @@
  * `warmFarms` (on by default since #179): farms and orchards are placed where the land within 3 steps has the longest growing season (`Climate.growingGuess`),
  * worth WARM_FARM in the site ranking from frozen all year to growing all year, against the ranking's cost for distance from the centre
  * (planner.ts `placeConnected`). Fields and orchard fruit wait while it is cold; hungry seats were found farming their coldest land.
+ * `diplomacy` (on by default): AI seats offer and accept treaties (truces, trade pacts, shared roads, prisoner exchanges). Without it
+ * they offer none and decline every offer, so no truce ever holds them back (#126, war pacing).
+ * `rejoinRoads` (on by default since #126): every few thoughts a seat lays a road from a building of its own that no road route joins to the Hearthship to the
+ * nearest flag that is joined (planner.ts `rejoinCutOff`), lantern buildings first, the most threatened first; not for one that only
+ * a closed ice road cuts off, which the next hard frost joins again. Captured lantern buildings were never joined, so no warden could
+ * walk to them and the front stayed thinly held (#126, #188).
  */
-export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true };
+export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true, diplomacy: true, rejoinRoads: true };

@@ -20,6 +20,16 @@ const STONE = [
   [0.7, 0.66, 0.6],
   [0.52, 0.5, 0.46],
 ];
+/** An ice road closed by the thaw: grey slush with the runner tracks washed out, so it reads as shut. */
+const SLUSH = [
+  [0.4, 0.47, 0.52],
+  [0.56, 0.6, 0.63],
+  [0.48, 0.53, 0.57],
+  [0.58, 0.62, 0.65],
+  [0.48, 0.53, 0.57],
+  [0.56, 0.6, 0.63],
+  [0.4, 0.47, 0.52],
+];
 
 /** A causeway pier: a squat six-sided stack of dressed stone from the flats up to the deck. */
 function causewayPadGeometry(): THREE.BufferGeometry {
@@ -148,7 +158,8 @@ export class FrontierView {
 
   /**
    * Ice roads: packed snow on the ice, two dark runner tracks and a brushed shoulder, laid as
-   * ribbons between tile centres wherever a road touches a frozen lake.
+   * ribbons between tile centres wherever a road touches a frozen lake. A road closed by the thaw stays drawn over the open water,
+   * grey and slushy, until the lake freezes again.
    */
   private buildIceRoads(): void {
     if (this.roads) {
@@ -180,7 +191,7 @@ export class FrontierView {
       for (let i = 0; i < r.tiles.length - 1; i++) {
         const a = r.tiles[i] as number;
         const b = r.tiles[i + 1] as number;
-        const special = (x: number) => land.isIce(x) || land.causeway[x] === 1;
+        const special = (x: number) => land.isIce(x) || land.causeway[x] === 1 || (!!r.iceClosed && land.thinIce(x));
         if (!special(a) && !special(b)) continue;
         const stone = land.causeway[a] === 1 || land.causeway[b] === 1;
         const pa = this.frames.pos(a);
@@ -197,7 +208,7 @@ export class FrontierView {
             const w = across[j] as number;
             const p = a3.clone().addScaledVector(side, w);
             pos.push(p.x, p.y, p.z);
-            const c = (stone ? STONE : shade)[j] as number[];
+            const c = (stone ? STONE : r.iceClosed ? SLUSH : shade)[j] as number[];
             const n = 0.94 + SurfaceFrames.hash(a * 31 + k, j) * 0.08;
             col.push((c[0] as number) * n, (c[1] as number) * n, (c[2] as number) * n);
           }

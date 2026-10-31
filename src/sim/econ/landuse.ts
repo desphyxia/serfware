@@ -376,6 +376,12 @@ export class LandUse {
     return n >= this.tileCount ? this.cornerTilesOf(n).some(thin) : thin(n);
   }
 
+  /** The lake tiles at node `n`: the tile itself, or the lake tiles round a corner. */
+  lakeTilesAt(n: number): number[] {
+    if (n < this.tileCount) return this.hydro.lake[n] === 1 ? [n] : [];
+    return this.cornerTilesOf(n).filter((t) => this.hydro.lake[t] === 1);
+  }
+
   /** High water keeps settlers off node `n`: a tile that is flooded, or a corner with such a tile round it (causeways stay dry). */
   tideBlocked(n: number): boolean {
     if (n >= this.tileCount) return this.cornerTilesOf(n).some((t) => this.flooded[t] === 1 && !this.causeway[t]);

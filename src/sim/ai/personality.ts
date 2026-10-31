@@ -1,6 +1,7 @@
 import { mix32, hashString } from "../rng";
 import type { Proposal } from "../econ/diplomacy";
 import type { Economy } from "../econ/economy";
+import { aiOptions } from "./options";
 
 /**
  * Rival temperaments. A Builder wants to be left alone to grow and keeps its word; a Trader
@@ -82,6 +83,7 @@ export function rivalFor(seed: string, player: number): { personality: Personali
 
 /** How a rival answers an offer: its temperament, the offerer's name, and the balance of arms. */
 export function answerOffer(eco: Economy, me: Personality, p: number, prop: Proposal): boolean {
+  if (!aiOptions.diplomacy) return false;
   const rep = eco.diplomacy.rep(prop.from);
   if (prop.kind === "prisoners") return true;
   if (rep < 30) return false;
