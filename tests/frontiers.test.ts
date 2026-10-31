@@ -19,7 +19,7 @@ function claimedLake(w: World): { lake: number; shore: number } {
 }
 
 describe("Rimefall Tundra", () => {
-  it("lakes freeze in a hard frost; ice roads cross them and sink in the thaw", () => {
+  it("lakes freeze in a hard frost; ice roads cross them, close in the thaw and open in the next frost", () => {
     const w = new World("frost-1", { size: "small" });
     const land = w.land;
     const eco = w.economy;
@@ -39,14 +39,38 @@ describe("Rimefall Tundra", () => {
     // Ice is quick with a sledge on a road.
     expect(land.stepCost(shore, lake)).toBeLessThan(0.7);
     expect(land.sledging(lake)).toBe(true);
-    // The thaw.
+    const road = eco.roads.find((r) => r.alive && r.tiles.includes(shore))!;
+    const iceFlag = eco.flagAt(lake)!;
+    const farFlag = eco.flagAt(far!)!;
+    expect(eco.route(iceFlag.id, farFlag.id).dist).toBeLessThan(Infinity);
+    // Near the thaw the owner is warned, once (the warning comes on the hour, tick 150 of every 300).
+    const hour = (w.tick - (w.tick % 300)) + 450;
+    w.climate.temp[lake] = 0;
+    let notices = eco.notices.length;
+    eco.step(hour);
+    expect(eco.notices.slice(notices).filter((n) => /thin/.test(n.text))).toHaveLength(1);
+    notices = eco.notices.length;
+    eco.step(hour + 300);
+    expect(eco.notices.slice(notices).filter((n) => /thin/.test(n.text))).toHaveLength(0);
+    // The thaw: the road and its flags stay, but it is closed and nothing is routed over it.
     land.frozen[lake] = 0;
     w.climate.thawed = true;
-    const notices = eco.notices.length;
-    eco.step(w.tick + 1);
-    expect(land.use[lake]).toBe(Use.Free);
-    expect(eco.roads.filter((r) => r.alive && r.tiles.includes(shore))).toHaveLength(0);
-    expect(eco.notices.slice(notices).some((n) => /ice/.test(n.text))).toBe(true);
+    notices = eco.notices.length;
+    eco.step(hour + 301);
+    expect(road.alive).toBe(true);
+    expect(road.iceClosed).toBe(true);
+    expect(iceFlag.alive).toBe(true);
+    expect(land.use[lake]).toBe(Use.Flag);
+    expect(eco.route(iceFlag.id, farFlag.id).dist).toBe(Infinity);
+    expect(eco.notices.slice(notices).some((n) => /closed/.test(n.text))).toBe(true);
+    // The next hard frost opens it again.
+    land.frozen[lake] = 1;
+    w.climate.froze = true;
+    notices = eco.notices.length;
+    eco.step(hour + 302);
+    expect(road.iceClosed).toBe(false);
+    expect(eco.route(iceFlag.id, farFlag.id).dist).toBeLessThan(Infinity);
+    expect(eco.notices.slice(notices).some((n) => /open/.test(n.text))).toBe(true);
   });
 
   it("the climate freezes lakes below -3 °C and thaws them above 1 °C", () => {

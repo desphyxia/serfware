@@ -349,6 +349,76 @@ export function connectKeepFlag(w: World, player: number, want: number, maxNodes
   return false;
 }
 
+/**
+ * `rejoinRoads`: a road from the flag of one of `player`'s buildings that no road route joins to the Hearthship (a captured lantern
+ * building, say) to the nearest flag that is joined, over free ground. Lantern buildings
+ * come first, the most threatened first, then any other building or site. A building that only a closed ice road cuts off is left
+ * to the next hard frost, which opens the road again. Buildings in `skip` (id to the tick before which they are not
+ * tried again) are passed over, and one with no road found is added to it for `retryTicks`. Long roads get flags every few nodes, as
+ * `placeOn` lays them. True when a road was placed.
+ */
+export function rejoinCutOff(w: World, player: number, skip: Map<number, number>, retryTicks: number): boolean {
+  const eco = w.economy;
+  const land = w.land;
+  const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
+  if (keepFlag < 0 || !eco.flags[keepFlag]?.alive) return false;
+  // Routes are cached per destination, so asking each flag's way to the keep flag is one search.
+  const joined = (f: number) => eco.route(f, keepFlag).dist < Infinity;
+  // A building that only a closed ice road cuts off is joined again at the next hard frost: no road round the lake for it.
+  const overIce = new Set<number>([keepFlag]);
+  for (const queue = [keepFlag]; queue.length; ) {
+    for (const rid of eco.flags[queue.pop() as number]?.roads ?? []) {
+      const r = eco.roads[rid];
+      if (!r?.alive) continue;
+      for (const f of [r.a, r.b]) {
+        if (overIce.has(f)) continue;
+        overIce.add(f);
+        queue.push(f);
+      }
+    }
+  }
+  const cut = eco.buildings
+    .filter((b) => b.alive && b.owner === player && b.flag >= 0 && b.flag !== keepFlag && (skip.get(b.id) ?? 0) <= w.tick && !overIce.has(b.flag) && !joined(b.flag))
+    .sort((a, b) => (b.def.slots ? 1 : 0) - (a.def.slots ? 1 : 0) || b.threat - a.threat || a.id - b.id);
+  if (!cut.length) return false;
+  const c = land.lattice ? land.lattice.pos : land.planet.grid.center;
+  const d2 = (s: number, t: number) => ((c[s * 3] as number) - (c[t * 3] as number)) ** 2 + ((c[s * 3 + 1] as number) - (c[t * 3 + 1] as number)) ** 2 + ((c[s * 3 + 2] as number) - (c[t * 3 + 2] as number)) ** 2;
+  const home = eco.flags.filter((f) => f.alive && f.owner === player && joined(f.id));
+  const hold = heldTiles(w, player);
+  const gap = land.lattice ? 8 : 4;
+  for (const b of cut.slice(0, 3)) {
+    const ft = (eco.flags[b.flag] as { tile: number }).tile;
+    let road: number[] | null = null;
+    for (const f of home.map((f) => ({ t: f.tile, d: d2(f.tile, ft) })).sort((x, y) => x.d - y.d || x.t - y.t).slice(0, 6)) {
+      const path = land.findPath(f.t, ft, (x) => land.roadable(x, player) && !hold?.has(x), 1500);
+      if (!path || path.length < 3) continue;
+      if (!road || path.length < road.length) road = path;
+    }
+    if (road && layInLegs(w, road, player, gap)) return true;
+    skip.set(b.id, w.tick + retryTicks);
+  }
+  return false;
+}
+
+/**
+ * Lay `path` (from one flag to another over free ground) as roads of at most `gap` steps, with a flag at the end of each leg, as a
+ * player adds flags along a road too long for one. A leg ends on the farthest node a flag can stand on. True when the first leg was
+ * laid: a road left short of its end joins what it reaches, and the next try goes on from there.
+ */
+function layInLegs(w: World, path: readonly number[], player: number, gap: number): boolean {
+  const land = w.land;
+  const last = path.length - 1;
+  let i = 0;
+  while (i < last) {
+    let j = Math.min(i + gap, last);
+    if (j < last) while (j > i + 2 && !land.canPlaceFlag(path[j] as number, player)) j--;
+    if (j < last && !(land.canPlaceFlag(path[j] as number, player) && w.command({ t: "flag", tile: path[j] as number, player }).ok)) return i > 0;
+    if (!w.command({ t: "road", tiles: path.slice(i, j + 1), player }).ok) return i > 0;
+    i = j;
+  }
+  return true;
+}
+
 /** The side `placeOn` would choose for `def` on tile `t` with `turnBuildings` on, with its score and the default side's (for tests and probes). */
 export function chooseSide(w: World, def: BuildingDef, t: number, player: number): { flagTile: number; cost: number; defaultSide: number; defaultCost: number } | null {
   const eco = w.economy;

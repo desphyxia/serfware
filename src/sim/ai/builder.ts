@@ -1,6 +1,6 @@
 import { BUILDINGS, buildingType, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { clearForBorder, clearForest, connectKeepFlag, flagSides, frontierTiles, landmassOf, placeConnected, placeOn } from "../econ/planner";
+import { clearForBorder, clearForest, connectKeepFlag, flagSides, frontierTiles, landmassOf, placeConnected, placeOn, rejoinCutOff } from "../econ/planner";
 import { goodId, goodsFor } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
@@ -60,6 +60,8 @@ const WOOD_PER_BUILT = 12;
 const KEEP_ROADS = 3;
 const KEEP_ROADS_FROM = 8;
 const KEEP_ROADS_EVERY = 4;
+/** With `rejoinRoads`: thoughts between two looks for buildings cut off from the Hearthship's roads. */
+const REJOIN_EVERY = 4;
 /** With `borderCandidates`: frontier tiles looked at for a lantern, and the ones that fit that are tried. */
 const BORDER_SCAN = 400;
 const BORDER_TRY = 40;
@@ -388,6 +390,7 @@ export class AiBuilder implements Brain {
     if (this.thoughts % 4 === 1 || this.cargoShort) this.tools(w);
     if (this.thoughts % 10 === 5) this.tidy(w);
     if (aiOptions.keepRoads && this.thoughts % KEEP_ROADS_EVERY === 2 && mine.length >= KEEP_ROADS_FROM) connectKeepFlag(w, pl, KEEP_ROADS, w.land.lattice ? 12 : 6);
+    if (aiOptions.rejoinRoads && this.thoughts % REJOIN_EVERY === 0) rejoinCutOff(w, pl, this.rejoinSkip, eco.dayTicks);
     if (aiOptions.foodByNeed) this.trackFood(stock, eco.peopleOf(pl).length);
     const retired = aiOptions.relocateQuarries ? this.retireQuarries(w, mine) : new Set<number>();
     if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
@@ -591,6 +594,8 @@ export class AiBuilder implements Brain {
   /** `borderClear`: woodcutters built so far, and the thought of the last. */
   private borderCuts = 0;
   private cutAt = -BORDER_CUT_GAP;
+  /** `rejoinRoads`: cut-off buildings no road was found for, with the tick before which they are not tried again. */
+  private rejoinSkip = new Map<number, number>();
 
   private expand(w: World, plank: number, stone: number): boolean {
     const pl = this.player;

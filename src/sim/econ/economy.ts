@@ -110,6 +110,8 @@ export const GOOD_COLLECT = 3;
 /** An emptying store sends one good out this often (ticks). */
 const EMPTY_INTERVAL = 10;
 const MAX_ROAD_TILES = 24;
+/** Lake ice this warm (°C) is getting thin: the owner of a road over it is warned. It breaks up above 1 °C (climate.ts). */
+const THIN_ICE_TEMP = -1;
 /**
  * Carriers a road may have in all, by its length (as in Serf City): one on a short road, more
  * on long ones. Extra carriers are called when goods queue (see dispatch) and go home when idle.
@@ -148,6 +150,10 @@ export interface Road {
   busyPrev: number;
   /** A ferry link between two quays: water tiles, a boatman for a carrier. */
   ferry?: boolean;
+  /** An ice road whose lake has thawed: it stays, but nothing travels it until the lake freezes hard again. */
+  iceClosed?: boolean;
+  /** Its owner was told the ice under it is getting thin (once, until it closes). */
+  iceWarned?: boolean;
   alive: boolean;
 }
 
@@ -1535,6 +1541,8 @@ export class Economy {
 
   private createRoad(a: number, b: number, tiles: number[], owner: number, ferry = false): Road {
     const r: Road = { id: this.roads.length, owner, a, b, tiles: [...tiles], carrier: -1, helpers: [], busy: 0, busyPrev: -1, ...(ferry && { ferry }), alive: true };
+    // A road made from roads over thawed ice (joined at a flag, or split by one) is closed as they were.
+    if (!ferry && tiles.some((t) => this.land.thinIce(t))) r.iceClosed = true;
     this.roads.push(r);
     (this.flags[a] as Flag).roads.push(r.id);
     (this.flags[b] as Flag).roads.push(r.id);
@@ -1834,6 +1842,7 @@ export class Economy {
       if (!flag.alive) continue;
       for (const rid of flag.roads) {
         const road = this.roads[rid] as Road;
+        if (road.iceClosed) continue;
         const other = road.a === f ? road.b : road.a;
         // Plain road lengths: congestion is weighed live, at each flag (see hopFrom).
         const w = road.tiles.length - 1;
@@ -2013,7 +2022,7 @@ export class Economy {
     let bestCost = Infinity;
     for (const rid of here.roads) {
       const road = this.roads[rid] as Road;
-      if (!road.alive) continue;
+      if (!road.alive || road.iceClosed) continue;
       const other = road.a === from ? road.b : road.a;
       const rest = other === to ? 0 : this.route(other, to).dist;
       if (!(rest < base.dist)) continue;
@@ -2400,7 +2409,7 @@ export class Economy {
   private dispatch(): void {
     // Carriers for roads without one (a helper already there takes over first).
     for (const r of this.roads) {
-      if (!r.alive || r.carrier >= 0) continue;
+      if (!r.alive || r.carrier >= 0 || r.iceClosed) continue;
       if (r.helpers.length) {
         r.carrier = r.helpers.shift() as number;
         continue;
@@ -2420,7 +2429,7 @@ export class Economy {
     }
     // Busy roads call more carriers, up to what their length allows.
     for (const r of this.roads) {
-      if (!r.alive || r.carrier < 0 || 1 + r.helpers.length >= helperCap(r.tiles.length - 1)) continue;
+      if (!r.alive || r.carrier < 0 || r.iceClosed || 1 + r.helpers.length >= helperCap(r.tiles.length - 1)) continue;
       if (Math.max(this.queued(r, r.a), this.queued(r, r.b)) < QUEUE_FOR_HELPER) continue;
       if (this.freeCarriers(r) > 0) continue;
       const pick = this.pickPerson(r.a, "carrier") ?? this.pickPerson(r.b, "carrier");
@@ -4847,9 +4856,14 @@ export class Economy {
   private stepFrontiers(tick: number): void {
     if (this.climate?.thawed) {
       this.climate.thawed = false;
-      this.sinkIceRoads();
+      this.closeIceRoads();
+    }
+    if (this.climate?.froze) {
+      this.climate.froze = false;
+      this.openIceRoads();
     }
     if (tick % 300 === 150) {
+      this.warnThinIce();
       this.stepWarmth();
       this.stepLight();
       if (this.storms.length) this.stepStorms();
@@ -4876,22 +4890,56 @@ export class Economy {
     }
   }
 
-  /** The thaw: roads and flags out on lake ice sink. */
-  private sinkIceRoads(): void {
+  /**
+   * The thaw: a road out on lake ice that has broken up closes. It stays where it is, with its flags, but no good, carrier or warden is
+   * routed over it until the lake freezes hard again (`openIceRoads`). Before, such roads sank and were gone.
+   */
+  private closeIceRoads(): void {
     const land = this.land;
-    const sunk = new Set<number>();
-    const thin = (t: number) => land.thinIce(t);
+    const closed = new Set<number>();
     for (const r of this.roads) {
-      if (!r.alive || !r.tiles.some(thin)) continue;
-      sunk.add(r.owner);
-      this.removeRoad(r);
+      if (!r.alive || r.ferry || r.iceClosed || !r.tiles.some((t) => land.thinIce(t))) continue;
+      r.iceClosed = true;
+      r.iceWarned = false;
+      closed.add(r.owner);
+      // Its carriers put down what they carry at the nearer end and go home; the road gets new ones when it opens.
+      if (r.carrier >= 0) this.dismissCarrier(this.settlers[r.carrier] as Settler, r, r.a, r.b);
+      for (const id of r.helpers) this.dismissCarrier(this.settlers[id] as Settler, r, r.a, r.b);
+      r.carrier = -1;
+      r.helpers = [];
     }
-    for (const f of this.flags) {
-      if (!f.alive || !thin(f.tile)) continue;
-      sunk.add(f.owner);
-      this.removeFlag(f);
+    if (!closed.size) return;
+    this.graphVersion++;
+    for (const p of closed) this.notify(p, "The lake ice has broken up: your ice road is closed until the lake freezes hard again.");
+  }
+
+  /** A hard frost: closed ice roads whose lake is all frozen again open. */
+  private openIceRoads(): void {
+    const land = this.land;
+    const opened = new Set<number>();
+    for (const r of this.roads) {
+      if (!r.alive || !r.iceClosed || r.tiles.some((t) => land.thinIce(t))) continue;
+      r.iceClosed = false;
+      opened.add(r.owner);
     }
-    for (const p of sunk) this.notify(p, "The lake ice has broken up and your ice road sank. Lay it again after the next hard frost.");
+    if (!opened.size) return;
+    this.graphVersion++;
+    for (const p of opened) this.notify(p, "The lake has frozen hard again: your ice road is open.");
+  }
+
+  /** Hourly: the owner of an open ice road is told once when the ice under it is near the thaw (THIN_ICE_TEMP). */
+  private warnThinIce(): void {
+    const climate = this.climate;
+    if (!climate) return;
+    const land = this.land;
+    const warned = new Set<number>();
+    for (const r of this.roads) {
+      if (!r.alive || r.ferry || r.iceClosed || r.iceWarned) continue;
+      if (!r.tiles.some((n) => land.lakeTilesAt(n).some((t) => land.frozen[t] === 1 && (climate.temp[t] as number) > THIN_ICE_TEMP))) continue;
+      r.iceWarned = true;
+      warned.add(r.owner);
+    }
+    for (const p of warned) this.notify(p, "The lake ice under your road is getting thin. When it breaks up, the road closes until the next hard frost.");
   }
 
   /** Daily: vents build pressure, the ground trembles, and at last they erupt. */
