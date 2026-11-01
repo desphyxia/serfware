@@ -184,6 +184,11 @@ the same as no tokens at all. Each switch below says what it does when on.
   (`rejoinRoads`, planner.ts `rejoinCutOff`). A building no road is found for is not tried again for a day, and one that only a
   closed ice road cuts off is left to the next hard frost. On by default since
   #126; until then the switch was `rejoin`, which no longer does anything.
+- `dropwood`: a woodcutter that did no work all of the last day, with no tree it fells within its 6 steps (saplings count) and no
+  forester of its seat planting within them, is pulled down after 3 looks in a row, 5 thoughts apart, with the road that served it
+  alone: its flag, when one road leaves it, and each flag along that road with no building and no other road, up to the first
+  junction or building flag (`dropIdleWoodcutters`, ai/builder.ts `retireWoodcutters`, planner.ts `woodcutterSpent` and
+  `spurFlags`). A woodcutter whose flag other roads pass through goes alone. Off by default.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 

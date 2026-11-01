@@ -112,6 +112,7 @@ export function playGame(spec: GameSpec): GameRecord {
   aiOptions.diplomacy = !ai.includes("nodiplomacy");
   // On by default: "norejoin" plays without it ("rejoin" does nothing now).
   aiOptions.rejoinRoads = !ai.includes("norejoin");
+  aiOptions.dropIdleWoodcutters = ai.includes("dropwood");
   aiOptions.turnBlockWeight = process.env.BALANCE_BLOCK_WEIGHT ? Number(process.env.BALANCE_BLOCK_WEIGHT) : ai.includes("block") ? 1 : 0;
   transportOptions.breakRings = !ai.includes("norings");
   // Starts kept out of land that is cold most of the year, on by default since #179: "nocoldstart" plays without it.

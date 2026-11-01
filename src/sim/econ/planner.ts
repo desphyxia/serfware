@@ -405,6 +405,54 @@ export function rejoinCutOff(w: World, player: number, skip: Map<number, number>
 }
 
 /**
+ * The flags that serve a building's flag and nothing else: that flag, when at most one road leaves it, then each flag along that road
+ * that holds no building and joins no other road, up to the first junction or building flag, which stays. Empty when two roads or
+ * more meet at the building's flag (other traffic passes through it). Demolishing these flags in order takes the building and its
+ * dead-end road away, and leaves every other building joined as it was.
+ */
+export function spurFlags(w: World, flagId: number): number[] {
+  const eco = w.economy;
+  const live = (f: { roads: number[] }) => f.roads.filter((r) => eco.roads[r]?.alive);
+  const start = eco.flags[flagId];
+  if (!start?.alive) return [];
+  let f: { id: number; owner: number; roads: number[] } = start;
+  const first = live(f);
+  if (first.length > 1) return [];
+  const out = [f.id];
+  let via = first[0];
+  while (via !== undefined) {
+    const r = eco.roads[via];
+    if (!r || r.ferry) break;
+    const g: { id: number; owner: number; roads: number[]; alive: boolean; building: number } | undefined = eco.flags[r.a === f.id ? r.b : r.a];
+    if (!g?.alive || g.building >= 0 || g.owner !== f.owner || out.includes(g.id)) break;
+    const rest = live(g).filter((x) => x !== via);
+    if (rest.length > 1) break;
+    out.push(g.id);
+    f = g;
+    via = rest[0];
+  }
+  return out;
+}
+
+/**
+ * `dropIdleWoodcutters`: a finished woodcutter that did no work the whole of the last day, has no tree of a kind it fells within its
+ * reach (a sapling counts: it will grow), and no forester (standing or a site) of its owner plants within that reach.
+ */
+export function woodcutterSpent(w: World, b: { tile: number; owner: number; built: boolean; busyPrev: number; def: { id: string; radius?: number } }): boolean {
+  if (b.def.id !== "woodcutter" || !b.built || b.busyPrev !== 0) return false;
+  const land = w.land;
+  const reach = land.ring(b.tile, b.def.radius ?? 5);
+  const tree = (t: number) => (land.feature[t] === Feature.Tree && (land.variety[t] as number) <= 3) || (land.feature[t] === Feature.Giant && land.variety[t] === 1 && land.territory[t] === b.owner + 1);
+  if (reach.some(tree)) return false;
+  const inReach = new Set(reach);
+  for (const f of w.economy.buildings) {
+    if (!f.alive || f.owner !== b.owner || f.def.id !== "forester") continue;
+    if (land.ring(f.tile, f.def.radius ?? 5).some((t) => inReach.has(t))) return false;
+  }
+  return true;
+}
+
+/**
  * Lay `path` (from one flag to another over free ground) as roads of at most `gap` steps, with a flag at the end of each leg, as a
  * player adds flags along a road too long for one. A leg ends on the farthest node a flag can stand on. True when the first leg was
  * laid: a road left short of its end joins what it reaches, and the next try goes on from there.

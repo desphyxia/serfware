@@ -1,6 +1,6 @@
 import { BUILDINGS, buildingType, GOODS, TOOLS } from "../econ/defs";
 import { Feature } from "../econ/landuse";
-import { clearForBorder, clearForest, connectKeepFlag, flagSides, frontierTiles, landmassOf, placeConnected, placeOn, rejoinCutOff } from "../econ/planner";
+import { clearForBorder, clearForest, connectKeepFlag, flagSides, frontierTiles, landmassOf, placeConnected, placeOn, rejoinCutOff, spurFlags, woodcutterSpent } from "../econ/planner";
 import { goodId, goodsFor } from "../econ/defs";
 import type { Rng } from "../rng";
 import type { World } from "../world";
@@ -88,6 +88,9 @@ const ROCK_LOW = 15;
 const QUARRY_FAR = 22;
 /** Looks at a quarry that found no rock in reach, in a row, before it is pulled down. */
 const QUARRY_DEAD_LOOKS = 3;
+/** With `dropIdleWoodcutters`: thoughts between two looks at the woodcutters, and looks in a row that find one spent before it is pulled down. */
+const CUTTER_EVERY = 5;
+const CUTTER_DEAD_LOOKS = 3;
 /** With `releaseStalled`: days a site may go with no material delivered or used before a seat at its cap pulls it down, and days that kind then waits. */
 /** With `toolsmithAnyway`: stone in the stores that lets a seat without a standing quarry build its toolsmith (it costs 2). */
 const TOOLSMITH_STONE = 4;
@@ -355,6 +358,39 @@ export class AiBuilder implements Brain {
     return gone;
   }
 
+  /** With `dropIdleWoodcutters`: woodcutters seen spent (`woodcutterSpent`), by building id, and how many looks in a row. */
+  private readonly spent = new Map<number, number>();
+  /**
+   * With `dropIdleWoodcutters`: a woodcutter with no tree and no forester in reach, idle all of the last day, is pulled down after a
+   * few looks in a row, and with it the road that served it alone (`spurFlags`), so the ground can take something else. Returns the
+   * ids pulled down.
+   */
+  private retireWoodcutters(w: World, mine: readonly { id: number; flag: number; tile: number; owner: number; built: boolean; busyPrev: number; def: { id: string; radius?: number } }[]): Set<number> {
+    const eco = w.economy;
+    const pl = this.player;
+    const gone = new Set<number>();
+    const seen = new Set<number>();
+    for (const b of mine) {
+      if (b.def.id !== "woodcutter" || !b.built) continue;
+      seen.add(b.id);
+      if (!woodcutterSpent(w, b)) {
+        this.spent.delete(b.id);
+        continue;
+      }
+      const looks = (this.spent.get(b.id) ?? 0) + 1;
+      this.spent.set(b.id, looks);
+      if (looks < CUTTER_DEAD_LOOKS) continue;
+      const spur = spurFlags(w, b.flag);
+      const at = (f: number) => (eco.flags[f] as { tile: number }).tile;
+      // Demolishing its flag takes the woodcutter with it; then each flag of the dead-end road, now at its end.
+      if (!w.command({ t: "demolish", tile: spur.length ? at(spur[0] as number) : b.tile, player: pl }).ok) continue;
+      gone.add(b.id);
+      for (const f of spur.slice(1)) if (eco.flags[f]?.alive) w.command({ t: "demolish", tile: at(f), player: pl });
+    }
+    for (const id of [...this.spent.keys()]) if (!seen.has(id) || gone.has(id)) this.spent.delete(id);
+    return gone;
+  }
+
   /** The armed-wardens rule, as seen at the last thought (it is fixed for a match). */
   private armed = false;
 
@@ -393,6 +429,7 @@ export class AiBuilder implements Brain {
     if (aiOptions.rejoinRoads && this.thoughts % REJOIN_EVERY === 0) rejoinCutOff(w, pl, this.rejoinSkip, eco.dayTicks);
     if (aiOptions.foodByNeed) this.trackFood(stock, eco.peopleOf(pl).length);
     const retired = aiOptions.relocateQuarries ? this.retireQuarries(w, mine) : new Set<number>();
+    if (aiOptions.dropIdleWoodcutters && this.thoughts % CUTTER_EVERY === 0) for (const id of this.retireWoodcutters(w, mine)) retired.add(id);
     if (this.thoughts % 3 === 2) this.econ.settings(ctx, this.thoughts);
     // Wardens look for a fight often, Traders seldom, Builders hardly ever.
     const temper = Math.max(1, Math.round(this.tuning.temper));
