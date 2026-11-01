@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { aiOptions } from "../src/sim/ai/builder";
 import { Feature } from "../src/sim/econ/landuse";
-import { spurFlags, woodcutterSpent } from "../src/sim/econ/planner";
+import { fellable } from "../src/sim/econ/landuse";
+import { placeConnected, spurFlags, woodcutterSpent } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
 
 afterEach(() => {
   aiOptions.dropIdleWoodcutters = false;
+  aiOptions.woodcutterTrees = false;
 });
 
 const SEED = "quiet-cairn-171";
@@ -118,4 +120,24 @@ describe("pulling down idle woodcutters (dropIdleWoodcutters)", () => {
     // At least one went with a road that served it alone.
     expect(gone.some((c) => (spur.get(c.id)?.length ?? 0) >= 1)).toBe(true);
   }, 240000);
+});
+
+describe("woodcutters only where trees stand (woodcutterTrees)", () => {
+  it("is off by default", () => {
+    expect(aiOptions.woodcutterTrees).toBe(false);
+  });
+
+  it("placeConnected with need and ripe puts a woodcutter only where that many fellable trees stand in its reach", () => {
+    const w = grown(6000);
+    const eco = w.economy;
+    const land = w.land;
+    const ripeIn = (t: number) => land.ring(t, 6).filter((x) => fellable(land, x)).length;
+    const before = eco.buildings.length;
+    expect(placeConnected(w, "woodcutter", { minDist: 2, maxDist: 9, near: Feature.Tree, need: 6, ripe: true, player: P, splitRoads: true })).toBe(true);
+    const placed = eco.buildings.slice(before).find((b) => b.alive && b.def.id === "woodcutter");
+    expect(placed).toBeDefined();
+    expect(ripeIn(placed!.tile)).toBeGreaterThanOrEqual(6);
+    // A need no spot meets places nothing.
+    expect(placeConnected(w, "woodcutter", { minDist: 2, maxDist: 9, near: Feature.Tree, need: 500, ripe: true, player: P, splitRoads: true })).toBe(false);
+  }, 120000);
 });

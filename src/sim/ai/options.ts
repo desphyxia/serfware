@@ -90,5 +90,9 @@
  * that served it alone, back to the first junction or building flag (planner.ts `spurFlags`), so the ground can take something else.
  * The woodcutter wishes then place a new one where trees are. Idle woodcutters with no tree in reach were among the first idle reasons
  * in every size of the assessment.
+ * `woodcutterTrees`: a woodcutter is placed only where CUTTER_TREES trees it can fell now stand within its 6 steps (planner.ts
+ * `placeConnected`, `need` with `ripe`), for every woodcutter wish (`woodByNeed` too). Without it, trees only rank the spots (a tree within
+ * 4 steps, of any age or kind, counts), so a woodcutter can go where none stands; with many idle hands the builder adds them by the
+ * number of idle adults.
  */
-export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true, diplomacy: true, rejoinRoads: true, dropIdleWoodcutters: false };
+export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true, diplomacy: true, rejoinRoads: true, dropIdleWoodcutters: false, woodcutterTrees: false };

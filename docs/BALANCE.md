@@ -189,6 +189,10 @@ the same as no tokens at all. Each switch below says what it does when on.
   alone: its flag, when one road leaves it, and each flag along that road with no building and no other road, up to the first
   junction or building flag (`dropIdleWoodcutters`, ai/builder.ts `retireWoodcutters`, planner.ts `woodcutterSpent` and
   `spurFlags`). A woodcutter whose flag other roads pass through goes alone. Off by default.
+- `cuttrees`: a woodcutter is placed only where 6 trees it can fell now stand within its 6 steps, for every woodcutter wish
+  (`woodcutterTrees`, planner.ts `placeConnected` with `need` and `ripe`). Without it trees only rank the spots, so a woodcutter
+  can go where none stands. With `dropwood` alone, the warden seat of tiny `bal-003` placed 32 woodcutters (22 without it) and
+  pulled 26 down, most between days 18 and 26 (`dropwhy.ts`). Off by default.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 

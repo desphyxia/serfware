@@ -91,6 +91,8 @@ const QUARRY_DEAD_LOOKS = 3;
 /** With `dropIdleWoodcutters`: thoughts between two looks at the woodcutters, and looks in a row that find one spent before it is pulled down. */
 const CUTTER_EVERY = 5;
 const CUTTER_DEAD_LOOKS = 3;
+/** With `woodcutterTrees`: trees a woodcutter can fell now (`fellable`) that must stand within its 6 steps for one to be placed there. */
+const CUTTER_TREES = 6;
 /** With `releaseStalled`: days a site may go with no material delivered or used before a seat at its cap pulls it down, and days that kind then waits. */
 /** With `toolsmithAnyway`: stone in the stores that lets a seat without a standing quarry build its toolsmith (it costs 2). */
 const TOOLSMITH_STONE = 4;
@@ -460,7 +462,8 @@ export class AiBuilder implements Brain {
     const want = (cond: boolean, w: { key: string; fn: () => boolean }) => {
       if (cond) wants.push(w);
     };
-    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: feature === Feature.Rock ? Math.max(max, aiOptions.relocateQuarries ? QUARRY_FAR : 14) : max, near: feature, need: feature === Feature.Rock ? 2 : 0, player: pl, center: this.center(w), splitRoads: true }) });
+    // With `woodcutterTrees`, a woodcutter goes only where CUTTER_TREES trees it can fell now stand in its reach; without it trees only rank the spots.
+    const near = (type: string, feature?: Feature, max = 9) => ({ key: type, fn: () => placeConnected(w, type, { minDist: 2, maxDist: feature === Feature.Rock ? Math.max(max, aiOptions.relocateQuarries ? QUARRY_FAR : 14) : max, near: feature, need: feature === Feature.Rock ? 2 : type === "woodcutter" && aiOptions.woodcutterTrees ? CUTTER_TREES : 0, ripe: type === "woodcutter" && aiOptions.woodcutterTrees, player: pl, center: this.center(w), splitRoads: true }) });
     const grow = () => ({ key: "expand", fn: () => this.expand(w, plank, stone) });
     // Try the wishes in order; one that finds no site steps aside for a while, so a cramped spot
     // (no room for a sawmill, say) never stops everything after it, such as pushing the border out.
@@ -586,7 +589,8 @@ export class AiBuilder implements Brain {
     // The tool is in the stores, or a toolsmith stands to make it (the site then makes the toolsmith's priority follow).
     if (!type || (tool && spareTools(w, this.player, stock, tool) < 1 && !mine.some((b) => b.built && b.def.id === "toolsmith"))) return null;
     return () => {
-      const ok = placeConnected(w, type, { minDist: 2, maxDist: 9, near: Feature.Tree, need: 3, player: this.player, center: this.center(w), splitRoads: true });
+      const ripe = type === "woodcutter" && aiOptions.woodcutterTrees;
+      const ok = placeConnected(w, type, { minDist: 2, maxDist: 9, near: Feature.Tree, need: ripe ? CUTTER_TREES : 3, ripe, player: this.player, center: this.center(w), splitRoads: true });
       if (ok) this.woodAt = this.thoughts;
       return ok;
     };

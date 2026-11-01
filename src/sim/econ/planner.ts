@@ -1,7 +1,7 @@
 import type { World } from "../world";
 import { BUILDINGS, buildingType, GOOD_INDEX, goodsFor, type BuildingDef } from "./defs";
 import { aiOptions } from "../ai/options";
-import { Feature, Use } from "./landuse";
+import { Feature, fellable, Use } from "./landuse";
 
 /** With `widePlacement`: lit lanterns tried as centres after the first search finds nothing, and how far from the Hearthship the last try reaches. */
 const WIDE_CENTRES = 3;
@@ -21,7 +21,18 @@ const WARM_FARM = 30;
 export function placeConnected(
   w: World,
   type: string,
-  opts: { minDist?: number; maxDist?: number; near?: Feature; /** With `near`: at least this many of that feature within reach (a quarry with no rock in reach never works). */ need?: number; player?: number; center?: number; splitRoads?: boolean } = {},
+  opts: {
+    minDist?: number;
+    maxDist?: number;
+    near?: Feature;
+    /** With `near`: at least this many of that feature within reach (a quarry with no rock in reach never works). */
+    need?: number;
+    /** With `near: Feature.Tree` and `need`: count only trees a woodcutter can fell now (`fellable`), not saplings or orchard trees. */
+    ripe?: boolean;
+    player?: number;
+    center?: number;
+    splitRoads?: boolean;
+  } = {},
 ): boolean {
   const eco = w.economy;
   const land = w.land;
@@ -31,7 +42,7 @@ export function placeConnected(
   const minDist = opts.minDist ?? 2;
   const reach = (t: number) => {
     let n = 0;
-    for (const x of land.ring(t, 6)) if (land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
+    for (const x of land.ring(t, 6)) if (opts.ripe ? fellable(land, x) : land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
     return n;
   };
   const score = (t: number) => {
