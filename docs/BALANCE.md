@@ -1419,7 +1419,40 @@ Per game, wardens and the rest per rival seat, now / six:
 - **Costs:** seats are hungrier on tiny and medium, hold less land, have fewer lit lantern buildings and fewer wardens, and less
   room for people (more houses wait for stone that nobody sent: on small 47% of site-samples against 31%). Not traced; the
   Hearthship's cargo and founders, and the land the rail site keeps free, would fit.
-- **Wood:** woodcutters with no tree in reach become the first idle reason on every size; tiny makes 22% more logs.
+- **Wood:** woodcutters with no tree in reach become the first idle reason on every size (the split shows this is not the switches); tiny makes 22% more logs.
+
+**The split** (`ab43-*`, each against `ab41-final`, the same 9 games; two runs at a time, 7 workers each). Runs: the colony trio
+(`rail,railsites,early`) and each of the six alone. Games that play exactly as in `ab41-final` (the same buildings per seat at
+the end): `wood` 5 of 9, `clear` 3, `railsites` 1, `early` 1, the others none. Once a game differs at all, its war can go any way.
+
+| | now | trio | rail | railsites | early | clear | wood | keeproads | all six |
+|---|---|---|---|---|---|---|---|---|---|
+| attacks, all games | 260 | 168 | 140 | 62 | 148 | 225 | 381 | 166 | 252 |
+| attacks by 20-day block | 52/68/65/75 | 96/45/26/1 | 95/35/10/0 | 59/1/0/2 | 52/56/0/40 | 76/91/13/45 | 68/97/90/126 | 81/36/35/14 | 98/90/19/45 |
+| winners (day) | 26, 63 | 27, 53 | none | 15, 26 | 26 | 16, 54 | 26, 63, 80 | 32, 43 | 13, 25, 41 |
+| Hearthships sent, medium | 0 | 3.33 | 0 | 0.33 | 4.33 | 0 | 0.33 | 0 | 3.33 |
+| games with a colony | 1 | 4 | 0 | 2 | 6 | 0 | 2 | 0 | 7 |
+| hungry seat-days, tiny | 4% | 44% | 31% | 26% | 3% | 12% | 20% | 18% | 47% |
+| hungry seat-days, medium | 17% | 27% | 21% | 21% | 17% | 24% | 18% | 13% | 30% |
+| wardens d60, small | 18.4 | 20.4 | 19.4 | 18.4 | 18.4 | 17.7 | 18.4 | 20.7 | 9 |
+| wardens d60, medium | 41.5 | 29.7 | 39.3 | 27.3 | 39.7 | 28.7 | 42 | 31.4 | 32.8 |
+| land held d60, small | 432 | 421 | 428 | 432 | 432 | 431 | 432 | 425 | 269 |
+| buildings d60, medium | 110 | 138 | 110 | 145 | 109 | 149 | 114 | 136 | 110 |
+| goods stuck on flags d60, medium | 22.4 | 57.6 | 54.8 | 2.53 | 26.6 | 42 | 35.7 | 6.68 | 20.6 |
+
+- **Colonies come from `orderEarly`.** Alone it sends Hearthships on every size and founds a colony in 6 games of 9, about what
+  all six do; `reserveRail` alone sends none and `railWithSites` alone few.
+- **The hunger on tiny is not one switch.** `orderEarly` alone leaves it as it is (3%); the rail switches raise it most (trio 44%,
+  `reserveRail` 31%, `railWithSites` 26%). Tiny has three games, one of which ends on day 26, so this is few seat-days.
+- **The lost wardens and land on small are not a switch effect.** No single switch moves them (17.7 to 20.7 wardens, 421 to 432
+  tiles); with all six on, small `bal-001` (the warden seat's win, day 13) ends early and its seats leave the day-60 means. On
+  medium, the runs whose medium `bal-003` ends early (`railsites` day 15, `clear` day 16, `keeproads` day 32) have the fewest
+  wardens, which fits the same reading.
+- **Idle woodcutters are not `woodByNeed`.** Woodcutters with no tree in reach are the first or second idle reason in every run,
+  the one without any switch too (medium 11%).
+- **War counts are mostly noise at 9 games.** One game moves the total by over 100 attacks: `wood` changes 4 games and
+  medium `bal-003` alone goes from 54 attacks to 175 (the warden seat wins on day 80). Attacks after day 40 range from 2 to
+  216 across runs that all have `rejoinRoads` on, so the "attacks to the end" of `ab41-final` is not yet a firm result.
 
 ### Result: new sites join only roads that reach the Hearthship (#126)
 
