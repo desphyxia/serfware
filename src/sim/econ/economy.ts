@@ -3844,11 +3844,21 @@ export class Economy {
     return true;
   }
 
+  /** Ground a forester may plant a sapling on now: free, flat, open land with living soil (grassland at least). */
+  plantable(t: number): boolean {
+    return this.openGround(t) && (this.land.life[t] as number) >= 3;
+  }
+
+  /** Free, flat land with no tree, rock or field on it: where a forester or an orchard may plant. */
+  private openGround(t: number): boolean {
+    const land = this.land;
+    return land.isLand(t) && land.use[t] === Use.Free && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
+  }
+
   private findJobTarget(b: Building, s: Settler): number {
     const land = this.land;
     const def = b.def;
-    const open = (t: number) =>
-      land.isLand(t) && land.use[t] === Use.Free && (land.feature[t] === Feature.None || land.feature[t] === Feature.Shrub) && land.slope(t) < 1.8 && land.planet.grid.degree(t) === 6;
+    const open = (t: number) => this.openGround(t);
     switch (def.job) {
       case "fell":
         return this.findWorkTile(b, (t) => fellable(land, t) || (land.feature[t] === Feature.Giant && land.variety[t] === 1 && land.territory[t] === b.owner + 1));
@@ -3864,7 +3874,7 @@ export class Economy {
         return this.findWorkTile(b, (t) => land.feature[t] === Feature.Ruin && (land.amount[t] as number) > 0);
       case "plant":
         // Saplings need living soil: grassland at least.
-        return this.findWorkTile(b, (t) => open(t) && (land.life[t] as number) >= 3);
+        return this.findWorkTile(b, (t) => this.plantable(t));
       case "farm": {
         const ripe = this.findWorkTile(b, (t) => land.feature[t] === Feature.Field && (land.amount[t] as number) >= FIELD_RIPE);
         if (ripe >= 0) return ripe;

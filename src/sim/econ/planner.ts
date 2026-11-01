@@ -445,9 +445,33 @@ export function spurFlags(w: World, flagId: number): number[] {
   return out;
 }
 
+/** With `dropIdleWoodcutters`: tiles a forester could plant on now, within both its reach and a woodcutter's, for it to keep that woodcutter. */
+export const FORESTER_FEEDS = 3;
+
+/**
+ * The foresters (standing or sites) of the woodcutter's owner that could plant at least FORESTER_FEEDS saplings within the
+ * woodcutter's reach now: free, flat, living ground (`Economy.plantable`) that both reach. A forester whose reach only touches the
+ * woodcutter's, or meets it on roads, buildings and fields, grows nothing it can fell.
+ */
+export function feedingForesters(w: World, b: { tile: number; owner: number; def: { radius?: number } }): number {
+  const eco = w.economy;
+  const land = w.land;
+  const reach = land.ring(b.tile, b.def.radius ?? 5).filter((t) => eco.plantable(t));
+  if (reach.length < FORESTER_FEEDS) return 0;
+  const free = new Set(reach);
+  let n = 0;
+  for (const f of eco.buildings) {
+    if (!f.alive || f.owner !== b.owner || f.def.id !== "forester") continue;
+    let shared = 0;
+    for (const t of land.ring(f.tile, f.def.radius ?? 5)) if (free.has(t) && ++shared >= FORESTER_FEEDS) break;
+    if (shared >= FORESTER_FEEDS) n++;
+  }
+  return n;
+}
+
 /**
  * `dropIdleWoodcutters`: a finished woodcutter that did no work the whole of the last day, has no tree of a kind it fells within its
- * reach (a sapling counts: it will grow), and no forester (standing or a site) of its owner plants within that reach.
+ * reach (a sapling counts: it will grow), and no forester that could plant there (`feedingForesters`).
  */
 export function woodcutterSpent(w: World, b: { tile: number; owner: number; built: boolean; busyPrev: number; def: { id: string; radius?: number } }): boolean {
   if (b.def.id !== "woodcutter" || !b.built || b.busyPrev !== 0) return false;
@@ -455,12 +479,7 @@ export function woodcutterSpent(w: World, b: { tile: number; owner: number; buil
   const reach = land.ring(b.tile, b.def.radius ?? 5);
   const tree = (t: number) => (land.feature[t] === Feature.Tree && (land.variety[t] as number) <= 3) || (land.feature[t] === Feature.Giant && land.variety[t] === 1 && land.territory[t] === b.owner + 1);
   if (reach.some(tree)) return false;
-  const inReach = new Set(reach);
-  for (const f of w.economy.buildings) {
-    if (!f.alive || f.owner !== b.owner || f.def.id !== "forester") continue;
-    if (land.ring(f.tile, f.def.radius ?? 5).some((t) => inReach.has(t))) return false;
-  }
-  return true;
+  return feedingForesters(w, b) === 0;
 }
 
 /**

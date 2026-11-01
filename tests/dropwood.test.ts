@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { aiOptions } from "../src/sim/ai/builder";
 import { Feature } from "../src/sim/econ/landuse";
 import { fellable } from "../src/sim/econ/landuse";
-import { placeConnected, spurFlags, woodcutterSpent } from "../src/sim/econ/planner";
+import { feedingForesters, placeConnected, spurFlags, woodcutterSpent } from "../src/sim/econ/planner";
 import { World } from "../src/sim/world";
 
 afterEach(() => {
@@ -139,5 +139,23 @@ describe("woodcutters only where trees stand (woodcutterTrees)", () => {
     expect(ripeIn(placed!.tile)).toBeGreaterThanOrEqual(6);
     // A need no spot meets places nothing.
     expect(placeConnected(w, "woodcutter", { minDist: 2, maxDist: 9, near: Feature.Tree, need: 500, ripe: true, player: P, splitRoads: true })).toBe(false);
+  }, 120000);
+});
+
+describe("a forester keeps a woodcutter only when it can plant in its reach (dropIdleWoodcutters)", () => {
+  it("counts a forester with plantable ground in the woodcutter's reach, and not once that ground cannot take a sapling", () => {
+    const w = grown(12000);
+    const eco = w.economy;
+    const land = w.land;
+    const cutter = eco.buildings.find((b) => b.alive && b.owner === P && b.built && b.def.id === "woodcutter" && feedingForesters(w, b) > 0);
+    expect(cutter, "a woodcutter a forester feeds").toBeDefined();
+    const b = cutter!;
+    for (const t of land.ring(b.tile, b.def.radius ?? 5)) if (land.feature[t] === Feature.Tree || land.feature[t] === Feature.Giant) land.feature[t] = Feature.None;
+    b.busyPrev = 0;
+    expect(woodcutterSpent(w, b), "fed by a forester").toBe(false);
+    // Dead soil in the woodcutter's reach: no forester can plant there, so none keeps it.
+    for (const t of land.ring(b.tile, b.def.radius ?? 5)) land.life[t] = 0;
+    expect(feedingForesters(w, b)).toBe(0);
+    expect(woodcutterSpent(w, b)).toBe(true);
   }, 120000);
 });

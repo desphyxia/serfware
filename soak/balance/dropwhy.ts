@@ -1,16 +1,18 @@
 import { AiBuilder, aiOptions } from "../../src/sim/ai/builder";
 import { Economy } from "../../src/sim/econ/economy";
 import { Feature, fellable, Use } from "../../src/sim/econ/landuse";
+import { feedingForesters } from "../../src/sim/econ/planner";
 import { World } from "../../src/sim/world";
 
 /**
  * What `dropIdleWoodcutters` pulls down and what takes the ground: `node dropwhy.mjs <size> <seed> <days>` plays the assess game with
- * the switch on (DROP=0 plays without it) and prints one JSON line: per rival seat, the woodcutters pulled down while the seat stood
+ * the switch on (DROP=0 plays without it; CUTTREES=1 adds `woodcutterTrees`) and prints one JSON line: per rival seat, the woodcutters pulled down while the seat stood
  * (day, flags taken with it), and at the end what stands on each freed tile and how many buildings placed after it stand within 2
  * steps (by kind). Read-only apart from the switch.
  */
 const [size, seed, daysArg] = process.argv.slice(2) as ["tiny" | "small" | "medium", string, string];
 aiOptions.dropIdleWoodcutters = process.env.DROP !== "0";
+aiOptions.woodcutterTrees = process.env.CUTTREES === "1";
 type Ev = { tick: number; owner: number; tile: number; flags: number; nextId: number };
 const drops: Ev[] = [];
 const proto = Economy.prototype as unknown as Record<string, (this: Economy, x: never) => void>;
@@ -60,12 +62,14 @@ const look = (): void => {
     const young = reach.some((t) => land.feature[t] === Feature.Tree && (land.variety[t] as number) <= 3 && !fellable(land, t));
     const inReach = new Set(reach);
     const planted = eco.buildings.some((f) => f.alive && f.owner === b.owner && f.def.id === "forester" && land.ring(f.tile, f.def.radius ?? 5).some((t) => inReach.has(t)));
+    const feeding = feedingForesters(w, b) > 0;
     const idle = b.busyPrev === 0;
     if (idle) add("idleYesterday");
     if (idle && !ripe) add("idleNoRipeTree");
     if (idle && !ripe && young) add("idleNoRipeButSapling");
-    if (idle && !ripe && planted) add("idleNoRipeButForester");
-    if (idle && !ripe && !young && !planted) add("idleSpent");
+    if (idle && !ripe && planted) add("idleNoRipeButForesterTouching");
+    if (idle && !ripe && feeding) add("idleNoRipeButForesterFeeding");
+    if (idle && !ripe && !young && !feeding) add("idleSpent");
     if (b.worker < 0) add("noWorker");
   }
   census.push(c);
@@ -101,4 +105,4 @@ const seats = [1, 2, 3].map((p) => {
     woodcuttersAtEnd: cutters,
   };
 });
-console.log(JSON.stringify({ size, seed, day: Math.round((w.tick / eco.dayTicks) * 10) / 10, winner: eco.winner, drop: aiOptions.dropIdleWoodcutters, seats, census }));
+console.log(JSON.stringify({ size, seed, day: Math.round((w.tick / eco.dayTicks) * 10) / 10, winner: eco.winner, drop: aiOptions.dropIdleWoodcutters, cuttrees: aiOptions.woodcutterTrees, seats, census }));
