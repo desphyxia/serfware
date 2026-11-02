@@ -227,8 +227,12 @@ function planSide(w: World, def: BuildingDef, t: number, flagTile: number, playe
   const hold = heldTiles(w, player);
   // Only flags that join the Hearthship's network: a road to a cut-off island leaves the site unreachable.
   const keepFlag = eco.buildings[eco.keeps[player] ?? -1]?.flag ?? -1;
+  // Flags stand on road nodes, the landmass is map tiles: a node is on it when its tile is.
+  const onHome = (n: number) => home().has(land.pt(n));
+  // A flag that carries roads already joins the site to those roads alone, so they must reach the Hearthship.
+  if (existing && keepFlag >= 0 && existing.roads.some((r) => eco.roads[r]?.alive) && eco.route(keepFlag, existing.id).dist === Infinity && onHome(flagTile)) return null;
   const mine = eco.flags.filter((f) => f.alive && f.owner === player && f.tile !== flagTile);
-  const joined = keepFlag < 0 ? mine : mine.filter((f) => eco.route(keepFlag, f.id).dist < Infinity || !home().has(f.tile));
+  const joined = keepFlag < 0 ? mine : mine.filter((f) => eco.route(keepFlag, f.id).dist < Infinity || !onHome(f.tile));
   const near = (joined.length ? joined : mine)
     .map((f) => {
       const dx = (c[f.tile * 3] as number) - (c[flagTile * 3] as number);
