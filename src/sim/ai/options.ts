@@ -85,5 +85,14 @@
  * nearest flag that is joined (planner.ts `rejoinCutOff`), lantern buildings first, the most threatened first; not for one that only
  * a closed ice road cuts off, which the next hard frost joins again. Captured lantern buildings were never joined, so no warden could
  * walk to them and the front stayed thinly held (#126, #188).
+ * `dropIdleWoodcutters`: a woodcutter that did no work all of the last day, with no tree it fells within its reach (saplings count) and
+ * no forester planting within it, is pulled down after a few looks in a row (builder.ts `retireWoodcutters`), and with it the road
+ * that served it alone, back to the first junction or building flag (planner.ts `spurFlags`), so the ground can take something else.
+ * The woodcutter wishes then place a new one where trees are. Idle woodcutters with no tree in reach were among the first idle reasons
+ * in every size of the assessment.
+ * `woodcutterTrees`: a woodcutter is placed only where CUTTER_TREES trees it can fell now stand within its 6 steps (planner.ts
+ * `placeConnected`, `need` with `ripe`), for every woodcutter wish (`woodByNeed` too). Without it, trees only rank the spots (a tree within
+ * 4 steps, of any age or kind, counts), so a woodcutter can go where none stands; with many idle hands the builder adds them by the
+ * number of idle adults.
  */
-export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true, diplomacy: true, rejoinRoads: true };
+export const aiOptions = { relocateQuarries: true, stoneFallback: true, foodByNeed: true, stonePriority: true, borderReach: false, borderClear: false, toolsByDemand: true, oreMines: true, releaseStalled: true, toolsmithAnyway: true, forgeRoom: true, surveyAgain: false, graniteFirst: true, turnBuildings: true, widePlacement: true, turnPartnerWeight: 2, borderCandidates: false, woodByNeed: false, reserveRail: false, turnBlockWeight: 0, foodWithoutIdle: true, railWithSites: false, orderEarly: false, keepRoads: false, bowsByNeed: true, warmFarms: true, diplomacy: true, rejoinRoads: true, dropIdleWoodcutters: false, woodcutterTrees: false };

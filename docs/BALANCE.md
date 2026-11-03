@@ -184,6 +184,15 @@ the same as no tokens at all. Each switch below says what it does when on.
   (`rejoinRoads`, planner.ts `rejoinCutOff`). A building no road is found for is not tried again for a day, and one that only a
   closed ice road cuts off is left to the next hard frost. On by default since
   #126; until then the switch was `rejoin`, which no longer does anything.
+- `dropwood`: a woodcutter that did no work all of the last day, with no tree it fells within its 6 steps (saplings count) and no
+  forester of its seat that could plant at least 3 saplings within them now (free, flat, living ground both reach: planner.ts
+  `feedingForesters`, economy.ts `plantable`), is pulled down after 3 looks in a row, 5 thoughts apart, with the road that served it
+  alone: its flag, when one road leaves it, and each flag along that road with no building and no other road, up to the first
+  junction or building flag (`dropIdleWoodcutters`, ai/builder.ts `retireWoodcutters`, planner.ts `woodcutterSpent` and
+  `spurFlags`). A woodcutter whose flag other roads pass through goes alone. Off by default.
+- `cuttrees`: a woodcutter is placed only where 6 trees it can fell now stand within its 6 steps, for every woodcutter wish
+  (`woodcutterTrees`, planner.ts `placeConnected` with `need` and `ripe`). Without it trees only rank the spots, so a woodcutter
+  can go where none stands. Off by default.
 
 Pilots so far (2 seeds, 36 economy games of 60 days each; the differences between the later rows are within the noise):
 
@@ -1453,6 +1462,39 @@ the end): `wood` 5 of 9, `clear` 3, `railsites` 1, `early` 1, the others none. O
 - **War counts are mostly noise at 9 games.** One game moves the total by over 100 attacks: `wood` changes 4 games and
   medium `bal-003` alone goes from 54 attacks to 175 (the warden seat wins on day 80). Attacks after day 40 range from 2 to
   216 across runs that all have `rejoinRoads` on, so the "attacks to the end" of `ab41-final` is not yet a firm result.
+
+### Result: `dropwood` and `cuttrees` together (#126)
+
+Run `ab45-both`: `BALANCE_AI="dropwood,cuttrees"`, the 9 assess games (3 seeds, tiny/small/medium, 80 days), against
+`ab41-final` (no switch). The `dropwhy.ts` trace of the same 9 games ran alongside (small `bal-003`'s trace crashed in node, so 8).
+
+| | tiny now / both | small now / both | medium now / both |
+|---|---|---|---|
+| games with a winner (day) | 1 (26) / 1 (22) | 0 / 0 | 1 (63) / 1 (16) |
+| buildings d60 | 88.3 / 74 | 83.3 / 88.8 | 110 / 147 |
+| people d60 | 183 / 166 | 169 / 193 | 232 / 294 |
+| hungry seat-days from day 30 | 4% / 18% | 31% / 31% | 17% / 23% |
+| workplaces idle (share) d60 | 0.56 / 0.34 | 0.44 / 0.46 | 0.44 / 0.48 |
+| workplaces with no worker d60 | 2.76 / 0.36 | 2.14 / 0 | 1 / 0.5 |
+| logs, days 0-59 | 1329 / 1577 | 1417 / 1578 | 1352 / 1311 |
+
+Attacks 102 in all (260 now), 90 of them before day 20. Medium `bal-003` ends on day 16 and leaves the day-60 means, so the
+medium column is two games against three. Wall minutes are not comparable: the trace ran on the same cores.
+
+- **Finished woodcutters with no tree to fell are now rare.** The trace's census (every 10 days, finished woodcutters) counts 11
+  idle with no ripe tree in reach (57 with `dropwood` alone) and 7 spent.
+- **The woodcutter loop in tiny `bal-003` is not these switches.** Its warden seat placed 67 woodcutters (32 with `dropwood`
+  alone, 22 with neither). A trace of that game to day 35 (`cutwhy`, kept outside the repo) logs who places and who removes each
+  one. With neither switch on: 21 placed, 12 removed, all 12 unfinished sites pulled by `tidy` 0.4 to 0.5 days after placing (no
+  route from the site's flag to the keep's for 3 looks). With both on: 25 placed, 22 removed, 14 sites by `tidy` the same way and 8
+  finished woodcutters by `retireWoodcutters`, 3.6 to 7.1 days after placing. All placements came through `placeConnected`.
+  The sites were joined to roads that do not reach the Hearthship, a bug in `planSide` fixed in #191 (next section). This run
+  predates the fix, so it measures the switches on top of that loop.
+- **The earlier `dropwhy` counts include `tidy`.** It logs every woodcutter removal while the seat stands, so "dropped" there is
+  `retireWoodcutters` plus `tidy` (and any other cause). Of the 139 it counts here, the split is known only for the traced
+  stretch above.
+- **Tiny hunger rose (4% to 18%), small did not move, medium rose (17% to 23%).** Three games per size, and one tiny game
+  ends on day 22, so this is few seat-days.
 
 ### Result: new sites join only roads that reach the Hearthship (#126)
 

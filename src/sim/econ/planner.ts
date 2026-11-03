@@ -1,7 +1,7 @@
 import type { World } from "../world";
 import { BUILDINGS, buildingType, GOOD_INDEX, goodsFor, type BuildingDef } from "./defs";
 import { aiOptions } from "../ai/options";
-import { Feature, Use } from "./landuse";
+import { Feature, fellable, Use } from "./landuse";
 
 /** With `widePlacement`: lit lanterns tried as centres after the first search finds nothing, and how far from the Hearthship the last try reaches. */
 const WIDE_CENTRES = 3;
@@ -21,7 +21,18 @@ const WARM_FARM = 30;
 export function placeConnected(
   w: World,
   type: string,
-  opts: { minDist?: number; maxDist?: number; near?: Feature; /** With `near`: at least this many of that feature within reach (a quarry with no rock in reach never works). */ need?: number; player?: number; center?: number; splitRoads?: boolean } = {},
+  opts: {
+    minDist?: number;
+    maxDist?: number;
+    near?: Feature;
+    /** With `near`: at least this many of that feature within reach (a quarry with no rock in reach never works). */
+    need?: number;
+    /** With `near: Feature.Tree` and `need`: count only trees a woodcutter can fell now (`fellable`), not saplings or orchard trees. */
+    ripe?: boolean;
+    player?: number;
+    center?: number;
+    splitRoads?: boolean;
+  } = {},
 ): boolean {
   const eco = w.economy;
   const land = w.land;
@@ -31,7 +42,7 @@ export function placeConnected(
   const minDist = opts.minDist ?? 2;
   const reach = (t: number) => {
     let n = 0;
-    for (const x of land.ring(t, 6)) if (land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
+    for (const x of land.ring(t, 6)) if (opts.ripe ? fellable(land, x) : land.feature[x] === opts.near && (opts.near !== Feature.Rock || (land.amount[x] as number) > 0)) n++;
     return n;
   };
   const score = (t: number) => {
@@ -402,6 +413,73 @@ export function rejoinCutOff(w: World, player: number, skip: Map<number, number>
     skip.set(b.id, w.tick + retryTicks);
   }
   return false;
+}
+
+/**
+ * The flags that serve a building's flag and nothing else: that flag, when at most one road leaves it, then each flag along that road
+ * that holds no building and joins no other road, up to the first junction or building flag, which stays. Empty when two roads or
+ * more meet at the building's flag (other traffic passes through it). Demolishing these flags in order takes the building and its
+ * dead-end road away, and leaves every other building joined as it was.
+ */
+export function spurFlags(w: World, flagId: number): number[] {
+  const eco = w.economy;
+  const live = (f: { roads: number[] }) => f.roads.filter((r) => eco.roads[r]?.alive);
+  const start = eco.flags[flagId];
+  if (!start?.alive) return [];
+  let f: { id: number; owner: number; roads: number[] } = start;
+  const first = live(f);
+  if (first.length > 1) return [];
+  const out = [f.id];
+  let via = first[0];
+  while (via !== undefined) {
+    const r = eco.roads[via];
+    if (!r || r.ferry) break;
+    const g: { id: number; owner: number; roads: number[]; alive: boolean; building: number } | undefined = eco.flags[r.a === f.id ? r.b : r.a];
+    if (!g?.alive || g.building >= 0 || g.owner !== f.owner || out.includes(g.id)) break;
+    const rest = live(g).filter((x) => x !== via);
+    if (rest.length > 1) break;
+    out.push(g.id);
+    f = g;
+    via = rest[0];
+  }
+  return out;
+}
+
+/** With `dropIdleWoodcutters`: tiles a forester could plant on now, within both its reach and a woodcutter's, for it to keep that woodcutter. */
+export const FORESTER_FEEDS = 3;
+
+/**
+ * The foresters (standing or sites) of the woodcutter's owner that could plant at least FORESTER_FEEDS saplings within the
+ * woodcutter's reach now: free, flat, living ground (`Economy.plantable`) that both reach. A forester whose reach only touches the
+ * woodcutter's, or meets it on roads, buildings and fields, grows nothing it can fell.
+ */
+export function feedingForesters(w: World, b: { tile: number; owner: number; def: { radius?: number } }): number {
+  const eco = w.economy;
+  const land = w.land;
+  const reach = land.ring(b.tile, b.def.radius ?? 5).filter((t) => eco.plantable(t));
+  if (reach.length < FORESTER_FEEDS) return 0;
+  const free = new Set(reach);
+  let n = 0;
+  for (const f of eco.buildings) {
+    if (!f.alive || f.owner !== b.owner || f.def.id !== "forester") continue;
+    let shared = 0;
+    for (const t of land.ring(f.tile, f.def.radius ?? 5)) if (free.has(t) && ++shared >= FORESTER_FEEDS) break;
+    if (shared >= FORESTER_FEEDS) n++;
+  }
+  return n;
+}
+
+/**
+ * `dropIdleWoodcutters`: a finished woodcutter that did no work the whole of the last day, has no tree of a kind it fells within its
+ * reach (a sapling counts: it will grow), and no forester that could plant there (`feedingForesters`).
+ */
+export function woodcutterSpent(w: World, b: { tile: number; owner: number; built: boolean; busyPrev: number; def: { id: string; radius?: number } }): boolean {
+  if (b.def.id !== "woodcutter" || !b.built || b.busyPrev !== 0) return false;
+  const land = w.land;
+  const reach = land.ring(b.tile, b.def.radius ?? 5);
+  const tree = (t: number) => (land.feature[t] === Feature.Tree && (land.variety[t] as number) <= 3) || (land.feature[t] === Feature.Giant && land.variety[t] === 1 && land.territory[t] === b.owner + 1);
+  if (reach.some(tree)) return false;
+  return feedingForesters(w, b) === 0;
 }
 
 /**
