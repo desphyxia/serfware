@@ -1553,6 +1553,34 @@ With `dropwood` two medium games end early (days 22 and 25), so its medium day-6
 - **Spent woodcutters are rare at any look.** The census (every 10 days) counts 5 spent against 25 idle with no ripe tree, which
   have a sapling in reach (20); none is kept by a forester alone (a forester reaches 21 of them, but none could plant 3 saplings there).
 
+### Result: `dropwood` and `cuttrees` together, after the fix (#126)
+
+Run `ab49-both`: `BALANCE_AI="dropwood,cuttrees"` on master after #191 and #193, the 9 assess games, against `ab46-fix` (no
+switch) and `ab48-drop` (`dropwood` alone). Medium `bal-002` plays out as in `ab45-both`, before the fix.
+
+| | tiny now / drop / both | small now / drop / both | medium now / drop / both |
+|---|---|---|---|
+| games with a winner (day) | 1 (48) / 1 (44) / 0 | 0 / 0 / 0 | 1 (21) / 2 (22, 25) / 1 (17) |
+| buildings d60 | 93.5 / 92 / 83 | 90.3 / 92.8 / 87.8 | 161 / 166 / 152 |
+| people d60 | 192 / 194 / 186 | 184 / 191 / 183 | 351 / 329 / 318 |
+| hungry seat-days from day 30 | 15% / 18% / 16% | 25% / 24% / 31% | 17% / 19% / 27% |
+| logs, days 0-59 | 1729 / 1616 / 1861 | 1524 / 1605 / 1651 | 1173 / 1059 / 1358 |
+| planks, days 0-59 | 1390 / 1242 / 1440 | 1130 / 1172 / 1282 | 952 / 884 / 1081 |
+
+Medium day-60 means are two games for `now` and `both` (the same two) and one for `drop`. Attacks 120, by 20-day block 109/6/3/2.
+
+- **More wood, not more growth.** Logs and planks rise 4% to 16% against no switch, but buildings and people do not: tiny has
+  11% fewer buildings at day 60, and small and medium are hungrier. Three games a size.
+- **The churn moves, it does not stop.** The trace counts 119 removed. Tiny `bal-003`'s warden seat placed 29 woodcutters, 26
+  of them between days 15 and 18 (10 without a switch, 8 of them on days 14 and 15), and lost 21, most on days 22 to 24: placed by
+  ripe trees, they fell them and are spent within about a week. Medium `bal-001`'s trader seat placed 40 and lost 34 between
+  days 35 and 79. Each one is a building's planks and stone and a road.
+- **The freed ground:** 55 of the 119 spots have a building placed after the removal within 2 steps (houses, orchards, farms);
+  74 tiles are free at the end.
+
+Neither switch, alone or together, earns being turned on. The bursts of woodcutter orders (8 in two days on tiny `bal-003`
+with no switch) are the next thing to trace; which wish places them is not yet known.
+
 ## Looking at the map
 
 Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
