@@ -1523,6 +1523,36 @@ Medium `bal-003` ends on day 21 with the fix (medium `bal-002` on day 63 before)
 and not the same two. Attacks 108 (260 now), by 20-day block 91/12/2/3 (52/68/65/75 now); `ab45-both` was 90/6/6/0. Two
 different changes giving few attacks after day 20 fits `ab41-final` being the run with unusually many, but 9 games cannot say.
 
+### Result: `dropwood` alone, after the fix (#126)
+
+Run `ab48-drop`: `BALANCE_AI="dropwood"` on master after #191 and #193, the 9 assess games, against `ab46-fix` (no switch, same
+code). Every game plays out differently. The `dropwhy.ts` trace ran alongside; it counts every woodcutter removal while the seat
+stands, which since #191 is mostly `retireWoodcutters`.
+
+| | tiny now / drop | small now / drop | medium now / drop |
+|---|---|---|---|
+| games with a winner (day) | 1 (48) / 1 (44) | 0 / 0 | 1 (21) / 2 (22, 25) |
+| buildings d60 | 93.5 / 92 | 90.3 / 92.8 | 161 / 166 |
+| people d60 | 192 / 194 | 184 / 191 | 351 / 329 |
+| hungry seat-days from day 30 | 15% / 18% | 25% / 24% | 17% / 19% |
+| food made per seat-day, days 0-59 | 86.5 / 83.6 | 88.5 / 82.9 | 112 / 103 |
+| logs, days 0-59 | 1729 / 1616 | 1524 / 1605 | 1173 / 1059 |
+| goods stuck on flags d60 | 1.67 / 1.33 | 0.13 / 0.97 | 19.4 / 49.1 |
+
+With `dropwood` two medium games end early (days 22 and 25), so its medium day-60 means are one game against two. Attacks 123
+(108 now), by 20-day block 68/52/2/1.
+
+- **No gain in growth on tiny and small.** Buildings, people, food and wood all move under 10%, within the noise of 3 games.
+- **The woodcutters come down, and some go straight back up.** The trace counts 108 removed (66 with their road), most in a few
+  seats: small `bal-001`'s warden seat placed 26 woodcutters (11 without the switch) and lost 20, most between days 30 and 44;
+  small `bal-002`'s trader seat placed 25 (8) and lost 16; tiny `bal-003`'s warden seat lost 8 of the 10 it placed on days 14
+  and 15 within days 16 and 17. Without `cuttrees` the woodcutter wishes can place a woodcutter where no tree stands, it is
+  spent from its first day, and the switch pulls it down.
+- **The freed ground is used less than hoped.** At the end 56 of the 108 tiles are free, 6 carry a woodcutter again, and 42 have
+  a building placed after the removal within 2 steps (mostly houses, fishers, waystations and orchards).
+- **Spent woodcutters are rare at any look.** The census (every 10 days) counts 5 spent against 25 idle with no ripe tree, which
+  have a sapling in reach (20); none is kept by a forester alone (a forester reaches 21 of them, but none could plant 3 saplings there).
+
 ## Looking at the map
 
 Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
