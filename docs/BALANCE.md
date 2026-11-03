@@ -1384,6 +1384,33 @@ wardens per rival seat, keep / final:
 - **Still not met:** 2 games of 9 have a winner. The same three games have no attack, and the same two early falls (day 8.1 and 9.7)
   happen. Medium seats still have fewer buildings by day 60 (110 against 150) and more goods stuck on flags (not traced).
 
+### Result: new sites join only roads that reach the Hearthship (#126)
+
+`planSide` (planner.ts) kept, as flags a new site's road may start from, those that reach the Hearthship and those on other land.
+The landmass is map tiles and flags stand on road-lattice nodes, so nearly every flag looked as if it stood on other land (16 of
+17 in a check of tiny `bal-003`), and a site could take its road from a cut-off scrap of road, or stand on a flag whose roads
+reach nothing. `tidy` pulled such a site down about half a day later and the AI placed another: in tiny `bal-003` the warden seat
+placed 22 woodcutters, most between days 18 and 24, and a trace to day 35 found all 12 it lost were such sites (5 roads from a
+cut-off flag, 7 on a flag whose roads reached nothing). The fix tests the node's tile and skips a side whose flag carries roads
+that do not reach the Hearthship; it is on by default (`tests/joinkeep.test.ts`).
+
+Run `ab46-fix` (no switch) against `ab41-final`, the 9 assess games. Three games play out the same (small `bal-002` and `bal-003`,
+tiny `bal-002`). In the trace of tiny `bal-003` to day 35 the warden seat placed 10 woodcutters, all joined to the Hearthship, none
+pulled down; over the 80 days it placed 10 (22 before).
+
+| | tiny now / fix | small now / fix | medium now / fix |
+|---|---|---|---|
+| games with a winner (day) | 1 (26) / 1 (48) | 0 / 0 | 1 (63) / 1 (21) |
+| buildings d60 | 88.3 / 93.5 | 83.3 / 90.3 | 110 / 161 |
+| people d60 | 183 / 192 | 169 / 184 | 232 / 351 |
+| workplaces with no worker d60 | 2.76 / 0 | 2.14 / 0 | 1 / 0.06 |
+| hungry seat-days from day 30 | 4% / 15% | 31% / 25% | 17% / 17% |
+| logs, days 0-59 | 1329 / 1729 | 1417 / 1524 | 1352 / 1173 |
+
+Medium `bal-003` ends on day 21 with the fix (medium `bal-002` on day 63 before), so the medium day-60 means are two games each,
+and not the same two. Attacks 108 (260 now), by 20-day block 91/12/2/3 (52/68/65/75 now); `ab45-both` was 90/6/6/0. Two
+different changes giving few attacks after day 20 fits `ab41-final` being the run with unusually many, but 9 games cannot say.
+
 ## Looking at the map
 
 Eight small helpers in `soak/balance/` bundle and run like the job (`node scripts/bundle-job.mjs /tmp/x.mjs soak/balance/x.ts`):
